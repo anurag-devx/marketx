@@ -115,11 +115,8 @@ def daily_moves_tab():
         "volume": st.column_config.NumberColumn(format="%d"),
         "volume_x_normal": st.column_config.NumberColumn("Volume × normal", format="%.1f×", help="Volume ÷ median of the previous 20 days"),
         "traded_cr": st.column_config.NumberColumn("Traded ₹ cr", format="%.0f"),
-        "market_cap_cr": st.column_config.NumberColumn("Market cap ₹ cr", format="%.0f",
-                                                        help="Shares outstanding (from NSE, today) × close. Blank until Data health → Download company sectors and shares."),
+        "market_cap_cr": None,
         "basic_industry": "Basic industry"})
-    if not company_info.FILE.exists():
-        st.caption("Sectors are the Nifty 500 list's industries until company sectors are downloaded (Data health).")
     from ui.screener_more import _open_stock
     _open_stock(list(s.symbol.head(200)), "dm")
 

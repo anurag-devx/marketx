@@ -179,7 +179,7 @@ def daily(p):
     row = cnt[cnt.date == day]
     k = lambda c: str(int(row[c].iat[0])) if len(row) else "—"
     cols = [["symbol", "Stock", "sym"], ["move_pct", "Move", "spct2"], ["vs_nifty_pct", "vs Nifty", "spct2"], ["volume_x_normal", "Volume ×", "x1"],
-            ["traded_cr", "Traded ₹ cr", "num0"], ["market_cap_cr", "Market cap ₹ cr", "num0"], ["sector", "Sector"], ["industry", "Industry"],
+            ["traded_cr", "Traded ₹ cr", "num0"], ["sector", "Sector"], ["industry", "Industry"],
             ["basic_industry", "Basic industry"], ["close", "Close", "inr"]]
     out = [dict(kind="chart", type="bars", title=f"How many stocks moved more than {thr}% each day", height=300,
                 x=v.date.dt.strftime("%Y-%m-%d").tolist(),

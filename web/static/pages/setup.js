@@ -134,20 +134,21 @@
   async function historyTab(b) {
     const d = await api("data?tab=history");
     b.innerHTML = note("Everything the news study, Catalyst, Search, Results and the reports learn from. Each download is polite to the source, resumes where it stopped, and can run while you use the app.") +
-      `<div class="row section"><button class="btn primary" id="hall" title="In order: company sectors → NSE filings since 2016 → news archives since 2016 → article text (300) → search index. Press again later to continue.">⬇ Download all history (runs for hours; safe to leave running)</button></div>
+      `<div class="row section"><button class="btn primary" id="hall" title="In order: NSE filings since 2016 → news archives since 2016 → article text (300) → search index. Press again later to continue.">⬇ Download all history (runs for hours; safe to leave running)</button></div>
       <div class="card section flush">${d.rows.map((r, i) => `<div class="hrow"><div class="hl"><b>${esc(r.label)}</b></div>
         <div class="hm">${r.frac != null ? `<div class="bar wide"><i style="width:${Math.max(1, Math.min(100, 100 * r.frac)).toFixed(1)}%"></i></div>` : ""}<div class="muted small">${esc(r.detail)}</div></div>
         <div>${r.job ? `<button class="btn small" data-h="${i}" title="${esc(r.help || "")}">${esc(r.button)}</button>` : ""}</div></div>`).join("")}</div>
       ${d.macro ? `<p class="muted small">${esc(d.macro)}</p>` : ""}`;
     $("#hall", b).addEventListener("click", () => startJob("history-all"));
     $$("[data-h]", b).forEach((x) => x.addEventListener("click", () => { const r = d.rows[+x.dataset.h]; startJob(r.job, r.args); }));
+    if (d.busy) setTimeout(() => { if (document.body.contains(b) && b.querySelector("#hall")) historyTab(b); }, 20000);   // live counts while a download runs
   }
 
   async function newsTab(b) {
     const d = await api("data?tab=news");
     b.innerHTML = `<div class="row section"><button class="btn primary" id="n1">Fetch latest news + filings</button><button class="btn" id="n2" title="Tries every feed and sitemap once (about a minute) and lists what works.">Check news sources</button>
       <button class="btn" id="n3" title="Run after editing data/news_aliases.csv (extra names for a company, one per row: symbol,alias).">Re-link headlines to stocks</button></div>
-      <div class="card section"><div id="nf"></div></div><div id="ns"></div><p class="muted small">Older news, NSE filings, company sectors and article text: see History downloads.</p>`;
+      <div class="card section"><div id="nf"></div></div><div id="ns"></div><p class="muted small">Older news, NSE filings and article text: see History downloads.</p>`;
     $("#n1", b).addEventListener("click", () => startJob("announcements"));
     $("#n2", b).addEventListener("click", () => startJob("news-check"));
     $("#n3", b).addEventListener("click", () => startJob("news-retag"));

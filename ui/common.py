@@ -72,7 +72,7 @@ RUN_LABEL = {"fetch+pipeline": "Fetch data + run all agents", "pipeline": "Run a
              "validation": "Run validation", "report": "Build report", "backtest": "Run backtest + analysis",
              "announcements": "Fetch announcements", "news": "Fetch news", "news-check": "Check news sources",
              "news-backfill": "Download older news", "news-retag": "Re-link headlines to stocks",
-             "announcements-backfill": "Download older NSE filings", "company-info": "Download company sectors and shares",
+             "announcements-backfill": "Download older NSE filings", 
              "news-research": "Run the news study", "market-report": "Write the market report",
              "library-ingest": "Add to documents library", "news-articles": "Read news article text", "install-ai": "Install missing packages",
              "macro-fetch": "Fetch macro data", "macro-research": "Run macro study", "macro-all": "Fetch macro data + run study",

@@ -17,7 +17,6 @@
     python3 cli.py news-check           try every news source once, list what works
     python3 cli.py news-backfill        download older headlines from archive sitemaps (resumable)
     python3 cli.py announcements-backfill   download older NSE filings, 2016 onwards (resumable)
-    python3 cli.py company-info         download sectors / industries / shares from NSE
     python3 cli.py news-research        run the event study (does news move stocks?)
     python3 cli.py macro                fetch macro & geopolitical data;  macro-research: run the macro study
     python3 cli.py market-report [YYYY-MM-DD] [--no-llm]   write the daily market report (local model via Ollama)
@@ -92,7 +91,7 @@ def main(argv):
     extra = {"news": ("news_fetch.py",), "news-check": ("-m", "core.news", "check"),
              "news-backfill": ("-m", "core.news", "backfill", *argv[1:]),
              "announcements-backfill": ("-m", "core.announcements", "backfill", *argv[1:]),
-             "company-info": ("-m", "core.company_info", *argv[1:]), "news-research": ("-m", "research.events", *argv[1:]),
+             "news-research": ("-m", "research.events", *argv[1:]),
              "market-report": ("-m", "research.market_report", *argv[1:]),
              "macro": ("-m", "core.macro"), "macro-research": ("-m", "research.macro_impact")}
     if cmd in extra:

@@ -12,7 +12,7 @@ LOCK = JOBS / "current.json"
 #   lab      Market Debate Lab analyses (minutes, mostly waiting on the local model); writes only data/debate/
 # Lanes never share the database; files they share are protected by core/filelock.py and written atomically.
 LANES = {"news": {"news", "news-check", "announcements", "macro-fetch", "macro-all", "fundamentals"},
-         "history": {"history-all", "announcements-backfill", "news-backfill", "company-info", "news-articles", "search-index",
+         "history": {"history-all", "announcements-backfill", "news-backfill", "news-articles", "search-index",
                      "library-ingest", "news-retag", "fundamentals-backfill"},
          "lab": {"debate", "debate-eval", "debate-batch", "debate-replay", "stock-lists"}}
 SIDE = LANES["news"]                         # kept for older callers
@@ -50,7 +50,6 @@ COMMANDS = {
     "news-backfill": [[PY, "-u", "-m", "core.news", "backfill", "start=2016-01-01"]],
     "news-retag": [[PY, "-u", "-m", "core.news", "retag"]],
     "announcements-backfill": [[PY, "-u", "-m", "core.announcements", "backfill", "start=2016-01-01"]],
-    "company-info": [[PY, "-u", "-m", "core.company_info"]],
     "news-research": [[PY, "-u", "-m", "research.events"]],
     "fundamentals": [[PY, "-u", "-m", "core.fundamentals"], [PY, "-u", "-m", "research.earnings"]],
     "fundamentals-backfill": [[PY, "-u", "-m", "core.fundamentals", "backfill", "start=2021-01-01"], [PY, "-u", "-m", "research.earnings"]],
@@ -59,7 +58,7 @@ COMMANDS = {
     "macro-research": [[PY, "-u", "-m", "research.macro_impact"]],
     "macro-all": [[PY, "-u", "-m", "core.macro"], [PY, "-u", "-m", "research.macro_impact"]],
     "search-index": [[PY, "-u", "-m", "core.search_index"]],
-    "history-all": [[PY, "-u", "-m", "core.company_info"], [PY, "-u", "-m", "core.announcements", "backfill", "start=2016-01-01"],
+    "history-all": [[PY, "-u", "-m", "core.announcements", "backfill", "start=2016-01-01"],
                     [PY, "-u", "-m", "core.news", "backfill", "start=2016-01-01"], [PY, "-u", "-m", "core.articles", "max=300"],
                     [PY, "-u", "-m", "core.search_index"]],
     "library-ingest": [[PY, "-u", "-m", "core.library", "ingest"]],
@@ -208,7 +207,7 @@ def tail(path, n=300):
 # command -> (what the user sees, agent tile key)
 STEPS = [("fetch_angel.py", "Downloading prices", "fetch"), ("news_fetch.py", "Fetching news", "announcements"),
          ("core.announcements", "Fetching NSE filings", "announcements"), ("core.news", "Downloading news history", "announcements"),
-         ("core.company_info", "Downloading company details", "announcements"), ("core.articles", "Reading article text", "search-index"),
+         ("core.articles", "Reading article text", "search-index"),
          ("core.fundamentals", "Reading quarterly results (NSE XBRL)", "announcements"),
          ("research.earnings", "Results: growth, surprise and price reaction", "announcements"),
          ("core.macro", "Fetching macro and geopolitical data", "macro-all"), ("research.macro_impact", "Running the macro study", "macro-all"),

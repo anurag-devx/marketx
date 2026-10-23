@@ -2,7 +2,7 @@
 (plus one button that runs them all in order). All downloads resume where they stopped."""
 import json
 from ui.common import *  # noqa: F401,F403
-from core import news as N, announcements as A, articles as AR, company_info as CI
+from core import news as N, announcements as A, articles as AR
 
 
 def _json(p):
@@ -28,16 +28,12 @@ def panel(_main_busy=None):
     st.caption("Everything the news study, Catalyst, Search and the reports learn from. Each download is polite to the source, "
                "resumes where it stopped, and can run while you use the dashboard.")
     if st.button("⬇ Download all history (runs for hours; safe to leave running)", type="primary", disabled=busy, key="hist-all",
-                 help="In order: company sectors → NSE filings since 2016 → news archives since 2016 → article text (300) → search index. "
+                 help="In order: NSE filings since 2016 → news archives since 2016 → article text (300) → search index. "
                       "A step that fails is reported and the rest continue. Press again later to continue where it stopped."):
         launch("history-all")
     uni = universe()
     n_uni = max(len(uni), 1)
     years = pd.Timestamp.now().year - 2016 + 1
-
-    info = CI.load(raw=True)
-    _row("Company sectors and shares", len(info) / n_uni, f"{len(info)} of {n_uni} stocks", "company-info", "Download",
-         "NSE's industry levels and shares outstanding (~10 min)", busy)
 
     bf = _json(A.BACKFILL_STATE)
     done = len(bf.get("done", []))

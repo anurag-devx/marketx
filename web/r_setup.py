@@ -257,14 +257,11 @@ def data(p):
 
 
 def _history():
-    from core import news as N, announcements as A, articles as AR, company_info as CI
+    from core import news as N, announcements as A, articles as AR
     uni = universe()
     n_uni = max(len(uni), 1)
     years = pd.Timestamp.now().year - 2016 + 1
     rows = []
-    info = CI.load(raw=True)
-    rows.append(dict(label="Company sectors and shares", frac=len(info) / n_uni, detail=f"{len(info)} of {n_uni} stocks", job="company-info", button="Download",
-                     help="NSE's industry levels and shares outstanding (~10 min)"))
     bf = _json(A.BACKFILL_STATE)
     done = len(bf.get("done", []))
     an = A.load()

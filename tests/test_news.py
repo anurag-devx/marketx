@@ -1,6 +1,6 @@
 """News system: cleaning, parsing, robots, tagging, dedupe, filing backfill, company info, event study."""
 import numpy as np, pandas as pd, pytest
-from core import news as N, news_sources as S, announcements as A, company_info as CI
+from core import news as N, news_sources as S, announcements as A
 from research import events as E
 
 UNI = pd.DataFrame({"Company Name": ["Reliance Industries Ltd.", "Persistent Systems Ltd.", "State Bank of India", "Tata Consultancy Services Ltd.",
@@ -182,17 +182,6 @@ def test_announcements_backfill_stops_when_nse_down(tmp_path, monkeypatch):
     s = FakeNSE(fail=True)
     A.backfill([f"S{i}" for i in range(50)], start="2020-01-01", end="2025-06-30", session=s, log=lambda *_: None)
     assert s.count == 20
-
-
-def test_company_info_parse():
-    j = {"info": {"isin": "INE467B01029", "listingDate": "25-Aug-2004"},
-         "industryInfo": {"macro": "Information Technology", "sector": "Information Technology", "industry": "IT - Services",
-                          "basicIndustry": "Computers - Software & Consulting"},
-         "securityInfo": {"issuedSize": "3618087518"}}
-    r = CI.parse_quote("TCS", j)
-    assert r["basic_industry"].startswith("Computers") and r["shares"] == 3618087518.0 and r["isin"] == "INE467B01029"
-    with pytest.raises(ValueError):
-        CI.parse_quote("TCS", {"unexpected": 1})
 
 
 # ---------------- event study ----------------

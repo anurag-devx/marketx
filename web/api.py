@@ -154,7 +154,7 @@ def status(_):
 # ---------------- jobs ----------------
 JOB_LABEL = {"strategy-research": "Strategy research", "screener-experiments": "Screener experiments", "screener-experiments-force": "Re-run all experiments",
              "history-all": "Download all history", "news-backfill": "Download older news", "announcements-backfill": "Download older NSE filings",
-             "company-info": "Download company sectors and shares", "search-index": "Build the search index", "library-ingest": "Add to documents",
+             "search-index": "Build the search index", "library-ingest": "Add to documents",
              "news-articles": "Read news article text", "news-research": "Run the news study", "macro-fetch": "Fetch macro data", "macro-research": "Run macro study",
              "debate": "Debate analysis", "debate-eval": "Score forecasts", "debate-replay": "Replay 20 sessions", "stock-lists": "Download NSE index lists",
              "install-ai": "Install missing packages", "news-check": "Check news sources", "news-retag": "Re-link headlines", "fetch-full": "Re-download all prices",

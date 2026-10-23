@@ -66,8 +66,6 @@ def _stock_view(sym, info):
     if mv:
         items = [dict(label=f"Close ({mv['date']:%d %b})", value=f"₹{mv['close']:,.2f}", delta=_pc(mv["d1"], 2), tone="up" if (mv["d1"] or 0) > 0 else "down"),
                  dict(label="1 month", value=_pc(mv["m1"])), dict(label="3 months", value=_pc(mv["m3"])), dict(label="1 year", value=_pc(mv["y1"]))]
-        if r0 is not None and pd.notna(r0.shares):
-            items.append(dict(label="Market cap", value=f"₹{r0.shares * mv['close'] / 1e7:,.0f} cr"))
         head.append(dict(kind="kpis", items=items))
     peers = list(info[(info.industry == industry) & (info.symbol != sym)].symbol) if industry else []
     fil = ann[ann.symbol == sym].sort_values("published", ascending=False) if len(ann) else ann

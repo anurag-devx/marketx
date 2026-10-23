@@ -41,7 +41,7 @@ def data_section(busy):
     if b[2].button("Re-link headlines to stocks", width="stretch", disabled=jobs.busy("news-retag"),
                    help="Run after editing data/news_aliases.csv (extra names for a company, one per row: symbol,alias)."):
         launch("news-retag")
-    st.caption("Older news, NSE filings, company sectors and article text: see History downloads above.")
+    st.caption("Older news, NSE filings and article text: see History downloads above.")
     b = st.columns(4)
     o = options()
     g = b[2].toggle("Google News search for my stocks", value=o["gnews"],
