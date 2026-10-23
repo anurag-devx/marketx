@@ -2,7 +2,7 @@
 import json
 import numpy as np, pandas as pd
 from core import config as C, jobs
-from web.api import route, q, prices, universe, UserError
+from web.api import route, q, prices, universe, UserError, extra_status
 
 STATE_LABEL = {"up_calm": "Uptrend, calm", "up_volatile": "Uptrend, volatile", "down_calm": "Downtrend, calm", "down_volatile": "Downtrend, volatile"}
 PERIOD_LABEL = {"design": "Design 2016–20", "validation": "Validation 2021–23", "holdout": "Holdout 2024–26"}
@@ -48,8 +48,9 @@ def agents(_):
     for a in meta:
         k = "data" if a["key"] == "fetch" else a["key"]
         row = lr.loc[k].to_dict() if len(lr) and k in lr.index else None
+        ex = extra_status(a["key"])
         out.append(dict(key=a["key"], name=a["name"], kind=a["kind"], what=a["what"], io=a["io"], built=a["built"], last=row,
-                        working=busy.get(a["key"], {}).get("label")))
+                        extra=dict(state=ex[0], text=ex[1]) if ex else None, working=busy.get(a["key"], {}).get("label")))
     return out
 
 

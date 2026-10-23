@@ -523,7 +523,7 @@ def report(p):
     S.append(dict(kind="md", title="Market overview", text=sec["Market overview"]))
     h = pd.DataFrame(m["last_5_days"])
     if len(h):
-        S.append(dict(kind="chart", type="bars", title="Advances and declines, last 5 days", height=220, x=h.date.astype(str).tolist(),
+        S.append(dict(kind="chart", type="bars", title="Advances and declines, last 5 days (line: Nifty % change)", height=200, maxBar=44, x=h.date.astype(str).tolist(),
                       series=[dict(name="Advances", y=h.advances.astype(float).tolist()), dict(name="Declines", y=(-h.declines).astype(float).tolist())],
                       line=dict(name="Nifty %", y=h.nifty_pct.round(2).tolist())))
     mcols = [["symbol", "Stock", "symonly"], ["sector", "Sector"], ["move_pct", "Move", "spct2"], ["vs_nifty_pct", "vs Nifty", "spct2"], ["volume_x_normal", "Volume ×", "x1"],

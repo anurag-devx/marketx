@@ -13,8 +13,8 @@
       const cur = list.find((a) => a.key === arg) || list[0];
       el.innerHTML = head("Agents", "Each agent reads the previous agent's output. After new data, run them in order, or use Run all agents.",
         `<button class="btn" id="aall">Run all agents</button>`) +
-        `<div class="tiles section">${list.map((a) => { const s = a.working ? "run" : !a.last ? "idle" : a.last.status === "ok" ? "ok" : a.last.status === "error" ? "bad" : "warn";
-          return `<a class="tile ${a.key === cur.key ? "run" : ""}" href="#/agents/${a.key}"><div class="n"><span class="dot ${s}"></span>${esc(a.name)}</div><div class="s">${a.working ? esc(a.working) : a.last ? dt(a.last.started) : "never run"}</div></a>`; }).join("")}</div>
+        `<div class="tiles section">${list.map((a) => { const s = a.working ? "run" : a.extra ? a.extra.state : !a.last ? "idle" : a.last.status === "ok" ? "ok" : a.last.status === "error" ? "bad" : "warn";
+          return `<a class="tile ${a.key === cur.key ? "run" : ""}" href="#/agents/${a.key}"><div class="n"><span class="dot ${s}"></span>${esc(a.name)}</div><div class="s">${a.working ? esc(a.working) : a.extra ? esc(a.extra.text) : a.last ? dt(a.last.started) : "never run"}</div></a>`; }).join("")}</div>
         <div class="section card"><div class="ct"><h2>${esc(cur.name)}</h2><span class="aside">${esc(cur.kind)}</span></div><p style="margin:0 0 6px">${esc(cur.what)}</p><p class="muted small"><code>${esc(cur.io)}</code></p>
           <div class="row">${cur.key === "debate" ? `<a class="btn primary" href="#/debate">Open Market Debate Lab</a>` : RUN[cur.key] ? `<button class="btn primary" id="arun">${RUN[cur.key]}</button>` : ""}
           ${cur.key === "strategy" ? `<button class="btn" id="ares">Run research</button>` : ""}</div>

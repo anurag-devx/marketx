@@ -221,6 +221,44 @@ AGENTS = [("fetch", "Data"), ("regime", "Market regime"), ("screener", "Screener
 STATE = {"up_calm": "Up · calm", "up_volatile": "Up · volatile", "down_calm": "Down · calm", "down_volatile": "Down · volatile"}
 
 
+def extra_status(k):
+    """(state, text) for agents that keep their own files instead of agent_runs rows; None for the rest."""
+    try:
+        if k == "macro-all":
+            from core import macro as M
+            lf = M.last_fetch()
+            meta = C.RESULTS / "macro" / "meta.json"
+            study = json.loads(meta.read_text())["when"][5:16] if meta.exists() else None
+            if not lf:
+                return "idle", "never fetched"
+            src = {x.replace(" vol", "").replace(" tone", "") for x in lf["status"]}
+            bad = {x.replace(" vol", "").replace(" tone", "") for x, v in lf["status"].items() if not str(v).startswith(("ok", "skipped"))}
+            return ("ok" if not bad and study else "warn"), f"data {lf['when'][5:16]} · study {study or 'not run'}" + (f" · {len(bad)}/{len(src)} sources failed" if bad else "")
+        if k == "market-report":
+            from research import report_writer as W
+            days = W.saved_reports()
+            if not days:
+                return "idle", "no report yet"
+            rec = W.load_report(days[0]) or {}
+            used = rec.get("report", {}).get("writer", {}).get("model")
+            return "ok", f"{days[0]} · {'model ' + used if used else 'template'}"
+        if k == "debate":
+            from debate import store as DS
+            idx = DS.index()
+            if idx.empty:
+                return "idle", "no analysis yet"
+            out = DS.outcomes()
+            return "ok", f"{len(idx)} analyses · {0 if out is None else len(out):,} forecasts scored"
+        if k == "announcements":
+            from core import announcements as A, news as N
+            info, (_, _, nw) = A.last_fetch(), N.load()
+            ok = info and not info.get("errors")
+            return ("ok" if ok and nw else "warn" if (info or nw) else "idle"), f"news {str(nw)[5:16] if nw else 'never'} · filings {info['when'][5:16] if info else 'never'}"
+    except Exception as e:
+        return "warn", f"needs setup ({type(e).__name__})"
+    return None
+
+
 def _agents():
     lr = q("""select agent, status, started, message from (select *, row_number() over (partition by agent order by started desc) rn
               from agent_runs) where rn = 1""")
@@ -232,6 +270,9 @@ def _agents():
         a = busy.get(key)
         if a:
             out.append(dict(key=key, name=name, state="run", sub=f"{a['label']} · step {a['step']}/{a['steps']}"))
+        elif extra_status(key):
+            st, txt = extra_status(key)
+            out.append(dict(key=key, name=name, state=st, sub=txt))
         elif len(lr) and k in lr.index:
             r = lr.loc[k]
             st = "ok" if r.status == "ok" else ("bad" if r.status == "error" else "warn")

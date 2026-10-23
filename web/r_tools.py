@@ -719,7 +719,7 @@ def lab_report(p):
                               delta=f"{_pct(s.get('excess_pct'))} a {'week' if run.get('freq') == 'W' else 'month'} vs market · t {_n(s.get('t_excess'))} · max drop {_pct(s.get('max_dd_pct'), 0, False)}"))
     secs = [dict(kind="kpis", cols=3, items=cards),
             table("Every test", pd.DataFrame(v["checks"]).assign(period=lambda x: x.period.map(E.PERIOD_LABEL)), {"ok": "bool"}, tools=False)]
-    trades = []
+    trades = 0
     if run["mode"] == "signal":
         t = _hide(run["trades"], "signal_date", revealed)
         e = _hide(run["equity"], "date", revealed)
@@ -751,7 +751,7 @@ def lab_report(p):
             sc = sc[sc.trades >= 30].sort_values("edge", ascending=False)
             if len(sc):
                 secs.append(dict(kind="chart", type="hbar", title="Edge by sector (sectors with 30+ trades)", labels=sc.sector.tolist(), values=sc.edge.round(2).tolist(), decimals=2))
-            trades = t[["signal_date", "symbol", "sector", "entry", "exit", "reason", "days", "net_pct", "control_pct", "taken", "period"]].sort_values("signal_date", ascending=False)
+            trades = len(t)
         else:
             secs.append(dict(kind="note", text="No trades."))
     else:
@@ -787,7 +787,47 @@ def lab_report(p):
     return dict(name=d["name"], notes=d.get("notes"), strategy=sid, run_id=run["run_id"], mode=run["mode"], revealed=revealed, passes=bool(v["passes"]),
                 reveals=f"Holdout seen {nrev} time(s), {nver} version(s)" if revealed else None,
                 caption=f"Tested {run['created'][:16]} on data to {run['data_last']} · {run['info'].get('universe', '')} · took {run['seconds']}s",
-                verdict=verdict, search_note=search_note, sections=secs, trades=trades, definition=d)
+                verdict=verdict, search_note=search_note, sections=secs, trades=trades, periods=[[k, v] for k, v in E.PERIOD_LABEL.items() if revealed or k != "holdout"], definition=d)
+
+
+TRADE_COLS = ["signal_date", "symbol", "sector", "entry", "exit", "reason", "days", "net_pct", "control_pct", "taken", "period"]
+
+
+def _trades(run_id):
+    def build():
+        _, S = _lab()
+        run = S.load_run(run_id)
+        if run is None or run.get("trades") is None:
+            return pd.DataFrame(columns=TRADE_COLS)
+        t = _hide(run["trades"], "signal_date", bool(run.get("holdout_revealed")))
+        t = t[t.period != "warmup"].copy()
+        t["net_pct"], t["control_pct"] = (100 * t.net).round(2), (100 * t.control).round(2)
+        t["entry"], t["exit"] = t.entry.round(2), t.exit.round(2)
+        t["signal_date"] = pd.to_datetime(t.signal_date).dt.strftime("%Y-%m-%d")
+        return t[TRADE_COLS].reset_index(drop=True)
+    from web.api import cached
+    _, S = _lab()
+    rv = S.q("select holdout_revealed from runs where run_id = ?", [run_id])
+    return cached(f"lab_trades_{run_id}", bool(rv.holdout_revealed.iat[0]) if len(rv) else None, build)
+
+
+@route("GET", "lab/trades")
+def lab_trades(p):
+    """One page of a run's trades (filtered and sorted on this Mac), or all of them as CSV text."""
+    t = _trades(p.get("run", ""))
+    if p.get("periods"):
+        t = t[t.period.isin(p["periods"].split(","))]
+    if p.get("taken") == "true":
+        t = t[t.taken.astype(bool)]
+    sym = p.get("symbol", "").strip().upper()
+    if sym:
+        t = t[t.symbol.str.contains(sym, regex=False)]
+    col = p.get("sort") if p.get("sort") in TRADE_COLS else "signal_date"
+    t = t.sort_values(col, ascending=p.get("dir") == "asc", kind="stable")
+    if p.get("csv") == "true":
+        return dict(csv=t.to_csv(index=False))
+    per, page = 25, max(0, int(p.get("page", 0) or 0))
+    return dict(total=len(t), page=page, pages=max(1, -(-len(t) // per)), rows=t.iloc[page * per: page * per + per])
 
 
 @route("GET", "lab/trade")

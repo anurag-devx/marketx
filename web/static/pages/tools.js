@@ -322,18 +322,40 @@
       <div class="note ${r.verdict[0] === "pos" ? "info" : "warn"}"><b>${esc(r.verdict[1])}</b>${r.search_note ? `<div class="small" style="margin-top:4px">${esc(r.search_note)}</div>` : ""}</div>
       <div class="row section">${r.revealed ? `<span class="muted small">${esc(r.reveals)}</span>` : `<button class="btn" id="rrev" title="Shows 2024 onwards. Recorded: the Lab counts how often you look.">Reveal holdout</button>`}
         ${r.passes ? `<button class="btn primary" id="rsend">Send to Strategy agent</button>` : ""}<span class="spacer"></span><button class="btn" id="rjson">Download rules (JSON)</button></div>
-      <div id="rsec"></div>${r.trades && r.trades.length ? `<div class="card section"><div class="ct"><h2>Trades</h2><span class="aside">click a trade to see it on the chart</span></div><div id="rtr"></div><div id="rtc"></div></div>` : ""}`;
+      <div id="rsec"></div>${r.trades ? `<div class="card section"><div class="ct"><h2>Trades (${num(r.trades, 0)})</h2><span class="aside">click a trade to see it on the chart</span></div><div id="rtr"></div><div id="rtc"></div></div>` : ""}`;
     form($("#rsel", el), [{ k: "run", label: "Test run", type: "select", options: runs.map((x) => [x[0], x[1]]), value: rid, wide: true }], () => { location.hash = `#/lab/results/${encodeURIComponent(sid)}/${$("#f-run", el).value}`; });
     $("#rrev", el)?.addEventListener("click", async () => { if (!confirm("Reveal the holdout (2024 onwards)? Every look after a change weakens it as a test.")) return; await post("lab/reveal", { run: rid }); MX.render(); });
     $("#rsend", el)?.addEventListener("click", async () => { const x = await post("lab/send", { strategy: sid, run: rid }); toast(x.message); });
     $("#rjson", el).addEventListener("click", () => download(JSON.stringify(r.definition, null, 2), `${sid}_${rid}.json`, "application/json"));
     sections($("#rsec", el), r.sections);
-    if (r.trades && r.trades.length) {
-      $("#rtr", el).appendChild(dataTable(r.trades, [["signal_date", "Signal", "date"], ["symbol", "Stock", "symonly"], ["sector", "Sector"], ["entry", "Entry", "num2"], ["exit", "Exit", "num2"], ["reason", "Exit reason"],
-        ["days", "Days", "int"], ["net_pct", "Net", "spct2"], ["control_pct", "Random", "spct2"], ["taken", "Taken", "bool"], ["period", "Period"]], { csv: "trades", per: 25, onRow: async (t) => {
-          const x = await api(`lab/trade?${qs({ run: rid, symbol: t.symbol, date: String(t.signal_date).slice(0, 10) })}`);
-          $("#rtc", el).innerHTML = `<p style="margin:14px 0 6px"><b>${esc(x.title)}</b></p><div class="ch"></div>`; MXCharts.draw($(".ch", $("#rtc", el)), x.chart); } }));
-    }
+    if (r.trades) tradeTable($("#rtr", el), $("#rtc", el), rid, r.periods);
+  }
+
+  // trades are paged, sorted and filtered on the server: a run can have thousands
+  function tradeTable(host, chart, rid, periods) {
+    const COLS = [["signal_date", "Signal", "date"], ["symbol", "Stock", "symonly"], ["sector", "Sector"], ["entry", "Entry", "num2"], ["exit", "Exit", "num2"], ["reason", "Exit reason"],
+      ["days", "Days", "int"], ["net_pct", "Net", "spct2"], ["control_pct", "Random", "spct2"], ["taken", "Taken", "bool"], ["period", "Period"]];
+    const st = { sort: "signal_date", dir: "desc", page: 0 };
+    host.innerHTML = `<div class="panel"><div id="tf"></div></div><div class="dt"><div class="dt-tools"><span class="muted" id="tn"></span><span class="spacer"></span><button class="btn small" id="tcsv">Download CSV</button></div><div class="scroll" id="tb"></div>
+      <div class="dt-pages"><button class="btn small" id="tp">‹</button><span class="muted" id="tpg"></span><button class="btn small" id="tx">›</button></div></div>`;
+    const f = form($("#tf", host), [{ k: "periods", label: "Period", type: "multi", options: periods, value: periods.map((x) => x[0]) }, { k: "taken", label: "Only trades the portfolio took", type: "toggle" },
+      { k: "symbol", label: "Stock", type: "text", placeholder: "e.g. HAL" }], () => { st.page = 0; load(); });
+    const params = () => { const v = f.values(); return { run: rid, periods: v.periods.join(","), taken: v.taken ? "true" : "", symbol: v.symbol, sort: st.sort, dir: st.dir }; };
+    const load = async () => {
+      const d = await api(`lab/trades?${qs({ ...params(), page: st.page })}`);
+      $("#tn", host).textContent = `${num(d.total, 0)} trades`; $("#tpg", host).textContent = `page ${d.page + 1} of ${d.pages}`;
+      $("#tp", host).disabled = d.page <= 0; $("#tx", host).disabled = d.page >= d.pages - 1;
+      $("#tb", host).innerHTML = `<table class="tbl"><thead><tr>${COLS.map((c) => `<th data-k="${c[0]}" class="sortable ${/^(int|num|spct)/.test(c[2] || "") ? "r" : ""}">${esc(c[1])}${st.sort === c[0] ? (st.dir === "asc" ? " ↑" : " ↓") : ""}</th>`).join("")}</tr></thead>
+        <tbody>${d.rows.map((t, i) => `<tr class="click" data-i="${i}">${COLS.map((c) => `<td class="${/^(int|num|spct)/.test(c[2] || "") ? "r" : ""}">${MX.fmt(c[2] || "text", t[c[0]], t)}</td>`).join("")}</tr>`).join("")}</tbody></table>`;
+      $$("th[data-k]", host).forEach((th) => th.addEventListener("click", () => { st.dir = st.sort === th.dataset.k && st.dir === "desc" ? "asc" : "desc"; st.sort = th.dataset.k; st.page = 0; load(); }));
+      $$("tr[data-i]", host).forEach((tr) => tr.addEventListener("click", async (e) => { if (e.target.closest("a")) return; const t = d.rows[+tr.dataset.i];
+        const x = await api(`lab/trade?${qs({ run: rid, symbol: t.symbol, date: t.signal_date })}`);
+        chart.innerHTML = `<p style="margin:14px 0 6px"><b>${esc(x.title)}</b></p><div class="ch"></div>`; MXCharts.draw($(".ch", chart), x.chart); }));
+    };
+    $("#tp", host).addEventListener("click", () => { st.page--; load(); });
+    $("#tx", host).addEventListener("click", () => { st.page++; load(); });
+    $("#tcsv", host).addEventListener("click", async () => download((await api(`lab/trades?${qs({ ...params(), csv: "true" })}`)).csv, `trades_${rid}.csv`, "text/csv"));
+    load();
   }
 
   MX.page("lab", {

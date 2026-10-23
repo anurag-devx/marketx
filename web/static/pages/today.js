@@ -19,7 +19,7 @@
           ${kpi("India VIX", r && r.vix != null ? num(r.vix, 1) : nifty && nifty.vix ? num(nifty.vix, 1) : "—", r && r.vix_median ? `1-year median ${num(r.vix_median, 1)}` : "")}
         </div>
         <div class="section"><div class="sh"><h3>Agents</h3><a class="more" href="#/agents">Details</a></div>
-          <div class="tiles">${o.agents.map((a) => `<div class="tile ${a.state === "run" ? "run" : ""}" title="${esc(a.note || "")}"><div class="n"><span class="dot ${a.state}"></span>${esc(a.name)}</div><div class="s">${esc(a.sub)}</div></div>`).join("")}</div></div>
+          <div class="tiles">${o.agents.map((a) => `<div class="tile ${a.state === "run" ? "run" : ""}" title="${esc(a.note || a.sub || "")}"><div class="n"><span class="dot ${a.state}"></span>${esc(a.name)}</div><div class="s">${esc(a.sub)}</div></div>`).join("")}</div></div>
         <div class="section grid g2">
           ${card("Trades for the next open", table(o.trades, [["symbol", "Stock", sym], ["strategy_name", "Strategy"], ["entry", "Entry", "inr"], ["stop", "Stop", "inr"], ["quantity", "Qty", "int"]],
             r && !r.active ? "No trades: no strategy has a tested edge in this market state." : "No approved trades."), r ? `Active: ${esc(r.active || "none")}` : "")}
