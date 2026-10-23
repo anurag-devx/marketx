@@ -317,7 +317,7 @@
         <button class="btn small" data-log="${j.lane}">Log</button><button class="btn small" data-stop="${j.lane}">Stop</button></span>`;
     }).join("");
     const busyMain = s.running.some((j) => j.lane === "main");
-    $("#status").innerHTML = `${fresh}${stale}${qual}<span class="job">${jobs}${busyMain ? "" : `<button class="btn primary small" id="runall">Fetch data + run all agents</button>`}</span>`;
+    $("#status").innerHTML = `${fresh}${stale}${qual}<span class="job">${jobs}${busyMain ? "" : `<button class="btn primary small" id="runall" title="Download the latest prices, news and filings, then run every agent">Fetch + run all</button>`}</span>`;
     $("#runall")?.addEventListener("click", () => startJob("fetch+pipeline"));
     $("#stale")?.addEventListener("click", () => showStale(s.stale));
     $$("[data-stop]").forEach((b) => b.addEventListener("click", async () => { if (!confirm("Stop this job?")) return; await post("job/stop", { lane: b.dataset.stop }, "Stopped"); refreshStatus(true); }));
