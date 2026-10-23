@@ -1,5 +1,7 @@
 # MarketX — NSE equity research agents
 
+[![tests](https://github.com/anurag-devx/marketx/actions/workflows/tests.yml/badge.svg)](https://github.com/anurag-devx/marketx/actions/workflows/tests.yml)
+
 Personal research project.
 
 A local research system for Indian equities (NSE, cash market only). It downloads daily prices, news, NSE filings and macro
