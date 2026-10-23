@@ -1,0 +1,29 @@
+{
+  "name": "baseline_momentum",
+  "version": 1,
+  "description": "BASELINE: 126-session return vs the Nifty in the top 20% of eligible stocks.",
+  "hypothesis": "Plain medium-term momentum. Technical setups should beat this to be worth their complexity.",
+  "limitations": "Signal statistics on NSE stocks still listed today (delisted stocks are missing). Not a trading system: no stops, sizing or portfolio limits.",
+  "primary_horizon": 10,
+  "evaluate_on": "qualifies",
+  "config": {
+    "setups": {
+      "trend_continuation": {
+        "enabled": false
+      },
+      "breakout_volume": {
+        "enabled": false
+      },
+      "pullback_recovery": {
+        "enabled": false
+      },
+      "relative_strength": {
+        "enabled": true,
+        "return_window": 126
+      },
+      "volatility_breakout": {
+        "enabled": false
+      }
+    }
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "name": "01_single_setups",
+  "description": "Each setup alone, plus the momentum baseline.",
+  "strategies": [
+    "trend_continuation",
+    "breakout_volume",
+    "pullback_recovery",
+    "relative_strength",
+    "volatility_breakout",
+    "baseline_momentum"
+  ]
+}

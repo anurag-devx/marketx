@@ -1,0 +1,13 @@
+{
+  "name": "05_relative_strength_window",
+  "description": "Relative strength on 63-session vs 126-session returns.",
+  "strategies": [
+    "relative_strength"
+  ],
+  "grid": {
+    "setups.relative_strength.return_window": [
+      63,
+      126
+    ]
+  }
+}

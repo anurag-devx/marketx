@@ -1,0 +1,12 @@
+{
+  "name": "any_setup",
+  "version": 1,
+  "description": "Any one of the five setups passes (the screener default).",
+  "hypothesis": "Each setup finds some candidates; the union is a broad shortlist.",
+  "limitations": "Signal statistics on NSE stocks still listed today (delisted stocks are missing). Not a trading system: no stops, sizing or portfolio limits.",
+  "primary_horizon": 10,
+  "evaluate_on": "qualifies",
+  "config": {
+    "combine": "any"
+  }
+}

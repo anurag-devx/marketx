@@ -1,0 +1,13 @@
+{
+  "name": "two_confirmations",
+  "version": 1,
+  "description": "At least two of the five setups pass on the same day.",
+  "hypothesis": "Agreement between independent setups improves the hit rate.",
+  "limitations": "Signal statistics on NSE stocks still listed today (delisted stocks are missing). Not a trading system: no stops, sizing or portfolio limits.",
+  "primary_horizon": 10,
+  "evaluate_on": "qualifies",
+  "config": {
+    "combine": "min_k",
+    "min_setups": 2
+  }
+}

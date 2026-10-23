@@ -1,0 +1,41 @@
+# ---- secrets: never commit (keys live in ~/.angel_env and ~/.swing_env, outside this folder) ----
+.env
+.env.*
+!.env.example
+*.env
+.angel_env
+.swing_env
+*.pem
+*.key
+
+# ---- your data and personal files ----
+data/
+results/
+backups/
+logs/
+reports/
+lab/workspace/
+settings.json
+account.json
+positions.csv
+logs_backtest_run.txt
+*.duckdb
+*.duckdb.wal
+
+# ---- Python / tools ----
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*.egg-info/
+build/
+dist/
+
+# ---- OS / editors ----
+.DS_Store
+.idea/
+.vscode/
+*.swp

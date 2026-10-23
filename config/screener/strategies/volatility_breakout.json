@@ -1,0 +1,28 @@
+{
+  "name": "volatility_breakout",
+  "version": 1,
+  "description": "Bollinger width in its lowest 20% of the year yesterday, then a close above the 20-session high on 1.5x volume.",
+  "hypothesis": "Volatility contraction precedes expansion; the breakout direction tends to persist.",
+  "limitations": "Signal statistics on NSE stocks still listed today (delisted stocks are missing). Not a trading system: no stops, sizing or portfolio limits.",
+  "primary_horizon": 10,
+  "evaluate_on": "qualifies",
+  "config": {
+    "setups": {
+      "trend_continuation": {
+        "enabled": false
+      },
+      "breakout_volume": {
+        "enabled": false
+      },
+      "pullback_recovery": {
+        "enabled": false
+      },
+      "relative_strength": {
+        "enabled": false
+      },
+      "volatility_breakout": {
+        "enabled": true
+      }
+    }
+  }
+}

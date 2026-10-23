@@ -1,0 +1,29 @@
+{
+  "name": "relative_strength",
+  "version": 1,
+  "description": "63-session return vs the Nifty in the top 20% of eligible stocks that day.",
+  "hypothesis": "Recent relative winners keep outperforming for a few weeks.",
+  "limitations": "Signal statistics on NSE stocks still listed today (delisted stocks are missing). Not a trading system: no stops, sizing or portfolio limits.",
+  "primary_horizon": 10,
+  "evaluate_on": "qualifies",
+  "config": {
+    "setups": {
+      "trend_continuation": {
+        "enabled": false
+      },
+      "breakout_volume": {
+        "enabled": false
+      },
+      "pullback_recovery": {
+        "enabled": false
+      },
+      "relative_strength": {
+        "enabled": true,
+        "return_window": 63
+      },
+      "volatility_breakout": {
+        "enabled": false
+      }
+    }
+  }
+}

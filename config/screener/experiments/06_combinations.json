@@ -1,0 +1,9 @@
+{
+  "name": "06_combinations",
+  "description": "Any setup vs two confirmations vs trend AND breakout.",
+  "strategies": [
+    "any_setup",
+    "two_confirmations",
+    "trend_plus_breakout"
+  ]
+}

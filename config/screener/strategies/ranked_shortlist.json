@@ -1,0 +1,14 @@
+{
+  "name": "ranked_shortlist",
+  "version": 1,
+  "description": "Any setup, then only the top 50 by the ranking method (tests the ranking itself).",
+  "hypothesis": "The ranking puts the better candidates first.",
+  "limitations": "Signal statistics on NSE stocks still listed today (delisted stocks are missing). Not a trading system: no stops, sizing or portfolio limits.",
+  "primary_horizon": 10,
+  "evaluate_on": "shortlist",
+  "config": {
+    "combine": "any",
+    "mode": "top_n",
+    "top_n": 50
+  }
+}

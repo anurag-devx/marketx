@@ -1,0 +1,11 @@
+# Project-wide Streamlit settings (used however the dashboard is started).
+# localhost only: the dashboard and Strategy Lab are reachable from this Mac, never from the network.
+[server]
+address = "localhost"
+headless = true
+enableCORS = true
+enableXsrfProtection = true
+
+[browser]
+gatherUsageStats = false
+serverAddress = "localhost"

@@ -1,0 +1,17 @@
+{
+  "name": "02_trend_rsi_adx",
+  "description": "Trend continuation with and without the RSI 50-70 band and the ADX > 20 floor.",
+  "strategies": [
+    "trend_continuation"
+  ],
+  "grid": {
+    "setups.trend_continuation.use_rsi": [
+      true,
+      false
+    ],
+    "setups.trend_continuation.use_adx": [
+      true,
+      false
+    ]
+  }
+}

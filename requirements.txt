@@ -1,0 +1,19 @@
+# Core runtime: dashboard, agents, data downloads, Market Debate Lab.
+# Install:  ./setup.sh   (creates .venv and installs these; see README)
+# Exact versions that passed the tests on your Mac are written to requirements.lock by setup.sh.
+pandas>=2.2,<4
+numpy>=1.26,<3
+pyarrow>=15
+duckdb>=1.1,<2
+streamlit>=1.50,<2
+plotly>=5.20,<8
+scipy>=1.11
+requests>=2.31
+lxml>=5
+tabulate>=0.9
+xlrd>=2.0
+# Angel One SmartAPI (prices)
+smartapi-python>=1.4
+pyotp>=2.9
+logzero>=1.7
+websocket-client>=1.6

@@ -1,0 +1,14 @@
+{
+  "name": "03_breakout_volume_thresholds",
+  "description": "Breakout with relative volume above 1.5, 2.0 or 2.5.",
+  "strategies": [
+    "breakout_volume"
+  ],
+  "grid": {
+    "setups.breakout_volume.rel_volume_min": [
+      1.5,
+      2.0,
+      2.5
+    ]
+  }
+}

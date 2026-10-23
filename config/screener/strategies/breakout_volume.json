@@ -1,0 +1,28 @@
+{
+  "name": "breakout_volume",
+  "version": 1,
+  "description": "Close above the previous 20-session high on 1.5x relative volume, above SMA50.",
+  "hypothesis": "A range breakout with heavy volume signals demand that carries the price further.",
+  "limitations": "Signal statistics on NSE stocks still listed today (delisted stocks are missing). Not a trading system: no stops, sizing or portfolio limits.",
+  "primary_horizon": 10,
+  "evaluate_on": "qualifies",
+  "config": {
+    "setups": {
+      "trend_continuation": {
+        "enabled": false
+      },
+      "breakout_volume": {
+        "enabled": true
+      },
+      "pullback_recovery": {
+        "enabled": false
+      },
+      "relative_strength": {
+        "enabled": false
+      },
+      "volatility_breakout": {
+        "enabled": false
+      }
+    }
+  }
+}

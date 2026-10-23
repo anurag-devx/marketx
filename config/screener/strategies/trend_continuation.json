@@ -1,0 +1,28 @@
+{
+  "name": "trend_continuation",
+  "version": 1,
+  "description": "Close > SMA50 > SMA200, SMA50 rising over 20 sessions, RSI14 50-70, ADX14 > 20.",
+  "hypothesis": "Stocks in an established, orderly uptrend tend to keep rising over the next 2-4 weeks.",
+  "limitations": "Signal statistics on NSE stocks still listed today (delisted stocks are missing). Not a trading system: no stops, sizing or portfolio limits.",
+  "primary_horizon": 10,
+  "evaluate_on": "qualifies",
+  "config": {
+    "setups": {
+      "trend_continuation": {
+        "enabled": true
+      },
+      "breakout_volume": {
+        "enabled": false
+      },
+      "pullback_recovery": {
+        "enabled": false
+      },
+      "relative_strength": {
+        "enabled": false
+      },
+      "volatility_breakout": {
+        "enabled": false
+      }
+    }
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "name": "04_pullback_rsi_levels",
+  "description": "Pullback recovery with the RSI crossing 40, 45 or 50.",
+  "strategies": [
+    "pullback_recovery"
+  ],
+  "grid": {
+    "setups.pullback_recovery.rsi_cross": [
+      40,
+      45,
+      50
+    ]
+  }
+}

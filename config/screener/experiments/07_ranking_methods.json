@@ -1,0 +1,14 @@
+{
+  "name": "07_ranking_methods",
+  "description": "Top 50 of any-setup candidates under three ranking methods.",
+  "strategies": [
+    "ranked_shortlist"
+  ],
+  "grid": {
+    "ranking.method": [
+      "relative_strength_126",
+      "relative_strength_63",
+      "setup_count_then_rs"
+    ]
+  }
+}
