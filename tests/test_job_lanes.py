@@ -68,3 +68,29 @@ def test_scheduled_daily_runs_the_same_steps_as_the_dashboard(monkeypatch):
     monkeypatch.setattr(jobs, "current", lambda name=None: {"name": "pipeline"})
     calls.clear()
     assert cli.daily() == 0 and calls == []                  # dashboard job running: skip
+
+
+def test_progress_markers_and_activity(tmp_path, monkeypatch):
+    """Each step of a chained job writes a marker; activity() reads the current step and the agent being run."""
+    from core import jobs
+    monkeypatch.setattr(jobs, "JOBS", tmp_path)
+    monkeypatch.setattr(jobs, "LOCK", tmp_path / "current.json")
+    monkeypatch.setattr(jobs, "COMMANDS", {"t": [["/bin/echo", "fetch_angel.py"], ["/bin/sleep", "3"]]})
+    jobs.start("t")
+    import time
+    time.sleep(0.8)
+    a = jobs.activity("t")
+    assert a and a["step"] == 2 and a["steps"] == 2 and a["job"] == "t"
+    assert "__STEP__" not in jobs.tail(a["log"])
+    jobs.stop("t")
+
+
+def test_activity_maps_pipeline_steps_to_agents(tmp_path, monkeypatch):
+    from core import jobs
+    log = tmp_path / "x.log"
+    log.write_text("__STEP__ 5/9 Running the agents\nBackup saved\n--- regime ---\nregime: ok\n--- technical ---\n")
+    monkeypatch.setattr(jobs, "current", lambda name=None: dict(name="fetch+pipeline", log=str(log), started="2026-10-23 10:00:00", pid=1))
+    a = jobs.activity()
+    assert a["agent"] == "technical" and a["step"] == 5 and a["steps"] == 9 and "technical (4 of 7)" in a["label"]
+    log.write_text("__STEP__ 5/9 Running the agents\nloading\n")
+    assert jobs.activity()["agent"] == "fetch"

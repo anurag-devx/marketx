@@ -93,6 +93,40 @@ button:disabled{box-shadow:none!important;transform:none!important}
 [data-testid="stSidebarNavLink"][aria-current="page"] span{color:var(--mx-accent)!important;font-weight:650}
 [data-testid="stNavSectionHeader"]{letter-spacing:.06em;text-transform:uppercase;font-size:.7rem!important;color:var(--mx-muted)}
 
+/* no grey-out while the page refreshes; a thin animated bar at the top shows it is working instead */
+[data-stale="true"]{opacity:1!important;filter:none!important;transition:none!important}
+[data-testid="stApp"]:has([data-stale="true"])::before{
+  content:"";position:fixed;top:0;left:0;right:0;height:3px;z-index:1000000;
+  background:linear-gradient(90deg,transparent 0%,#4F46E5 30%,#06B6D4 60%,transparent 100%);background-size:50% 100%;
+  background-repeat:no-repeat;animation:mx-load 1.1s linear infinite}
+@keyframes mx-load{0%{background-position:-50% 0}100%{background-position:150% 0}}
+[data-testid="stStatusWidget"]{visibility:hidden}
+
+/* running job card */
+.mx-run{display:flex;gap:12px;align-items:center;padding:12px 14px;margin:2px 0 6px;border:1px solid #DDE1F5;border-radius:12px;
+  background:linear-gradient(135deg,rgba(79,70,229,.06),rgba(6,182,212,.05))}
+.mx-run-compact{padding:8px 10px;gap:10px}
+.mx-run-title{font-weight:650;color:var(--mx-text);font-size:.92rem}
+.mx-run-sub{color:var(--mx-muted);font-size:.8rem;margin-top:1px}
+.mx-spinner{flex:none;width:18px;height:18px;border-radius:50%;border:2.5px solid rgba(79,70,229,.18);border-top-color:#4F46E5;
+  animation:mx-spin .8s linear infinite}
+@keyframes mx-spin{to{transform:rotate(360deg)}}
+[data-testid="stProgress"] [role="progressbar"]>div>div>div{background:linear-gradient(90deg,#4F46E5,#06B6D4)!important}
+
+/* agent tiles */
+[class*="st-key-tile-"]{min-height:108px}
+.mx-tile-head{display:flex;align-items:baseline;gap:8px;font-weight:650;color:var(--mx-text);font-size:.98rem}
+.mx-tile-sub{color:var(--mx-muted);font-size:.84rem;margin-top:4px;line-height:1.35}
+.mx-dot{flex:none;width:10px;height:10px;border-radius:50%;background:#CBD5E1;transform:translateY(-1px)}
+.mx-dot.ok{background:#10B981;box-shadow:0 0 0 3px rgba(16,185,129,.15)}
+.mx-dot.warn{background:#F59E0B;box-shadow:0 0 0 3px rgba(245,158,11,.15)}
+.mx-dot.bad{background:#EF4444;box-shadow:0 0 0 3px rgba(239,68,68,.15)}
+.mx-dot.idle{background:#CBD5E1}
+.mx-dot.run{background:#4F46E5;animation:mx-pulse 1.2s ease-in-out infinite}
+@keyframes mx-pulse{0%{box-shadow:0 0 0 0 rgba(79,70,229,.45)}70%{box-shadow:0 0 0 8px rgba(79,70,229,0)}100%{box-shadow:0 0 0 0 rgba(79,70,229,0)}}
+.mx-working{color:#4F46E5;font-weight:600}
+[class*="st-key-tile-"]:has(.mx-dot.run){border-color:#C7C9F6!important;background:linear-gradient(135deg,#FFFFFF,#F5F5FF)}
+
 /* accessibility */
 :focus-visible{outline:2px solid var(--mx-accent)!important;outline-offset:2px}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
@@ -123,8 +157,22 @@ def set_modern(on):
     atomic.write_text(PREFS, json.dumps({**prefs(), "modern": bool(on)}))
 
 
+COLORWAY = ["#4F46E5", "#06B6D4", "#F59E0B", "#10B981", "#EC4899", "#8B5CF6", "#64748B", "#EF4444"]
+
+
+def _plotly_defaults():
+    """Charts that don't set their own colours use the MarketX palette."""
+    try:
+        import plotly.io as pio
+        for name in ("plotly", "plotly_white"):
+            pio.templates[name].layout.colorway = COLORWAY
+    except Exception:
+        pass
+
+
 def apply():
     """Call once per page run, right after st.set_page_config."""
+    _plotly_defaults()
     if (ASSETS / "logo.svg").exists():
         try:
             st.logo(str(ASSETS / "logo.svg"), icon_image=str(ASSETS / "icon.svg"), size="large")

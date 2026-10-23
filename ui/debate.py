@@ -1,4 +1,5 @@
 """Market Debate Lab: bull vs bear research agents, statistical validation, probability engine and judge."""
+import html
 from ui.common import *  # noqa: F401,F403
 from core import jobs, llm
 from debate import store, evaluate as EV, stats as S, signals as SG, probability as PR
@@ -58,41 +59,38 @@ def run_tab():
         st.warning("No prices yet. Run **Fetch data + run all agents** first.")
         return
     names = dict(zip(uni.Symbol, uni["Company Name"]))
-    c = st.columns([2.4, 0.8, 1.3, 1.8])
-    sym = c[0].selectbox("Stock", sorted(names), format_func=lambda s: f"{s} — {names[s][:38]}", key="dl-sym",
-                         index=sorted(names).index(st.session_state.get("stock")) if st.session_state.get("stock") in names else 0)
-    c[1].selectbox("Exchange", ["NSE"], disabled=True, key="dl-ex", help="Prices come from NSE via Angel One; BSE is not covered.")
-    hz = c[2].selectbox("Horizon (trading sessions)", ["1", "5", "20", "60", "Custom", "Intraday (unavailable)"], index=1, key="dl-h")
-    h = 5
-    if hz == "Custom":
-        h = int(c[2].number_input("Sessions", 1, 120, 10, key="dl-hc"))
-    elif hz.startswith("Intraday"):
-        c[2].error("Only daily bars are stored; intraday horizons are not supported.")
-        h = None
-    else:
-        h = int(hz)
-    order = ["rel", "abs", "three"]
-    tgt = c[3].selectbox("Forecast target", order, key="dl-t",
-                         format_func=lambda k: TARGETS[k] + (" — main" if k == "rel" else " — second" if k == "abs" else " — experimental"))
-    if (h, tgt) not in ((5, "rel"), (5, "abs")):
-        st.caption("⚗️ Experimental question: the fixed questions are **5 sessions vs the Nifty** (main) and **5 sessions absolute** (second). "
-                   "Other horizons and targets work, but their forecasts are scored and reported separately.")
-    c = st.columns([1.3, 1.3, 1.2, 1.2, 1.6])
-    band = None
-    if tgt == "three":
-        band = float(c[0].number_input("Neutral band ± %", 0.1, 10.0, 0.5, 0.1, key="dl-b",
-                                       help="Neutral = return between -band and +band. Choose it for the horizon: ±0.5% suits 1–5 sessions, wider for 20+."))
-    day = c[1].date_input("Analysis date (information cutoff)", value=last, max_value=last, key="dl-d",
-                          help="Evidence is cut off at 15:30 IST on this day. A past date is a replay, scored separately from live forecasts.")
-    rounds = int(c[2].number_input("Cross-examination rounds", 1, 3, 1, key="dl-r", help="Stops early if a round raises nothing new."))
-    use_model = c[3].toggle("Use language model", value=True, key="dl-m", help="Off: template theses (instant). Statistics and probabilities are the same either way.")
     ok, msg = llm.status("debate")
-    c[4].caption(("🟢 " if ok else "🟡 ") + f"Agents' model: {msg}")
-    if day < last:
-        st.info(f"Replay for {day}: evidence stops at that day's close, but this is not a forecast made at the time. It is labelled *retrospective*.")
-    lab = jobs.current("debate")
-    disabled = lab is not None or h is None
-    if st.button("Run analysis", type="primary", disabled=disabled, key="dl-go"):
+    with st.container(border=True, key="card-dl-run"):
+        st.markdown("##### New analysis")
+        c = st.columns([2.6, 1.1, 2.0])
+        sym = c[0].selectbox("Stock (NSE)", sorted(names), format_func=lambda s: f"{s} — {names[s][:38]}", key="dl-sym",
+                             index=sorted(names).index(st.session_state.get("stock")) if st.session_state.get("stock") in names else 0)
+        hz = c[1].selectbox("Horizon", ["5", "1", "20", "60", "Custom"], key="dl-h", format_func=lambda x: x if x == "Custom" else f"{x} sessions")
+        h = int(c[1].number_input("Sessions", 1, 120, 10, key="dl-hc")) if hz == "Custom" else int(hz)
+        order = ["rel", "abs", "three"]
+        tgt = c[2].selectbox("Question", order, key="dl-t",
+                             format_func=lambda k: TARGETS[k] + (" (main)" if k == "rel" else " (second)" if k == "abs" else " (experimental)"))
+        band, day, rounds, use_model = None, last, 1, True
+        with st.expander("Advanced: date, debate rounds, model"):
+            a = st.columns(4)
+            day = a[0].date_input("Analysis date", value=last, max_value=last, key="dl-d",
+                                  help="Evidence is cut off at 15:30 IST on this day. A past date is a replay, scored separately from live forecasts.")
+            rounds = int(a[1].number_input("Cross-examination rounds", 1, 3, 1, key="dl-r", help="Stops early if a round raises nothing new."))
+            if tgt == "three":
+                band = float(a[2].number_input("Neutral band ± %", 0.1, 10.0, 0.5, 0.1, key="dl-b",
+                                               help="Neutral = return between -band and +band: ±0.5% suits 1–5 sessions, wider for 20+."))
+            use_model = a[3].toggle("Use language model", value=True, key="dl-m", help="Off: template theses (instant). Statistics and probabilities are the same either way.")
+            st.caption("Exchange: NSE (Angel One prices; BSE not covered). Intraday horizons aren't available: only daily bars are stored.")
+        if (h, tgt) not in ((5, "rel"), (5, "abs")):
+            st.caption("⚗️ Experimental question — scored and reported apart from the two fixed questions (5 sessions vs Nifty, 5 sessions absolute).")
+        if day < last:
+            st.caption(f"↺ Replay for {day}: evidence stops at that day's close; labelled retrospective.")
+        c = st.columns([1, 3])
+        lab = jobs.current("debate")
+        go = c[0].button("Run analysis", type="primary", disabled=lab is not None, key="dl-go", width="stretch")
+        c[1].markdown(f'<div class="mx-tile-sub" style="margin-top:8px"><span class="mx-dot {"ok" if ok else "warn"}" style="display:inline-block;margin-right:6px"></span>'
+                      f'Agents\' model: {html.escape(msg)} · about 3–8 min with the local model</div>', unsafe_allow_html=True)
+    if go:
         args = [f"sym={sym.replace('&', '__amp__')}", f"h={h}", f"target={tgt}", f"date={day}", f"rounds={rounds}"]
         if band is not None:
             args.append(f"band={band}")
@@ -103,8 +101,6 @@ def run_tab():
             st.rerun()
         except RuntimeError as e:
             st.error(str(e))
-    st.caption("With the local model a run takes about 3–8 minutes on a 16 GB Mac (7 model calls); the first run of a day also fits the "
-               "probability model (about a minute per horizon and target, then cached). It runs in its own lane: agents and downloads keep working.")
     _progress()
     with st.expander("Data available to the agents"):
         show(_availability(last))
@@ -112,23 +108,28 @@ def run_tab():
 
 def _progress():
     def body():
-        j = jobs.current("debate")
-        p = store.read_progress()
-        if j:
+        a = jobs.activity("debate")
+        if a:
+            p = store.read_progress() if a["job"] == "debate" else None
+            if p and p.get("step"):
+                a = {**a, "label": p["step"] + (f" — {p['note']}" if p.get("note") else "")}
+            progress_card(a)
             if p:
-                st.progress(min(100, int(p.get("pct", 0))) / 100, text=f"{p.get('step')} {('— ' + p['note']) if p.get('note') else ''}")
-            st.code(jobs.tail(j["log"], 25) or "(starting)", language=None)
-            if st.button("Stop analysis", key="dl-stop"):
+                st.progress(min(100, int(p.get("pct", 0))) / 100)
+            c = st.columns([1, 4])
+            if c[0].button("Stop", key="dl-stop"):
                 jobs.stop("debate"); st.rerun()
+            with c[1].expander("Live output"):
+                st.code(jobs.tail(a["log"], 25) or "(starting)", language=None)
         else:
-            hist = [x for x in jobs.history(40) if x["job"] in ("debate", "debate-eval")]
+            hist = [x for x in jobs.history(40) if x["job"] in ("debate", "debate-eval", "debate-batch", "debate-replay", "stock-lists")]
             if hist:
                 hj = hist[0]
-                (st.success if hj["result"] == "ok" else st.warning)(f"Last lab job: {hj['job']} — {hj['result']} at {hj['finished']}. See **Results**.")
+                (st.success if hj["result"] == "ok" else st.warning)(f"Last lab job: {RUN_LABEL.get(hj['job'], hj['job'])} — {hj['result']} at {hj['finished']}.")
                 if hj["result"] != "ok":
                     st.code(jobs.tail(hj["path"], 25), language=None)
     if jobs.current("debate") and hasattr(st, "fragment"):
-        st.fragment(run_every=3)(body)()
+        st.fragment(run_every=2)(body)()
     else:
         body()
 
@@ -408,9 +409,8 @@ def batch_tab():
     from debate import batch as B
     cfg = B.config()
     sel = cfg["selection"]
-    st.markdown("Every night, after **Fetch data + run all agents**, the code-only part of the lab (signals, statistics, probability model, judge — "
-                "no language model) forecasts the stocks below for the fixed questions: **5 sessions vs the Nifty** (main) and **5 sessions absolute** "
-                "(second). The model still learns from all liquid stocks; only the forecasts are limited to this list. Results: **Forecast scorecard** page.")
+    st.caption("After every **Fetch data + run all agents**, the code-only part of the lab forecasts this list (no language model). "
+               "The model still learns from all liquid stocks. Results: **Forecast scorecard**.")
     c = st.columns([1, 1, 1, 1.4])
     on = c[0].toggle("Run nightly", value=bool(cfg.get("enabled", True)), key="bt-on")
     if on != bool(cfg.get("enabled", True)):
@@ -423,8 +423,15 @@ def batch_tab():
         _start("debate-replay")
     if c[3].button("Download NSE index lists", disabled=busy, key="bt-idx"):
         _start("stock-lists")
-    _progress_lane("debate-batch")
-    st.subheader("Stocks to forecast")
+    _progress()
+    syms_now, notes = SL.resolve(sel)
+    with st.container(border=True, key="card-bt-sel"):
+        st.markdown(f"##### {sel.get('name')} · {len(syms_now)} stocks")
+        st.caption(SL.describe(sel) + " · questions: 5 sessions vs Nifty (main), 5 sessions absolute (second)")
+        for n in notes:
+            st.warning(n)
+        if syms_now:
+            st.caption(", ".join(syms_now))
     uni = universe()
     names = dict(zip(uni.Symbol, uni["Company Name"]))
     customs = SL.custom_lists()
@@ -435,7 +442,7 @@ def batch_tab():
     sym_sel = next((r["symbols"] for r in sel.get("include", []) if r["type"] == "symbols"), [])
     ex_sec = [r["name"] for r in sel.get("exclude", []) if r["type"] == "sector"]
     ex_sym = next((r["symbols"] for r in sel.get("exclude", []) if r["type"] == "symbols"), [])
-    with st.form("bt-form"):
+    with st.expander("Change the stock list"), st.form("bt-form"):
         name = st.text_input("Name of this selection", sel.get("name", "Nifty 50"))
         c = st.columns(2)
         idx = c[0].multiselect("NSE indices", list(SL.INDICES), default=[x for x in idx_sel if x in SL.INDICES])
@@ -463,12 +470,6 @@ def batch_tab():
                 B.save_config({"selection": {"name": name.strip() or "Selection", "include": inc, "exclude": exc}})
                 st.success("Saved. New forecasts use it from the next run; past forecasts keep the list they were made with.")
                 st.rerun()
-    syms_now, notes = SL.resolve(sel)
-    st.markdown(f"**{sel.get('name')}** = {SL.describe(sel)} → **{len(syms_now)} stocks**")
-    for n in notes:
-        st.warning(n)
-    if syms_now:
-        st.caption(", ".join(syms_now))
     with st.expander("Custom lists"):
         c = st.columns([1, 3, 1])
         nm = c[0].text_input("List name", key="bt-cn")
@@ -499,18 +500,6 @@ def _start(name):
         jobs.start(name); st.rerun()
     except RuntimeError as e:
         st.error(str(e))
-
-
-def _progress_lane(probe):
-    def body():
-        j = jobs.current(probe)
-        if j:
-            st.info(f"Running {j['name']} since {j['started'][11:16]}")
-            st.code(jobs.tail(j["log"], 15) or "(starting)", language=None)
-    if jobs.current(probe) and hasattr(st, "fragment"):
-        st.fragment(run_every=3)(body)()
-    else:
-        body()
 
 
 # ---------------- model check ----------------

@@ -75,7 +75,7 @@ def page():
     fig = make_subplots(rows=3, cols=1, shared_xaxes=True, row_heights=[0.62, 0.18, 0.2], vertical_spacing=0.03)
     fig.add_trace(go.Candlestick(x=v.date, open=v.open, high=v.high, low=v.low, close=v.close, name=sym,
                                  increasing_line_color=GOOD, decreasing_line_color=BAD, showlegend=False), row=1, col=1)
-    for col, colr, w in (("sma20", "#9b8bd0", 1), ("sma50", "#e0a43a", 1.3), ("sma200", ACCENT, 1.6)):
+    for col, colr, w in (("sma20", "#8B5CF6", 1), ("sma50", "#F59E0B", 1.3), ("sma200", ACCENT, 1.6)):
         fig.add_trace(go.Scatter(x=v.date, y=v[col], name=col.upper().replace("SMA", "") + "-day avg", line=dict(color=colr, width=w)), row=1, col=1)
     marks = []
     for sid in STRATEGIES:
@@ -86,13 +86,14 @@ def page():
         for sid, hit in marks:
             fig.add_trace(go.Scatter(x=hit.date, y=hit.low * 0.985, mode="markers", name=f"{sid} signal",
                                      marker=dict(symbol="triangle-up", size=9), hovertemplate=f"{sid}: %{{x|%d %b %Y}}<extra></extra>"), row=1, col=1)
-    fig.add_trace(go.Bar(x=v.date, y=v.volume, marker_color=MUTED, name="Volume", showlegend=False), row=2, col=1)
+    vol_col = np.where(v.close >= v.open, "rgba(5,150,105,0.65)", "rgba(220,38,38,0.65)")     # green up-day, red down-day (like the candles)
+    fig.add_trace(go.Bar(x=v.date, y=v.volume, marker_color=vol_col, marker_line_width=0, name="Volume", showlegend=False), row=2, col=1)
     fig.add_trace(go.Scatter(x=v.date, y=v.rsi14, line=dict(color=ACCENT, width=1.3), name="RSI 14", showlegend=False), row=3, col=1)
     for lvl in (30, 70):
         fig.add_hline(y=lvl, line_dash="dot", line_color=REF, row=3, col=1)
     ev = stock_news.stock_events(sym, f)
     stock_news.add_markers(fig, ev, v)
-    fig.update_layout(dragmode="zoom", xaxis_rangeslider_visible=False, height=660, margin=dict(l=8, r=8, t=56, b=8),
+    fig.update_layout(dragmode="zoom", xaxis_rangeslider_visible=False, height=660, margin=dict(l=8, r=28, t=56, b=8),
                       legend=dict(orientation="h", yanchor="bottom", y=1.01, x=0, font=dict(size=11)), hovermode="x unified")
     fig.update_xaxes(rangebreaks=[dict(bounds=["sat", "mon"])])
     fig.update_yaxes(title_text="Price ₹", row=1, col=1)

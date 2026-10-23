@@ -144,10 +144,13 @@ def start(name, args=None):
     # chain the commands in one shell so 'fetch+pipeline' stops if the fetch fails; exit code goes to the log
     cmds = [list(c) for c in COMMANDS[name]]
     cmds[-1] += args
+    n = len(cmds)
+    mark = lambda i, c: f'echo "__STEP__ {i}/{n} {step_of(c)[0]}"'   # progress markers for the dashboard
     if name in KEEP_GOING:                       # long multi-step downloads: one failing source doesn't stop the rest
-        chain = " ; ".join(f'( {" ".join(chr(34) + x + chr(34) for x in c)} || echo "(step failed: continuing)" )' for c in cmds)
+        chain = " ; ".join(f'( {mark(i, c)}; {" ".join(chr(34) + x + chr(34) for x in c)} || echo "(step failed: continuing)" )'
+                           for i, c in enumerate(cmds, 1))
     else:
-        chain = " && ".join(_cmd(cmd) for cmd in cmds)
+        chain = " && ".join(f"{mark(i, c)} && {_cmd(c)}" for i, c in enumerate(cmds, 1))
     script = f'{chain}; echo "__EXIT_CODE__=$?"'
     with open(log, "w") as f:
         f.write(f"job {name} started {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
@@ -189,4 +192,67 @@ def tail(path, n=300):
     if not p.exists():
         return ""
     lines = p.read_text(errors="ignore").splitlines()
-    return "\n".join(l for l in lines[-n:] if not l.startswith("__EXIT_CODE__"))
+    return "\n".join(l for l in lines[-n:] if not l.startswith(("__EXIT_CODE__", "__STEP__")))
+
+
+# ---------------- progress (for the dashboard) ----------------
+# command -> (what the user sees, agent tile key)
+STEPS = [("fetch_angel.py", "Downloading prices", "fetch"), ("news_fetch.py", "Fetching news", "announcements"),
+         ("core.announcements", "Fetching NSE filings", "announcements"), ("core.news", "Downloading news history", "announcements"),
+         ("core.company_info", "Downloading company details", "announcements"), ("core.articles", "Reading article text", "search-index"),
+         ("core.macro", "Fetching macro and geopolitical data", "macro-all"), ("research.macro_impact", "Running the macro study", "macro-all"),
+         ("pipeline.py", "Running the agents", None), ("research.market_report", "Writing the market report", "market-report"),
+         ("debate.batch", "Nightly forecasts", "debate"), ("debate.evaluate", "Scoring forecasts", "debate"),
+         ("debate.engine", "Debate analysis", "debate"), ("core.stocklists", "Downloading NSE index lists", "debate"),
+         ("core.search_index", "Building the search index", "search-index"), ("core.library", "Adding to the documents library", "search-index"),
+         ("backtest.py", "Backtesting strategies", "backtest"), ("strategy_research.py", "Strategy research", "backtest"),
+         ("analysis.py", "Strategy analysis", "backtest"), ("research.events", "Running the news study", "announcements"),
+         ("core.quality", "Checking data quality", "fetch"), ("pip", "Installing packages", None)]
+AGENT_STEP = {"regime": "regime", "screener": "screener", "strategy": "strategy", "technical": "technical", "risk": "risk",
+              "validation": "validation", "report": "report"}
+
+
+def step_of(cmd):
+    for key, label, agent in STEPS:
+        if key in cmd:
+            return label, agent
+    return "Working", None
+
+
+def activity(name=None):
+    """What the job in `name`'s lane is doing now: dict(job, label, step, steps, agent, elapsed) or None."""
+    j = current(name)
+    if not j:
+        return None
+    txt = Path(j["log"]).read_text(errors="ignore") if Path(j["log"]).exists() else ""
+    step, steps, label = 0, 1, "Starting"
+    marks = re.findall(r"^__STEP__ (\d+)/(\d+) (.*)$", txt, re.M)
+    if marks:
+        step, steps, label = int(marks[-1][0]), int(marks[-1][1]), marks[-1][2]
+    agent = next((a for k, lab, a in STEPS if lab == label), None)
+    frac = 0.5                                       # how far into the current step (unknown -> halfway)
+    if label == "Running the agents":
+        sub = re.findall(r"^--- (\w+) ---$", txt[txt.rfind("__STEP__"):], re.M)
+        order = list(AGENT_STEP)
+        if sub:
+            agent = AGENT_STEP.get(sub[-1], sub[-1])
+            k = order.index(sub[-1]) + 1 if sub[-1] in order else 1
+            label = f"Running the agents: {sub[-1]} ({k} of {len(order)})"
+            frac = k / (len(order) + 1)
+        else:
+            agent, label, frac = "fetch", "Running the agents: loading data and checking quality", 0.05
+    try:
+        elapsed = time.time() - time.mktime(time.strptime(j["started"], "%Y-%m-%d %H:%M:%S"))
+    except Exception:
+        elapsed = 0
+    return dict(job=j["name"], label=label, step=step, steps=steps, agent=agent, elapsed=elapsed, log=j["log"], frac=frac)
+
+
+def active_agents():
+    """Agent tile keys being worked on right now (all lanes)."""
+    out = {}
+    for probe in ("fetch", "news", "history-all", "debate"):
+        a = activity(probe)
+        if a and a["agent"]:
+            out[a["agent"]] = a
+    return out

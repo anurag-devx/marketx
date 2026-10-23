@@ -66,7 +66,9 @@ AGENTS = [
          what="Makes headlines, filings, article text and your documents searchable by meaning and keywords; powers Search, Deep search and Documents.",
          io="news + filings + documents → data/library/lancedb", table=None),
 ]
-RUN_LABEL = {"fetch": "Fetch latest data", "regime": "Run regime", "screener": "Run screener", "strategy": "Run strategy (daily)", "technical": "Run technical", "risk": "Run risk",
+RUN_LABEL = {"fetch+pipeline": "Fetch data + run all agents", "pipeline": "Run all agents", "fetch-full": "Re-download all prices",
+             "debate-batch": "Nightly forecasts", "debate-replay": "Replay 20 sessions", "stock-lists": "Download NSE index lists",
+             "fetch": "Fetch latest data", "regime": "Run regime", "screener": "Run screener", "strategy": "Run strategy (daily)", "technical": "Run technical", "risk": "Run risk",
              "validation": "Run validation", "report": "Build report", "backtest": "Run backtest + analysis",
              "announcements": "Fetch announcements", "news": "Fetch news", "news-check": "Check news sources",
              "news-backfill": "Download older news", "news-retag": "Re-link headlines to stocks",
@@ -149,28 +151,53 @@ def launch(name, args=None):
         st.error(str(e))
 
 
+def _mmss(sec):
+    sec = int(max(0, sec))
+    return f"{sec // 60}:{sec % 60:02d}" if sec < 3600 else f"{sec // 3600}h {sec % 3600 // 60:02d}m"
+
+
+def progress_card(a, compact=False):
+    """Spinner + step + elapsed time + progress bar for a running job (a = jobs.activity(...))."""
+    import html
+    title = html.escape(RUN_LABEL.get(a["job"], a["job"]))
+    sub = f"Step {a['step']} of {a['steps']} · {html.escape(a['label'])} · {_mmss(a['elapsed'])}" if a["step"] else f"Starting · {_mmss(a['elapsed'])}"
+    st.markdown(f'<div class="mx-run{" mx-run-compact" if compact else ""}"><span class="mx-spinner"></span>'
+                f'<div><div class="mx-run-title">{title}</div><div class="mx-run-sub">{sub}</div></div></div>', unsafe_allow_html=True)
+    done = (a["step"] - 1) / a["steps"] if a["steps"] and a["step"] else 0.0
+    st.progress(min(0.98, done + a.get("frac", 0.5) / max(a["steps"], 1)))
+
+
+def any_job():
+    return any(jobs.current(p) for p in ("fetch", "news", "history-all", "debate"))
+
+
 def job_panel(key):
-    """Live output of the running (or last) job; refreshes itself every 3 s while a job runs."""
+    """Progress of the running job(s) with live output, or the last job's result; refreshes every 2 s while a job runs."""
     def body():
-        j = jobs.current()
+        j = jobs.activity()
         hist = jobs.history(1)
-        path = j["log"] if j else (hist[0]["path"] if hist else None)
         if j:
-            st.info(f"Running **{j['name']}** since {j['started']}")
+            progress_card(j)
+            with st.expander("Live output", expanded=False):
+                st.code(jobs.tail(j["log"], 40) or "(no output yet)", language=None)
+            if st.button("Stop", key=f"{key}-stop-main"):
+                jobs.stop(); st.rerun()
         elif hist:
             res = hist[0]["result"]
-            (st.success if res == "ok" else st.warning)(f"Last job: **{hist[0]['job']}** — {res} at {hist[0]['finished']}")
-        if path:
-            st.code(jobs.tail(path, 60) or "(no output yet)", language=None)
+            (st.success if res == "ok" else st.warning)(f"Last job: **{RUN_LABEL.get(hist[0]['job'], hist[0]['job'])}** — {res} at {hist[0]['finished']}")
+            with st.expander("Output"):
+                st.code(jobs.tail(hist[0]["path"], 60) or "(no output)", language=None)
         for lane, probe in (("news", "news"), ("history", "history-all"), ("lab", "debate")):
-            sj = jobs.current(probe)
-            if sj:
-                st.info(f"Also running **{sj['name']}** ({lane} lane) since {sj['started']}")
-                st.code(jobs.tail(sj["log"], 25) or "(no output yet)", language=None)
-                if st.button(f"Stop {sj['name']}", key=f"{key}-stop-{lane}"):
+            a = jobs.activity(probe)
+            if a:
+                progress_card(a, compact=True)
+                c = st.columns([1, 4])
+                if c[0].button("Stop", key=f"{key}-stop-{lane}"):
                     jobs.stop(probe); st.rerun()
-    if (jobs.current() or jobs.current("news") or jobs.current("history-all") or jobs.current("debate")) and hasattr(st, "fragment"):
-        st.fragment(run_every=3)(body)()
+                with c[1].expander("Live output"):
+                    st.code(jobs.tail(a["log"], 25) or "(no output yet)", language=None)
+    if any_job() and hasattr(st, "fragment"):
+        st.fragment(run_every=2)(body)()
     else:
         body()
 
@@ -179,7 +206,8 @@ def job_panel(key):
 def fig_base(fig, h=360, legend=False):
     fig.update_layout(height=h, margin=dict(l=8, r=12, t=8, b=8), showlegend=legend,
                       legend=dict(orientation="h", y=1.08, x=0), hoverlabel=dict(namelength=-1),
-                      paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)")
+                      paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                      colorway=["#4F46E5", "#06B6D4", "#F59E0B", "#10B981", "#EC4899", "#8B5CF6", "#64748B", "#EF4444"])
     fig.update_xaxes(gridcolor="#EEF1F6", zerolinecolor="#E2E8F0")
     fig.update_yaxes(gridcolor="#EEF1F6", zerolinecolor="#E2E8F0")
     return fig
@@ -239,7 +267,16 @@ def sidebar_actions():
             if sj:
                 st.caption(f"{lane} lane: {sj['name']} running (since {sj['started'][11:16]})")
         if j:
-            st.info(f"Running: {j['name']} (since {j['started'][11:16]})")
+            def _sb():
+                a = jobs.activity()
+                if a:
+                    progress_card(a, compact=True)
+                else:
+                    st.rerun()                     # job finished: refresh the whole page to show its results
+            if hasattr(st, "fragment"):
+                st.fragment(run_every=2)(_sb)()
+            else:
+                _sb()
             if st.button("Stop job", width="stretch"):
                 jobs.stop(); st.rerun()
         else:

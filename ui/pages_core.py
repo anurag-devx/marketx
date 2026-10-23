@@ -38,34 +38,7 @@ def page_overview():
         st.warning(f"**{pend.n.iat[0]} proposal(s) waiting for your approval** — open Settings → Approvals.")
     _backdrop()
     st.subheader("Agent health")
-    lr = last_runs()
-    lr = lr.set_index("agent") if has(lr) else pd.DataFrame()
-    cols = st.columns(4)
-    for i, a in enumerate([a for a in AGENTS]):
-        k = "data" if a["key"] == "fetch" else a["key"]
-        with cols[i % 4].container(border=True, key=f"tile-{a['key'].replace('+', '-')}"):
-            if not a["built"]:
-                st.markdown(f"⚪ **{a['name']}**  \n<span style='color:{REF}'>not built yet</span>", unsafe_allow_html=True)
-            elif k in ("macro-all", "market-report", "search-index", "debate"):
-                icon, when = _extra_status(k)
-                st.markdown(f"{icon} **{a['name']}**  \n<span style='color:{REF}'>{when}</span>", unsafe_allow_html=True)
-            elif k == "announcements":
-                from core import announcements as ann, news as newsmod
-                info, (_, _, nw) = ann.last_fetch(), newsmod.load()
-                ok = info and not info.get("errors")
-                icon = "🟢" if ok and nw else ("🟡" if (info or nw) else "⚫")
-                when = f"news {str(nw)[5:16] if nw else 'never'} · filings {info['when'][5:16] if info else 'never'}"
-                st.markdown(f"{icon} **{a['name']}**  \n<span style='color:{REF}'>{when}</span>", unsafe_allow_html=True)
-                if info and info.get("errors"):
-                    st.caption("Last filings fetch had errors: see Screener → NSE announcements")
-            elif k in lr.index:
-                row = lr.loc[k]
-                icon = "🟢" if row.status == "ok" else ("🔴" if row.status == "error" else "🟡")
-                st.markdown(f"{icon} **{a['name']}**  \n<span style='color:{REF}'>{pd.Timestamp(row.started):%d %b %H:%M}</span>", unsafe_allow_html=True)
-                if row.status == "error":
-                    st.caption(f"Failed: {str(row.message)[:90]}. Run again; if it fails again, see Reports and logs.")
-            else:
-                st.markdown(f"⚫ **{a['name']}**  \n<span style='color:{REF}'>never run</span>", unsafe_allow_html=True)
+    _agent_tiles()
 
     st.subheader("Run")
     c = st.columns(3)
@@ -694,6 +667,58 @@ def page_data():
         st.caption("None recorded.")
 
 
+DOT = {"🟢": "ok", "🟡": "warn", "🔴": "bad", "⚫": "idle", "⚪": "idle"}
+
+
+def _tile_status(a, lr):
+    """(dot class, sub text, extra caption) for one agent tile."""
+    k = "data" if a["key"] == "fetch" else a["key"]
+    if not a["built"]:
+        return "idle", "not built yet", None
+    if k in ("macro-all", "market-report", "search-index", "debate"):
+        icon, when = _extra_status(k)
+        return DOT.get(icon, "idle"), when, None
+    if k == "announcements":
+        from core import announcements as ann, news as newsmod
+        info, (_, _, nw) = ann.last_fetch(), newsmod.load()
+        ok = info and not info.get("errors")
+        dot = "ok" if ok and nw else ("warn" if (info or nw) else "idle")
+        when = f"news {str(nw)[5:16] if nw else 'never'} · filings {info['when'][5:16] if info else 'never'}"
+        return dot, when, ("Last filings fetch had errors (Screener → NSE announcements)" if info and info.get("errors") else None)
+    if k in lr.index:
+        row = lr.loc[k]
+        dot = "ok" if row.status == "ok" else ("bad" if row.status == "error" else "warn")
+        return dot, f"{pd.Timestamp(row.started):%d %b %H:%M}", (f"Failed: {str(row.message)[:90]}" if row.status == "error" else None)
+    return "idle", "never run", None
+
+
+def _agent_tiles():
+    """Agent health as an even grid (rows of 4). A tile pulses while a running job works on that agent."""
+    import html
+    def body():
+        lr = last_runs()
+        lr = lr.set_index("agent") if has(lr) else pd.DataFrame()
+        busy = jobs.active_agents()
+        for r0 in range(0, len(AGENTS), 4):
+            cols = st.columns(4)
+            for c, a in zip(cols, AGENTS[r0:r0 + 4]):
+                dot, sub, extra = _tile_status(a, lr)
+                act = busy.get(a["key"])
+                if act:
+                    dot, sub = "run", f'<span class="mx-working">Working…</span> {html.escape(act["label"])} · step {act["step"]}/{act["steps"]}'
+                else:
+                    sub = html.escape(str(sub))
+                with c.container(border=True, key=f"tile-{a['key'].replace('+', '-')}"):
+                    st.markdown(f'<div class="mx-tile-head"><span class="mx-dot {dot}"></span>{html.escape(a["name"])}</div>'
+                                f'<div class="mx-tile-sub">{sub}</div>', unsafe_allow_html=True)
+                    if extra and not act:
+                        st.caption(extra)
+    if any_job() and hasattr(st, "fragment"):
+        st.fragment(run_every=3)(body)()
+    else:
+        body()
+
+
 def _extra_status(k):
     """(icon, text) for agents that keep their own files rather than agent_runs rows."""
     import json
@@ -705,8 +730,9 @@ def _extra_status(k):
             study = json.loads(meta.read_text())["when"][5:16] if meta.exists() else None
             if not lf:
                 return "⚫", "never fetched"
-            bad = [x for x, v in lf["status"].items() if not str(v).startswith("ok")]
-            return ("🟢" if not bad and study else "🟡"), f"data {lf['when'][5:16]} · study {study or 'not run'}" + (f" · {len(bad)} source(s) failing" if bad else "")
+            bad = sorted({x.replace(" vol", "").replace(" tone", "") for x, v in lf["status"].items()
+                          if not str(v).startswith(("ok", "skipped"))})
+            return ("🟢" if not bad and study else "🟡"), f"data {lf['when'][5:16]} · study {study or 'not run'}" + (f" · {len(bad)} of {len({x.replace(' vol', '').replace(' tone', '') for x in lf['status']})} sources failed last time" if bad else "")
         if k == "market-report":
             from research import report_writer as W
             days = W.saved_reports()
