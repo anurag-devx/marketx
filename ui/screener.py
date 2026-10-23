@@ -53,7 +53,7 @@ def page():
     if prices() is None:
         st.info("No price data yet."); return
     stale_notice("the screener (every tab)")
-    t1, t2, t6, t3, t4, t5 = st.tabs(["📐 Technical setups", "📈 Market movers", "📊 Daily moves", "📰 News", "📢 NSE announcements", "🤖 Agents' shortlist"])
+    t1, t2, t6, t7, t3, t4, t5 = st.tabs(["📐 Technical setups", "📈 Market movers", "📊 Daily moves", "📑 Results", "📰 News", "📢 NSE announcements", "🤖 Agents' shortlist"])
     from ui import screener_more as M
     with t1:
         run_tab(_strategy_options())
@@ -64,6 +64,9 @@ def page():
         moves_catalyst.daily_moves_tab()
     with t3:
         M.news_tab()
+    with t7:
+        from ui import results
+        results.results_tab()
     with t4:
         M.announcements_tab()
     with t5:

@@ -77,7 +77,8 @@ RUN_LABEL = {"fetch+pipeline": "Fetch data + run all agents", "pipeline": "Run a
              "library-ingest": "Add to documents library", "news-articles": "Read news article text", "install-ai": "Install missing packages",
              "macro-fetch": "Fetch macro data", "macro-research": "Run macro study", "macro-all": "Fetch macro data + run study",
              "search-index": "Build the search index", "history-all": "Download all history",
-             "debate": "Run a debate analysis", "debate-eval": "Score finished debate forecasts"}
+             "debate": "Run a debate analysis", "fundamentals": "Update quarterly results",
+             "fundamentals-backfill": "Download results history", "debate-eval": "Score finished debate forecasts"}
 
 
 # ---------------- data helpers ----------------

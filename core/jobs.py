@@ -11,9 +11,9 @@ LOCK = JOBS / "current.json"
 #   history  long history downloads and indexing (hours), so they never block the daily run
 #   lab      Market Debate Lab analyses (minutes, mostly waiting on the local model); writes only data/debate/
 # Lanes never share the database; files they share are protected by core/filelock.py and written atomically.
-LANES = {"news": {"news", "news-check", "announcements", "macro-fetch", "macro-all"},
+LANES = {"news": {"news", "news-check", "announcements", "macro-fetch", "macro-all", "fundamentals"},
          "history": {"history-all", "announcements-backfill", "news-backfill", "company-info", "news-articles", "search-index",
-                     "library-ingest", "news-retag"},
+                     "library-ingest", "news-retag", "fundamentals-backfill"},
          "lab": {"debate", "debate-eval", "debate-batch", "debate-replay", "stock-lists"}}
 SIDE = LANES["news"]                         # kept for older callers
 SIDE_LOCK = JOBS / "current_side.json"
@@ -40,7 +40,7 @@ COMMANDS = {
     "screener-experiments-force": [[PY, "-u", "-m", "screener", "experiments", "--force"]],
     "pipeline": [[PY, "-u", "pipeline.py", "all"]],
     "fetch+pipeline": [[PY, "-u", "fetch_angel.py"], [PY, "-u", "news_fetch.py"], [PY, "-u", "-m", "core.announcements"],
-                       [PY, "-u", "-m", "core.macro"], [PY, "-u", "pipeline.py", "all"], [PY, "-u", "-m", "research.macro_impact"],
+                       [PY, "-u", "-m", "core.fundamentals"], [PY, "-u", "-m", "research.earnings"], [PY, "-u", "-m", "core.macro"], [PY, "-u", "pipeline.py", "all"], [PY, "-u", "-m", "research.macro_impact"],
                        [PY, "-u", "-m", "research.market_report"], [PY, "-u", "-m", "debate.batch"], [PY, "-u", "-m", "debate.evaluate"]],
     "announcements": [[PY, "-u", "news_fetch.py"], [PY, "-u", "-m", "core.announcements"]],
     "backtest": [[PY, "-u", "backtest.py"], [PY, "-u", "strategy_research.py"], [PY, "-u", "analysis.py"]],
@@ -52,6 +52,8 @@ COMMANDS = {
     "announcements-backfill": [[PY, "-u", "-m", "core.announcements", "backfill", "start=2016-01-01"]],
     "company-info": [[PY, "-u", "-m", "core.company_info"]],
     "news-research": [[PY, "-u", "-m", "research.events"]],
+    "fundamentals": [[PY, "-u", "-m", "core.fundamentals"], [PY, "-u", "-m", "research.earnings"]],
+    "fundamentals-backfill": [[PY, "-u", "-m", "core.fundamentals", "backfill", "start=2021-01-01"], [PY, "-u", "-m", "research.earnings"]],
     "market-report": [[PY, "-u", "-m", "research.market_report"]],
     "macro-fetch": [[PY, "-u", "-m", "core.macro"]],
     "macro-research": [[PY, "-u", "-m", "research.macro_impact"]],
@@ -79,7 +81,7 @@ COMMANDS = {
 
 
 KEEP_GOING = {"history-all"}
-OPTIONAL = ("news_fetch.py", "core.announcements", "research.market_report", "core.macro", "research.macro_impact", "debate.batch", "debate.evaluate")   # a failure here is reported but never stops the agents
+OPTIONAL = ("news_fetch.py", "core.announcements", "core.fundamentals", "research.earnings", "research.market_report", "core.macro", "research.macro_impact", "debate.batch", "debate.evaluate")   # a failure here is reported but never stops the agents
 
 
 def _cmd(cmd):
@@ -207,6 +209,8 @@ def tail(path, n=300):
 STEPS = [("fetch_angel.py", "Downloading prices", "fetch"), ("news_fetch.py", "Fetching news", "announcements"),
          ("core.announcements", "Fetching NSE filings", "announcements"), ("core.news", "Downloading news history", "announcements"),
          ("core.company_info", "Downloading company details", "announcements"), ("core.articles", "Reading article text", "search-index"),
+         ("core.fundamentals", "Reading quarterly results (NSE XBRL)", "announcements"),
+         ("research.earnings", "Results: growth, surprise and price reaction", "announcements"),
          ("core.macro", "Fetching macro and geopolitical data", "macro-all"), ("research.macro_impact", "Running the macro study", "macro-all"),
          ("pipeline.py", "Running the agents", None), ("research.market_report", "Writing the market report", "market-report"),
          ("debate.batch", "Nightly forecasts", "debate"), ("debate.evaluate", "Scoring forecasts", "debate"),

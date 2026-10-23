@@ -155,6 +155,9 @@ def page():
         st.markdown("**Strength**")
         st.write(f"Beats {100 * last.rs_pct:.0f}% of liquid stocks on 3-month return vs Nifty; rank {int(last.rank_in_sector) if pd.notna(last.rank_in_sector) else '—'} in its sector on 1-month return.")
 
+    from ui import results
+    results.stock_section(sym)
+
     # ---------- history ----------
     st.subheader("History")
     h = st.columns(2)
