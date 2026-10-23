@@ -14,7 +14,8 @@ LOCK = JOBS / "current.json"
 LANES = {"news": {"news", "news-check", "announcements", "macro-fetch", "macro-all", "fundamentals"},
          "history": {"history-all", "announcements-backfill", "news-backfill", "news-articles", "search-index",
                      "library-ingest", "news-retag", "fundamentals-backfill"},
-         "lab": {"debate", "debate-eval", "debate-batch", "debate-replay", "stock-lists"}}
+         "lab": {"debate", "debate-eval", "debate-batch", "debate-replay", "stock-lists"},
+         "kronos": {"kronos-install", "kronos-forecast", "kronos-replay"}}      # experimental, separate: see kronos_lab/README.md
 SIDE = LANES["news"]                         # kept for older callers
 SIDE_LOCK = JOBS / "current_side.json"
 
@@ -29,6 +30,7 @@ def _python():
 
 
 PY = _python()
+PYK = str(BASE / ".venv-kronos" / "bin" / "python")      # Kronos's own environment (kronos_lab/setup.sh)
 
 COMMANDS = {
     "fetch": [[PY, "-u", "fetch_angel.py"]],
@@ -69,6 +71,9 @@ COMMANDS = {
     "debate-batch": [[PY, "-u", "-m", "debate.batch"], [PY, "-u", "-m", "debate.evaluate"]],
     "debate-replay": [[PY, "-u", "-m", "debate.batch", "days=20"], [PY, "-u", "-m", "debate.evaluate"]],
     "stock-lists": [[PY, "-u", "-m", "core.stocklists"]],
+    "kronos-install": [["/bin/bash", "kronos_lab/setup.sh"]],
+    "kronos-forecast": [[PYK, "-u", "-m", "kronos_lab.forecast"]],
+    "kronos-replay": [[PYK, "-u", "-m", "kronos_lab.forecast", "replay=50", "step=5"]],
     "regime": [[PY, "-u", "pipeline.py", "regime"]],
     "strategy": [[PY, "-u", "pipeline.py", "strategy"]],
     "strategy-research": [[PY, "-u", "strategy_research.py"], [PY, "-u", "analysis.py"]],
@@ -217,7 +222,8 @@ STEPS = [("fetch_angel.py", "Downloading prices", "fetch"), ("news_fetch.py", "F
          ("core.search_index", "Building the search index", "search-index"), ("core.library", "Adding to the documents library", "search-index"),
          ("backtest.py", "Backtesting strategies", "backtest"), ("strategy_research.py", "Strategy research", "backtest"),
          ("analysis.py", "Strategy analysis", "backtest"), ("research.events", "Running the news study", "announcements"),
-         ("core.quality", "Checking data quality", "fetch"), ("pip", "Installing packages", None)]
+         ("core.quality", "Checking data quality", "fetch"), ("pip", "Installing packages", None),
+         ("kronos_lab.forecast", "Kronos forecasts", None), ("kronos_lab/setup.sh", "Installing Kronos", None)]
 AGENT_STEP = {"regime": "regime", "screener": "screener", "strategy": "strategy", "technical": "technical", "risk": "risk",
               "validation": "validation", "report": "report"}
 

@@ -25,6 +25,8 @@ logs_backtest_run.txt
 # ---- Python / tools ----
 .venv/
 venv/
+.venv-kronos/
+kronos_lab/vendor/
 __pycache__/
 *.py[cod]
 .pytest_cache/

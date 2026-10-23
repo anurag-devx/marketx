@@ -275,6 +275,7 @@
     ["Portfolio", [["positions", "Positions & risk"]]],
     ["Tools", [["search", "Search"], ["ask", "Ask"], ["documents", "Documents"], ["lab", "Strategy Lab"], ["records", "Reports & logs"]]],
     ["Setup", [["settings", "Settings"], ["data", "Data health"]]],
+    ["Experimental", [["kronos", "Kronos"]]],
   ];
   const PAGES = {};
   function drawNav(cur) {

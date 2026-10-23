@@ -196,7 +196,7 @@
     for (let i = 0; i < n; i++) { let p = 0, m = 0; spec.series.forEach((s) => { const v = s.y[i] || 0; if (v >= 0) p += v; else m += v; }); hi = Math.max(hi, p); lo = Math.min(lo, m); }
     if (!(hi > lo)) hi = lo + 1;
     const y = (v) => padT + (1 - (v - lo) / (hi - lo)) * ph, x = (i) => padL + ((i + 0.5) / n) * (W - padL - padR), bw = Math.max(1, Math.min(spec.maxBar || 56, ((W - padL - padR) / n) * 0.72));
-    for (const t of niceTicks(lo, hi, 5)) { el("line", { x1: padL, x2: W - padR, y1: y(t), y2: y(t), stroke: css("--line") }, svg); const tx = el("text", { x: W - padR + 6, y: y(t) + 4 }, svg); tx.textContent = fmt(Math.abs(t), 0); }
+    for (const t of niceTicks(lo, hi, 5)) { el("line", { x1: padL, x2: W - padR, y1: y(t), y2: y(t), stroke: css("--line") }, svg); const tx = el("text", { x: W - padR + 6, y: y(t) + 4 }, svg); tx.textContent = fmt(spec.signed ? t : Math.abs(t), spec.decimals ?? 0); }
     const pal = [css("--up"), css("--down"), css("--accent"), "#f59e0b"];
     for (let i = 0; i < n; i++) { let p = 0, m = 0; spec.series.forEach((s, k) => { const v = s.y[i]; if (!v) return; const col = s.color || pal[k % pal.length];
       if (v >= 0) { el("rect", { x: x(i) - bw / 2, y: y(p + v), width: bw, height: Math.max(0.5, y(p) - y(p + v)), fill: col, opacity: 0.85 }, svg); p += v; }

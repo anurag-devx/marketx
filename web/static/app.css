@@ -309,3 +309,4 @@ blockquote { margin: 0 0 12px; padding: 6px 12px; border-left: 3px solid var(--l
 .jt { flex: 0 1 auto; min-width: 0; max-width: none; }
 .jobrow .bar { flex: none; width: 90px; }
 .page, #page { min-width: 0; }
+#ks tbody tr { cursor: pointer; }

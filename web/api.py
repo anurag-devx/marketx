@@ -121,7 +121,7 @@ def warm():
 
 
 # ---------------- status (every page) ----------------
-LANE_PROBE = {"main": "fetch", "news": "news", "history": "history-all", "lab": "debate"}
+LANE_PROBE = {"main": "fetch", "news": "news", "history": "history-all", "lab": "debate", "kronos": "kronos-forecast"}
 
 
 @route("GET", "status")
@@ -163,7 +163,8 @@ JOB_LABEL = {"strategy-research": "Strategy research", "screener-experiments": "
              "fetch+pipeline": "Fetch data + run all agents", "pipeline": "Run all agents", "fetch": "Fetch prices", "news": "Fetch news",
              "announcements": "Fetch news and filings", "fundamentals": "Update quarterly results",
              "fundamentals-backfill": "Download results history", "macro-all": "Fetch macro data + study", "market-report": "Write market report",
-             "debate-batch": "Nightly forecasts", "backtest": "Run backtest + analysis", "screener": "Run screener"}
+             "debate-batch": "Nightly forecasts", "backtest": "Run backtest + analysis", "screener": "Run screener",
+             "kronos-install": "Install Kronos", "kronos-forecast": "Kronos forecasts", "kronos-replay": "Kronos replay"}
 STARTABLE = set(jobs.COMMANDS)                # only the fixed commands in core/jobs.py; arguments are dates and flags only
 
 
@@ -427,4 +428,4 @@ def _stock_news(sym, n=40):
 
 
 # route modules register themselves on import
-from web import r_today, r_screener, r_agents, r_research, r_tools, r_setup  # noqa: E402,F401
+from web import r_today, r_screener, r_agents, r_research, r_tools, r_setup, r_kronos  # noqa: E402,F401
