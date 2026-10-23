@@ -135,7 +135,7 @@ def _rule(r, px_last=None):
         return set(d[col].astype(str).str.strip()) if col else set()
     if t == "screener":
         from . import db
-        d = db.read("select symbol from screener_results where cast(date as date) = (select max(cast(date as date)) from screener_results)")
+        d = db.read("select symbol from screener_results where screen_date = (select max(screen_date) from screener_results) and qualified")
         return set(d.symbol) if d is not None else set()
     if t == "exposure":
         from . import search as S

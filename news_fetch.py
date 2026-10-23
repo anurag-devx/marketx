@@ -37,7 +37,7 @@ def watched_symbols(limit=40):
         from core import db
         for sql in ("select symbol from portfolio_targets where cast(date as date) = (select max(cast(date as date)) from portfolio_targets)",
                     "select symbol from candidates where cast(date as date) = (select max(cast(date as date)) from candidates) limit 30",
-                    "select symbol from screener_results where cast(date as date) = (select max(cast(date as date)) from screener_results) limit 30"):
+                    "select symbol from screener_results where screen_date = (select max(screen_date) from screener_results) and qualified order by rank limit 30"):
             try:
                 out += list(db.read(sql).symbol)
             except Exception:

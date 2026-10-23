@@ -1,0 +1,146 @@
+/* Today: Overview, Market, Stock. */
+(function () {
+  const { api, esc, num, pct, cls, inr, day, dt, $, table, kpi, card, head, note, form, tabs, sections, newsList, startJob, dataTable, qs } = MX;
+  const sym = "sym";
+
+  MX.page("overview", {
+    title: "Overview", reloadOnJob: true,
+    async render(el) {
+      const o = await api("overview");
+      const r = o.regime, m = o.market, s = m && m.summary, nifty = m && m.nifty;
+      el.innerHTML = head("Overview", r ? `Market as of ${day(r.date, { weekday: "short", day: "numeric", month: "short", year: "numeric" })}` : "The agents haven't completed a run yet",
+        `<button class="btn" id="b-agents">Run all agents</button>`) +
+        (o.pending ? `<div class="section">${note(`${o.pending} proposal(s) wait for your approval — <a href="#/settings">Settings → Approvals</a>.`)}</div>` : "") +
+        (r && r.note ? note(esc(r.note), "warn") : "") +
+        `<div class="grid g4 section">
+          ${kpi("Nifty 50", nifty ? num(nifty.value, 0) : "—", nifty ? `<span class="${cls(nifty.chg)}">${pct(nifty.chg, 2)}</span> today` : "", nifty ? MXCharts.sparkline(nifty.spark, { h: 34 }) : "")}
+          ${kpi("Market state", r ? esc(r.state) : "—", r ? `${r.days} days · size ×${r.size}` : "")}
+          ${kpi("Breadth", s ? `${num(s.above200, 0)}%` : "—", s ? `above 200-day · <span class="up">${s.up} up</span> / <span class="down">${s.down} down</span>` : "")}
+          ${kpi("India VIX", r && r.vix != null ? num(r.vix, 1) : nifty && nifty.vix ? num(nifty.vix, 1) : "—", r && r.vix_median ? `1-year median ${num(r.vix_median, 1)}` : "")}
+        </div>
+        <div class="section"><div class="sh"><h3>Agents</h3><a class="more" href="#/agents">Details</a></div>
+          <div class="tiles">${o.agents.map((a) => `<div class="tile ${a.state === "run" ? "run" : ""}" title="${esc(a.note || "")}"><div class="n"><span class="dot ${a.state}"></span>${esc(a.name)}</div><div class="s">${esc(a.sub)}</div></div>`).join("")}</div></div>
+        <div class="section grid g2">
+          ${card("Trades for the next open", table(o.trades, [["symbol", "Stock", sym], ["strategy_name", "Strategy"], ["entry", "Entry", "inr"], ["stop", "Stop", "inr"], ["quantity", "Qty", "int"]],
+            r && !r.active ? "No trades: no strategy has a tested edge in this market state." : "No approved trades."), r ? `Active: ${esc(r.active || "none")}` : "")}
+          ${card("Exits due", table(o.exits, [["symbol", "Stock", sym], ["strategy", "Strategy"], ["days_held", "Days", "int"], ["action", "Action"]], "No exits due."))}
+        </div>
+        ${m ? `<div class="section grid g3">
+          ${card("Top gainers", table(m.gainers, [["symbol", "Stock", sym], ["close", "Close", "inr"], ["r1", "Day", "spct2"]]), `<a href="#/market">Market</a>`)}
+          ${card("Top losers", table(m.losers, [["symbol", "Stock", sym], ["close", "Close", "inr"], ["r1", "Day", "spct2"]]))}
+          ${card("Sectors today", table([...m.sectors_top, ...m.sectors_bottom], [["sector", "Sector"], ["day", "Day", "spct2"], ["week", "Week", "spct1"]]), "best and worst")}
+        </div>` : ""}
+        <div class="section grid g2">
+          ${card("Screener shortlist", table(o.shortlist, [["symbol", "Stock", sym], ["sector", "Sector"], ["setups_passed", "Setups", "int"], ["rank", "Rank", "int"]], "No shortlist yet: run the agents."),
+            o.shortlist && o.shortlist.length ? `${day(o.shortlist[0].screen_date)} · <a href="#/screener">Screener</a>` : "")}
+          ${card("Results", (o.results.recent && o.results.recent.length ? table(o.results.recent, [["symbol", "Stock", sym], ["quarter", "Quarter"], ["profit_yoy", "Profit YoY", "spct1"], ["sue_profit", "Surprise", "snum1"], ["react_rel", "Reaction", "spct1"]])
+            : `<div class="muted small">No results filed in the last 3 days.</div>`) + (o.results.upcoming && o.results.upcoming.length ? `<h3 style="margin:16px 0 6px">Coming up</h3>` +
+            table(o.results.upcoming, [["date", "Date", (v) => day(v, { weekday: "short", day: "numeric", month: "short" })], ["symbol", "Stock", sym]]) : ""), `<a href="#/screener">Results tab</a>`)}
+        </div>
+        ${o.backdrop.length ? `<div class="section"><div class="sh"><h3>Backdrop</h3><a class="more" href="#/macro">Macro</a></div><div class="grid g6">${o.backdrop.map((b) =>
+          kpi(esc(b.label), b.change_kind === "total" ? `${inr(b.value, 0)} cr` : num(b.value, 2), b.change_kind === "total" ? (b.chg_5d != null ? `5 days ${inr(b.chg_5d, 0)} cr` : "") : (b.chg_20d != null ? `${b.chg_20d > 0 ? "+" : ""}${num(b.chg_20d, 2)}${b.change_kind === "points" ? " pts" : "%"} in a month` : ""))).join("")}</div></div>` : ""}`;
+      $("#b-agents", el)?.addEventListener("click", () => startJob("pipeline"));
+    },
+  });
+
+  MX.page("market", {
+    title: "Market",
+    async render(el) {
+      el.innerHTML = head("Market", "Breadth, sectors, movers and news across the Nifty 500") + `<div id="mt"></div>`;
+      tabs($("#mt", el), ["Highlights", "News", "Catalyst"], async (i, body) => {
+        if (i === 0) {
+          body.innerHTML = `<div class="panel"><div id="hf"></div></div><div id="hs"></div>`;
+          const f = form($("#hf", body), [
+            { k: "as_of", label: "As of", type: "date", value: "" },
+            { k: "range", label: "Chart range", type: "radio", options: ["3M", "6M", "1Y", "3Y", "5Y", "All"], value: "1Y" },
+            { k: "period", label: "Sector moves over", type: "radio", options: [["day", "Day"], ["week", "Week"], ["month", "Month"]], value: "day" }], () => load());
+          const load = async () => { $("#hs", body).innerHTML = MX.spinner("Loading"); const d = await api(`market/highlights?${qs(f.values())}`);
+            sections($("#hs", body), [{ kind: "note", tone: "info", text: `Nifty 500 stocks on ${day(d.day, { weekday: "short", day: "numeric", month: "short", year: "numeric" })}` }, ...d.sections]); };
+          await load();
+        } else if (i === 1) {
+          body.innerHTML = `<div class="panel"><div class="row"><div id="nf" style="flex:1"></div><button class="btn" id="nref">Refresh news</button></div></div><div id="ns"></div>`;
+          $("#nref", body).addEventListener("click", () => startJob("news"));
+          let kinds = null;
+          const f = form($("#nf", body), [
+            { k: "days", label: "From the last", type: "select", options: [[1, "24 hours"], [3, "3 days"], [7, "7 days"], [30, "30 days"]], value: 7 },
+            { k: "q", label: "Search headlines", type: "text", placeholder: "RBI, crude, results" },
+            { k: "tagged", label: "Only headlines naming a stock", type: "toggle" }], () => load());
+          const load = async () => { const v = f.values(); const d = await api(`market/news?${qs({ ...v, tagged: v.tagged ? "true" : "" })}`); kinds = d.kinds;
+            $("#ns", body).innerHTML = card(`${d.items.length} headlines`, newsList(d.items, "No headlines yet. Press Refresh news."),
+              `${d.when ? `fetched ${esc(String(d.when).slice(0, 16))}` : "not fetched yet"}${d.errors && d.errors.length ? ` · not working: ${esc(d.errors.slice(0, 4).join(", "))}` : ""}`); };
+          await load();
+        } else {
+          body.innerHTML = note("Pick a headline (or type one). The system finds similar news and filings from the past and shows which stocks and sectors moved on those days. It describes what happened before; it is not a forecast.") +
+            `<div class="panel section"><div id="cf"></div><div class="row" style="margin-top:12px"><button class="btn primary" id="cgo">Find similar past news</button></div></div><div id="cs"></div>`;
+          const recent = await api("catalyst/recent");
+          const f = form($("#cf", body), [
+            { k: "pick", label: "Recent headline", type: "select", wide: true, options: [["", "— type my own below —"], ...recent.map((r, i) => [i, `${dt(r.published)} · ${r.title.slice(0, 150)}`])], value: recent.length ? 0 : "" },
+            { k: "text", label: "Or type a headline", type: "text", wide: true, placeholder: "e.g. RBI cuts repo rate by 25 bps / Crude jumps 5% / HAL bags ₹5,000 crore order" },
+            { k: "k", label: "Similar items to use", type: "select", options: [50, 100, 200, 400], value: 100 },
+            { k: "min_score", label: "Minimum similarity", type: "number", value: 0.15, min: 0.05, max: 0.6, step: 0.05 },
+            { k: "filings", label: "Include NSE filings", type: "toggle", value: true },
+            { k: "same", label: "Same event type only", type: "toggle", value: false }]);
+          $("#cgo", body).addEventListener("click", async () => {
+            const v = f.values(), r = v.text ? null : recent[v.pick];
+            const text = v.text || (r && r.title); if (!text) return MX.toast("Pick or type a headline", true);
+            $("#cs", body).innerHTML = MX.spinner("Searching past news and measuring moves (first time indexes everything, about a minute)");
+            try { const d = await api(`catalyst?${qs({ text, when: r ? r.published : "", k: v.k, min_score: v.min_score, filings: v.filings ? "true" : "false", same: v.same ? "true" : "false" })}`);
+              sections($("#cs", body), d.sections); } catch (e) { $("#cs", body).innerHTML = note(esc(e.message), "warn"); }
+          });
+        }
+      }, "market");
+    },
+  });
+
+  MX.page("stock", {
+    title: "Stock",
+    async render(el, arg) {
+      let symb = arg; try { symb = symb || localStorage.getItem("mx-stock"); } catch (e) { /* ignore */ }
+      symb = (symb || "RELIANCE").toUpperCase();
+      try { localStorage.setItem("mx-stock", symb); } catch (e) { /* ignore */ }
+      const d = await api(`stock?symbol=${encodeURIComponent(symb)}`);
+      const i = d.info, b = d.bars;
+      el.innerHTML = head(esc(i.company), `${esc(i.symbol)} · ${esc(i.sector || "")} · last bar ${day(i.last_date, { weekday: "short", day: "numeric", month: "short" })}`,
+        `<a class="btn" href="#/debate/${encodeURIComponent(i.symbol)}">Debate this stock</a>`) +
+        `<div class="quote"><span class="px">${inr(i.close)}</span><span class="chg ${cls(i.chg)}">${pct(i.chg, 2)}</span><span class="muted">on the day</span></div>
+        <div class="card flush" style="margin-top:16px"><div class="facts">
+          <div><div class="k">1 month</div><div class="v ${cls(i.r1m)}">${pct(i.r1m)}</div></div>
+          <div><div class="k">3 months</div><div class="v ${cls(i.r3m)}">${pct(i.r3m)}</div></div>
+          <div><div class="k">1 year</div><div class="v ${cls(i.r1y)}">${pct(i.r1y)}</div></div>
+          <div><div class="k">52-week range</div><div class="v">${inr(i.lo52)} – ${inr(i.hi52)}</div></div></div></div><div id="st"></div>`;
+      tabs($("#st", el), ["Chart", "Results", "News & filings", "Agents"], (k, t) => {
+        if (k === 0) {
+          t.innerHTML = `<div class="card"><div class="ct"><div class="seg" id="rng">${[["3M", 91], ["6M", 182], ["1Y", 365], ["3Y", 1100]].map(([l, n]) => `<button data-n="${n}" class="${n === 365 ? "on" : ""}">${l}</button>`).join("")}</div>
+            <div class="seg" id="mode" style="margin-left:8px"><button data-m="line" class="on">Line</button><button data-m="candle">Candles</button></div>
+            <span class="aside">avg turnover ₹${num(i.avg_turnover_cr, 0)} cr/day · ${pct(i.from_hi)} from 52-week high</span></div>
+            <div id="pc"></div><div class="legend"><span><i style="background:#f59e0b"></i>50-day average</span><span><i style="background:var(--faint)"></i>200-day average</span><span>volume: green up day, red down day</span></div></div>`;
+          let n = 365, mode = "line";
+          const draw = () => { if (!document.body.contains(t) || !$("#pc", t)) return;
+            const cut = new Date(b.t[b.t.length - 1]); cut.setDate(cut.getDate() - n);
+            const k0 = b.t.findIndex((x) => new Date(x) >= cut), sl = (a) => a.slice(Math.max(0, k0));
+            MXCharts.priceChart($("#pc", t), { t: sl(b.t), o: sl(b.o), h: sl(b.h), l: sl(b.l), c: sl(b.c), v: sl(b.v), sma50: sl(b.sma50), sma200: sl(b.sma200) }, { mode, height: 400 }); };
+          const seg = (id, attr, set) => $(id, t).addEventListener("click", (e) => { const btn = e.target.closest("button"); if (!btn) return;
+            MX.$$("button", $(id, t)).forEach((x) => x.classList.toggle("on", x === btn)); set(btn.dataset[attr]); draw(); });
+          seg("#rng", "n", (v) => (n = +v)); seg("#mode", "m", (v) => (mode = v));
+          draw(); window.addEventListener("mx-resize", draw);
+        } else if (k === 1) {
+          const q = d.results.quarters || [], nx = d.results.next;
+          if (!q.length) { t.innerHTML = card("Quarterly results", `<div class="empty">No results read for this stock yet. <a href="#/screener">Screener → Results</a> → Download history.${nx ? `<br>Next results meeting: ${day(nx.date, { weekday: "short", day: "numeric", month: "short" })}` : ""}</div>`); return; }
+          t.innerHTML = (nx ? note(`Next results meeting: ${day(nx.date, { weekday: "long", day: "numeric", month: "long" })}`) : "") +
+            `<div class="card section"><div class="ct"><h2>Revenue and profit</h2><span class="aside">₹ crore · bars revenue, line profit</span></div><div id="rc"></div></div><div class="section card flush" id="rt"></div>
+            <p class="muted small">Surprise = change vs the same quarter last year, scaled by how much that change usually varies (company's own history, not analyst estimates). Blank = not comparable.</p>`;
+          const h = [...q].reverse();
+          MXCharts.barLine($("#rc", t), h.map((x) => x.quarter), h.map((x) => x.revenue_cr), h.map((x) => x.profit_cr));
+          $("#rt", t).appendChild(dataTable(q, [["quarter", "Quarter"], ["revenue_cr", "Revenue ₹ cr", "num0"], ["revenue_yoy", "YoY", "spct1"], ["profit_cr", "Profit ₹ cr", "num1"], ["profit_yoy", "YoY", "spct1"],
+            ["margin_pct", "Net margin", "pct1"], ["sue_profit", "Surprise", "snum1"], ["react_rel", "Reaction vs Nifty", "spct1"], ["filed_at", "Filed", "dt"], ["basis", "Basis"]], { tools: false }));
+        } else if (k === 2) {
+          t.innerHTML = card("News & filings", newsList(d.news.map((n) => ({ ...n, source: n.kind === "filing" ? "NSE filing" : n.source })), "No news or filings stored for this stock."), "labels only where the headline shows them");
+        } else {
+          const sc = d.screener;
+          t.innerHTML = `<div class="grid g2">${card("Screener", sc ? `<div><b>${sc.qualifies ? "On the shortlist" : "Not on the shortlist"}</b>${sc.rank ? ` · rank ${num(sc.rank, 0)}` : ""} · ${day(sc.date)}</div><p class="muted small">${esc(sc.reasons || "")}</p>` : `<div class="empty">Not screened yet.</div>`)}
+            ${card("Signals from the strategies", table(d.signals, [["date", "Date", "date"], ["strategy", "Strategy"], ["approved", "Risk agent", (v, r) => v === true ? `<span class="up">approved</span>` : v === false ? `<span class="down">rejected</span> <span class="co">${esc(r.reject_reason || "")}</span>` : "—"]], "No signals on this stock recently."))}</div>`;
+        }
+      }, "stock");
+    },
+  });
+})();

@@ -1,5 +1,6 @@
 """Command line for the swing framework.
     python3 cli.py dashboard            open the control centre in your browser
+    python3 cli.py web                  the new MarketX app (plain HTML/JS, built-in server) on http://127.0.0.1:8504
     python3 cli.py lab                  open the Strategy Lab (separate workspace for your strategies)
     python3 cli.py fetch [--full|--broad]  update prices (Angel One); --full re-downloads, --broad adds all NSE stocks
     python3 cli.py quality              run the data quality checks
@@ -102,6 +103,11 @@ def main(argv):
         return schedule_refresh()
     if cmd == "backup":
         return sh("-m", "core.backup", "manual")
+    if cmd == "web":
+        sys.path.insert(0, str(BASE))
+        from web import server, api
+        api.warm()
+        return server.serve(int(argv[1]) if len(argv) > 1 else 8504)
     if cmd == "dashboard":
         ensure_packages()
         return streamlit("dashboard.py", argv[1] if len(argv) > 1 else "8503")

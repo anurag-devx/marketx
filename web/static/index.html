@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="mx-token" content="__TOKEN__">
+<title>MarketX</title>
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+<aside class="side">
+  <a class="brand" href="#/overview"><img src="/icon.svg" alt=""><span>Market<b>X</b></span></a>
+  <div class="search">
+    <input id="q" type="search" placeholder="Search stock  /" autocomplete="off" spellcheck="false" aria-label="Search stock">
+    <div id="qres" class="qres" hidden></div>
+  </div>
+  <nav id="nav"></nav>
+  <div class="side-foot"><div class="seg theme" id="theme"></div><div>Runs on this Mac · places no orders</div></div>
+</aside>
+<div class="main">
+  <header id="status" class="status"></header>
+  <main id="page" class="page"></main>
+</div>
+<div id="toast" class="toast" hidden></div>
+<script src="/charts.js"></script>
+<script src="/app.js"></script>
+<script src="/pages/today.js"></script>
+<script src="/pages/screener.js"></script>
+<script src="/pages/agents.js"></script>
+<script src="/pages/research.js"></script>
+<script src="/pages/tools.js"></script>
+<script src="/pages/setup.js"></script>
+</body>
+</html>
