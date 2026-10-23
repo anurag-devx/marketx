@@ -19,6 +19,6 @@ jobs:
       - name: Static check (fails only on undefined names or syntax errors)
         run: |
           python -m pyflakes $(git ls-files '*.py') > pyflakes.txt || true
-          ! grep -E "undefined name|invalid syntax|SyntaxError" pyflakes.txt
+          ! grep -E ": undefined name |invalid syntax|SyntaxError" pyflakes.txt
       - name: Tests (synthetic data only; no keys, no network)
         run: python -m pytest -q -p no:cacheprovider tests
