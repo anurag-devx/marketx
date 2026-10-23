@@ -32,7 +32,8 @@ PRESS_DOMAINS = ("economictimes", "moneycontrol", "livemint", "business-standard
                  "businessline", "reuters", "bloomberg", "cnbctv18", "ndtvprofit", "businesstoday", "thehindu", "ET ", "Livemint",
                  "BusinessLine", "Moneycontrol", "Business Standard")
 MATERIAL = {"Results", "Acquisition / merger", "Legal / regulatory", "Fund raising", "Management change", "Credit rating",
-            "Order / contract", "Buyback", "Dividend", "Bonus / split", "Block / bulk deal"}
+            "Order / contract", "Buyback", "Dividend", "Bonus / split", "Block / bulk deal", "Block / bulk deal / stake",
+            "Dividend / bonus / split / buyback"}
 UNAVAILABLE = {
     "UA-FUNDAMENTALS": ("Financial statements (revenue, margins, EPS, cash flow, debt, ROE/ROIC) and valuation multiples",
                         "No point-in-time fundamentals provider is connected. Results filings appear only as announcements (text), not numbers."),
@@ -355,7 +356,7 @@ def news_evidence(ctx, symbol, days=30, max_items=25):
             continue                      # the company is the broker / analyst, not the subject
         d0 = event_day(r.published, dates)
         ar0, since = _event_reaction(ctx, symbol, d0) if pd.notna(d0) else (None, None)
-        key = r.event_type
+        key = r.event_type or "untyped"
         prev = seen.get(key)
         novelty = "first report of this kind in the last 10 days" if prev is None or (r.published - prev).days > 10 else \
             f"follow-up: similar '{key}' item first seen {prev.date()}"
@@ -370,7 +371,7 @@ def news_evidence(ctx, symbol, days=30, max_items=25):
             else:
                 confirm = "cannot verify: the stored NSE filings start later"
         roundup = bool(getattr(r, "roundup", False))
-        fact = (f"News ({r.event_type}, tone {r.tone}): \"{str(r.title)[:180]}\" — {r.source}, published {pd.Timestamp(r.published):%Y-%m-%d %H:%M} IST"
+        fact = (f"News ({r.event_type or 'type not stated'}, tone {r.tone or 'no clear direction'}): \"{str(r.title)[:180]}\" — {r.source}, published {pd.Timestamp(r.published):%Y-%m-%d %H:%M} IST"
                 + (f"; covered by {int(r.n_sources)} sources" if getattr(r, "n_sources", 1) and r.n_sources > 1 else "")
                 + (f"; stock vs Nifty on the event day {ar0:+.1f}%, since then {since:+.1f}%" if ar0 is not None else "")
                 + ("; multi-stock roundup" if roundup else ""))

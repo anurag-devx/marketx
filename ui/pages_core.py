@@ -9,6 +9,7 @@ def page_overview():
     from ui.data_health import status_line
     lvl, line = status_line()
     (st.caption if lvl == "ok" else st.warning if lvl == "warn" else st.error)(f"🩺 {line}")
+    stale_notice("today's screener and agents")
     if not has(reg):
         start_here()
     else:
@@ -119,6 +120,7 @@ def start_here():
 def page_agents():
     st.title("Agents")
     st.caption("Each agent reads the previous agent's output from the database. After new data, run them in order, or use Run all agents.")
+    stale_notice("today's agent runs")
     tabs = st.tabs([("✅ " if a["built"] else "○ ") + a["name"] for a in AGENTS])
     busy = jobs.current() is not None
     lr = last_runs()

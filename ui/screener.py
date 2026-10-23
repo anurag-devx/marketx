@@ -52,6 +52,7 @@ def page():
     st.warning("**Research lists, not buy recommendations.** The agents still apply their own regime, entry, risk and exit rules.")
     if prices() is None:
         st.info("No price data yet."); return
+    stale_notice("the screener (every tab)")
     t1, t2, t6, t3, t4, t5 = st.tabs(["📐 Technical setups", "📈 Market movers", "📊 Daily moves", "📰 News", "📢 NSE announcements", "🤖 Agents' shortlist"])
     from ui import screener_more as M
     with t1:

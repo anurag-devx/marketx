@@ -47,7 +47,8 @@ for _name in ("smartConnect", "SmartApi", "logzero_default", "urllib3"):
 
 START = datetime(2015, 1, 1)
 CHUNK_DAYS = 1900          # API limit for ONE_DAY is 2000 days per request
-SLEEP = 0.35               # Angel allows 3 historical requests/second
+SLEEP = 1.0                # start at 1 request/second: Angel's limiter rejects far below its published 3/s (core/provider.py)
+RETRY_PASSES = (120, 300, 600)   # seconds to wait before each extra pass over stocks that still failed
 OUT = Path(__file__).parent / "data"
 OUT.mkdir(exist_ok=True)
 ENV_FILE = Path.home() / ".angel_env"
@@ -182,42 +183,79 @@ def run_set(api, symbols, tok, path, full, label):
     raw_path = OUT / "raw" / path.name.replace(".parquet", "_raw.parquet")
     raw_old = pd.read_parquet(raw_path) if (raw_path.exists() and not full) else pd.DataFrame(columns=["date", "symbol"])
     raw_by = {s: g.drop(columns="symbol") for s, g in raw_old.groupby("symbol")} if len(raw_old) else {}
-    frames, raw_frames, log, missing, failed, how = [], [], [], [], [], {}
+    log, missing, how = [], [], {}
+    res, raw_res, failed_why = {}, {}, {}          # symbol -> adjusted rows / raw rows to keep / last failure
     t0 = time.time()
+
+    def one(sym):
+        try:
+            d, h, raw = update_symbol(lambda frm, t=tok[sym]: candles(api, t, frm=frm), by_sym.get(sym), sym, log)
+        except ProviderError as e:
+            if e.kind == "auth":
+                raise
+            failed_why[sym] = f"{e.kind}: {str(e)[:140]}"
+            res[sym] = by_sym.get(sym, pd.DataFrame())
+            raw_res[sym] = raw_by[sym] if sym in raw_by else None
+            return "failed"
+        failed_why.pop(sym, None)
+        if h in ("new", "refetch"):
+            raw_res[sym] = raw
+        elif h == "update":
+            prev = raw_by.get(sym, pd.DataFrame(columns=raw.columns))
+            raw_res[sym] = pd.concat([prev[prev.date < raw.date.min()] if len(prev) else prev, raw])
+        else:
+            raw_res[sym] = raw_by.get(sym)
+        if h == "refetch":
+            print(f"  {sym}: history changed (split/bonus?) -> re-downloaded in full", flush=True)
+        res[sym] = d
+        return h
+
+    todo = []
     for n, sym in enumerate(symbols, 1):
         if sym not in tok:
             missing.append(sym)
             if sym in by_sym:
-                frames.append(by_sym[sym].assign(symbol=sym))
+                res[sym] = by_sym[sym]
+                raw_res[sym] = raw_by.get(sym)
             continue
-        try:
-            d, h, raw = update_symbol(lambda frm, t=tok[sym]: candles(api, t, frm=frm), by_sym.get(sym), sym, log)
-        except ProviderError as e:                     # reported, never silently dropped: old data is kept
-            failed.append(f"{sym} ({e.kind})")
-            print(f"  {sym}: download failed, kept the previous data ({e})", flush=True)
-            if e.kind == "auth":
-                raise
-            d, h, raw = by_sym.get(sym, pd.DataFrame()), "failed", None
-            if sym in raw_by:
-                raw_frames.append(raw_by[sym].assign(symbol=sym))
-        else:
-            if h in ("new", "refetch"):
-                raw_frames.append(raw.assign(symbol=sym))
-            elif h == "update":
-                prev = raw_by.get(sym, pd.DataFrame(columns=raw.columns))
-                raw_frames.append(pd.concat([prev[prev.date < raw.date.min()] if len(prev) else prev, raw]).assign(symbol=sym))
-            elif sym in raw_by:
-                raw_frames.append(raw_by[sym].assign(symbol=sym))
+        todo.append(sym)
+        h = one(sym)
+        if h == "failed":
+            print(f"  {sym}: download failed ({failed_why[sym][:90]}); will retry after this pass", flush=True)
         how[h] = how.get(h, 0) + 1
-        if h == "refetch":
-            print(f"  {sym}: history changed (split/bonus?) -> re-downloaded in full", flush=True)
-        if len(d):
-            frames.append(d.assign(symbol=sym))
-        else:
-            missing.append(sym)
         if n % 50 == 0:
             el = time.time() - t0
             print(f"  {label}: {n}/{len(symbols)} stocks, {el / 60:.1f} min, about {el / n * (len(symbols) - n) / 60:.0f} min left", flush=True)
+    # stocks Angel refused: retry later, more slowly, instead of keeping yesterday's prices
+    for i, wait in enumerate(RETRY_PASSES, 1):
+        again = [s_ for s_ in todo if s_ in failed_why]
+        if not again:
+            break
+        print(f"  {label}: {len(again)} stock(s) failed; retry pass {i}/{len(RETRY_PASSES)} in {wait // 60} min: {', '.join(again[:15])}"
+              f"{' ...' if len(again) > 15 else ''}", flush=True)
+        time.sleep(wait)
+        if hasattr(api, "interval"):
+            api.interval = max(api.interval, 2.0)       # gentler for the retries
+        for sym in again:
+            h = one(sym)
+            if h != "failed":
+                how["failed"] -= 1
+                how[h] = how.get(h, 0) + 1
+                print(f"  {sym}: downloaded on retry pass {i}", flush=True)
+    failed = [f"{s_} ({failed_why[s_].split(':')[0]})" for s_ in todo if s_ in failed_why]
+    for sym in failed_why:
+        print(f"  {sym}: STILL FAILED after {len(RETRY_PASSES)} retry passes ({failed_why[sym][:100]}); its last bar stays "
+              f"{pd.Timestamp(by_sym[sym].date.max()).date() if sym in by_sym else 'none'} and it is left out of today's signals", flush=True)
+    frames, raw_frames = [], []
+    for sym in symbols:
+        d = res.get(sym)
+        if d is not None and len(d):
+            frames.append(d.assign(symbol=sym))
+        elif sym in tok and sym not in missing:
+            missing.append(sym)
+        r = raw_res.get(sym)
+        if r is not None and len(r):
+            raw_frames.append(r.assign(symbol=sym))
     px = pd.concat(frames, ignore_index=True)[["date", "symbol", "open", "high", "low", "close", "volume"]]
     if path.exists():
         shutil.copy2(path, path.with_suffix(".prev.parquet"))      # one previous copy, in case
@@ -237,8 +275,37 @@ def run_set(api, symbols, tok, path, full, label):
           f"Split/bonus fixes: {n_adj} (+{len(log) - n_adj} gaps left for review). Missing: {', '.join(missing[:20]) or 'none'}{' ...' if len(missing) > 20 else ''}"
           + (f". FAILED (kept old data): {', '.join(failed)}" if failed else ""), flush=True)
     return dict(stocks=int(px.symbol.nunique()), rows=int(len(px)), last_bar=str(pd.Timestamp(px.date.max()).date()),
-                missing=missing, failed=failed, refetched=how.get("refetch", 0), new=how.get("new", 0), seconds=round(time.time() - t0),
+                missing=missing, failed=failed, failed_detail=dict(failed_why), refetched=how.get("refetch", 0), new=how.get("new", 0), seconds=round(time.time() - t0),
                 provider=dict(api.stats) if hasattr(api, "stats") else {})
+
+
+def write_stale_report(summary, not_listed, path=None):
+    """data/stale_symbols.json: every Nifty 500 stock without a bar for the latest day, and why. Read by the dashboard."""
+    path = path or OUT / "stale_symbols.json"
+    px = pd.read_parquet(OUT / "prices.parquet", columns=["date", "symbol"])
+    px["date"] = pd.to_datetime(px.date)
+    day = px.date.max()
+    last = px.groupby("symbol").date.max()
+    detail = summary.get("failed_detail", {})
+    rows = []
+    for sym in sorted(set(load_universe_cached().Symbol)):
+        lb = last.get(sym)
+        if lb is not None and lb >= day:
+            continue
+        why = (f"download failed: {detail[sym]}" if sym in detail else
+               "not in Angel One's instrument list" if sym in not_listed else
+               "no price history" if lb is None else f"Angel returned no bar for {day.date()} (not traded / suspended?)")
+        rows.append(dict(symbol=sym, last_bar=None if lb is None else str(lb.date()), reason=why))
+    out = dict(day=str(day.date()), checked=str(datetime.now().replace(microsecond=0)), stocks=rows)
+    atomic.write_text(path, json.dumps(out, indent=1))
+    if rows:
+        print(f"Not up to date for {day.date()}: {len(rows)} stock(s), left out of today's screener and agents: "
+              + ", ".join(r["symbol"] for r in rows[:30]) + (" ..." if len(rows) > 30 else ""), flush=True)
+    return out
+
+
+def load_universe_cached():
+    return pd.read_csv(OUT / "universe.csv")
 
 
 def main():
@@ -259,6 +326,16 @@ def main():
     nse = sm[sm.exch_seg == "NSE"]
     eq = nse[nse.symbol.str.endswith("-EQ")].assign(base=lambda x: x.symbol.str[:-3])
     tok = dict(zip(eq.base, eq.token))
+    # A stock moved to the trade-for-trade segment is listed as SYMBOL-BE, not -EQ: same company, same daily bars.
+    be = nse[nse.symbol.str.endswith("-BE")].assign(base=lambda x: x.symbol.str[:-3])
+    be_tok = dict(zip(be.base, be.token))
+    for sym in uni.Symbol:
+        if sym not in tok and sym in be_tok:
+            tok[sym] = be_tok[sym]
+            print(f"  {sym}: not listed as -EQ in Angel's instrument list; using its -BE (trade-for-trade) series", flush=True)
+    for sym in uni.Symbol:
+        if sym not in tok:
+            print(f"  {sym}: not in Angel One's instrument list (no -EQ or -BE series): no prices can be downloaded", flush=True)
     eq.assign(exchange="NSE").rename(columns={"base": "symbol_", "symbol": "trading_symbol"})[
         ["symbol_", "exchange", "token", "name", "trading_symbol"]].rename(columns={"symbol_": "symbol"}).to_csv(OUT / "instruments.csv", index=False)
 
@@ -295,6 +372,8 @@ def main():
     atomic.to_parquet(out.sort_values("date"), OUT / "index.parquet")
     info["index_last"] = str(pd.Timestamp(out.date.max()).date())
     print(f"Index data saved, last bar {info['index_last']}.", flush=True)
+
+    write_stale_report(info["nifty500"], set(uni.Symbol) - set(tok))
 
     # data quality checks on what was just saved
     try:

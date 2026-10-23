@@ -123,16 +123,7 @@ def news_tab():
     if only:
         v = v[v.symbols != ""]
     st.caption(f"{len(v)} headlines")
-    for r in v.head(80).itertuples():
-        with st.container(border=True):
-            st.markdown(f"**[{r.title}]({r.link})**")
-            meta = f"{r.source} · {str(r.published or '')[:16]}"
-            if r.symbols:
-                meta += " · mentions " + ", ".join(r.symbols.split(",")[:5])
-            st.caption(meta)
-            if r.summary:
-                st.write(r.summary[:280])
-
+    headline_list(v, "mk-news", show_summary=True)
 
 def page():
     st.title("Market")

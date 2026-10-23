@@ -90,3 +90,33 @@ def test_model_error_is_retried_once(facts, monkeypatch):
     rep = W.write(facts, use_llm=True, log=lambda *a: None)
     assert rep["writer"]["used"]["Market overview"] in ("model", "template (numbers failed the check)")
     assert rep["writer"]["used"]["Market overview"] != "template (model error)"
+
+
+def test_slow_model_cannot_stall_the_report(facts, monkeypatch):
+    """A local model that keeps timing out: after MAX_TIMEOUTS the rest of the report uses the template at once."""
+    monkeypatch.setattr(W, "ollama_status", lambda s=None: (True, "fake", ["fake"]))
+    monkeypatch.setattr(W.time, "sleep", lambda s: None)
+    n = {"calls": 0}
+
+    def timeout(msgs, s):
+        n["calls"] += 1
+        raise RuntimeError("Local model not reachable (ReadTimeout). Is the Ollama app open?")
+    monkeypatch.setattr(W, "_chat", timeout)
+    rep = W.write(facts, use_llm=True, log=lambda *a: None)
+    assert n["calls"] == W.MAX_TIMEOUTS                                  # no more calls once the model is known to be too slow
+    assert all(v.startswith("template") for v in rep["writer"]["used"].values())
+    assert any("too slow" in v for v in rep["writer"]["used"].values())
+
+
+def test_report_budget(facts, monkeypatch):
+    monkeypatch.setattr(W, "ollama_status", lambda s=None: (True, "fake", ["fake"]))
+    t = [0.0]
+    monkeypatch.setattr(W.time, "time", lambda: t[0])
+
+    def slow(msgs, s):
+        t[0] += W.BUDGET + 1                                             # one call eats the whole budget
+        return "Breadth was mixed."
+    monkeypatch.setattr(W, "_chat", slow)
+    rep = W.write(facts, use_llm=True, log=lambda *a: None)
+    used = list(rep["writer"]["used"].values())
+    assert "budget" in used[1] and used[-1] == "template"               # later sections and the summary skip the model

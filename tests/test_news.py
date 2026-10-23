@@ -136,7 +136,8 @@ def test_enrich_event_type_tone_roundup(tagger):
     d = N.enrich(raw, tagger, UNI)
     assert d.event_type.iat[0] == "Results" and d.tone.iat[0] == "positive" and d.symbols.iat[0] == "INFY"
     assert bool(d.roundup.iat[1]) and not bool(d.roundup.iat[0])
-    assert d.symbols.iat[2] == "RELIANCE"                     # summary used only because the title names nobody
+    assert d.symbols.iat[2] == ""                             # a summary naming a company is not evidence: headline only
+    assert d.tone.iat[1] == "" and d.tone.iat[2] == ""        # no tone for a round-up or a headline about no stock
 
 
 def test_merge_dedupes_and_counts_sources(tagger):

@@ -21,7 +21,14 @@ SIDE_LOCK = JOBS / "current_side.json"
 
 def lane_of(name):
     return next((lane for lane, names in LANES.items() if name in names), "main")
-PY = sys.executable
+def _python():
+    """The project's .venv Python when it exists (it has every package, e.g. xlrd for the GPR macro source), whatever
+    interpreter happens to be running the dashboard; otherwise the current one."""
+    v = BASE / ".venv" / "bin" / "python"
+    return str(v) if v.exists() else sys.executable
+
+
+PY = _python()
 
 COMMANDS = {
     "fetch": [[PY, "-u", "fetch_angel.py"]],
@@ -153,7 +160,7 @@ def start(name, args=None):
         chain = " && ".join(f"{mark(i, c)} && {_cmd(c)}" for i, c in enumerate(cmds, 1))
     script = f'{chain}; echo "__EXIT_CODE__=$?"'
     with open(log, "w") as f:
-        f.write(f"job {name} started {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+        f.write(f"job {name} started {time.strftime('%Y-%m-%d %H:%M:%S')} · Python {PY}\n")
         f.flush()
         p = subprocess.Popen(["/bin/bash", "-c", script], cwd=BASE, stdout=f, stderr=subprocess.STDOUT,
                              stdin=subprocess.DEVNULL, start_new_session=True)

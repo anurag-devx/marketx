@@ -103,10 +103,13 @@ def status(feature):
     return True, f"{model} ({PROVIDERS[prov]})"
 
 
-def chat(feature, messages, system=None, max_tokens=1500, temperature=None, json_mode=False):
+def chat(feature, messages, system=None, max_tokens=1500, temperature=None, json_mode=False, timeout=None):
     """messages: [{'role': 'user'|'assistant', 'content': str}]. Returns the reply text.
-    json_mode: ask a local model for strict JSON output (online models are asked in the prompt)."""
+    json_mode: ask a local model for strict JSON output (online models are asked in the prompt).
+    timeout: seconds for this call (default: the setting); lower values keep long batch jobs from stalling."""
     s, prov, model = resolve(feature)
+    if timeout:
+        s = dict(s, timeout=min(float(s["timeout"]), float(timeout)))
     temp = s["temperature"] if temperature is None else temperature
     if prov == "ollama":
         return _ollama(s, model, messages, system, temp, CTX.get(feature, 8192), max_tokens, json_mode)

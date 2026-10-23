@@ -144,11 +144,16 @@ def ollama_status(s=None):
     return ok, msg, models
 
 
+CALL_TIMEOUT = 240          # seconds per model call
+BUDGET = 25 * 60            # the whole report: after this, remaining sections use the code template
+MAX_TIMEOUTS = 2            # after this many timed-out calls the model is treated as too slow for today
+
+
 def _chat(messages, s):
     from core import llm
     system = next((m["content"] for m in messages if m["role"] == "system"), None)
     rest = [m for m in messages if m["role"] != "system"]
-    txt = llm.chat("report", rest, system=system, max_tokens=900)
+    txt = llm.chat("report", rest, system=system, max_tokens=900, timeout=CALL_TIMEOUT)
     return re.sub(r"^\s*#+.*$", "", txt, flags=re.M).strip()
 
 
@@ -277,14 +282,23 @@ def write(facts, use_llm=True, log=print):
     ok, msg, _ = ollama_status(s) if use_llm and s.get("enabled", True) else (False, "model not used", [])
     log(("Writer: " + msg) if use_llm else "Writer: template (no model)")
     parts, flags, used = [], {}, {}
-    t0 = time.time()
+    t0, timeouts = time.time(), 0
+
+    def too_slow():
+        return timeouts >= MAX_TIMEOUTS or time.time() - t0 > BUDGET
+
     for key, title, words, brief in SECTIONS:
         text = None
-        if ok:
+        if ok and too_slow():
+            used[title] = "template (model too slow today: " + (f"{timeouts} timed-out calls" if timeouts >= MAX_TIMEOUTS
+                                                                 else f"{BUDGET // 60}-minute budget used") + ")"
+        elif ok:
             for attempt in (1, 2):                     # one retry: a busy or reloading local model often succeeds the second time
                 try:
+                    s0 = time.time()
                     log(f"  writing {title}..." if attempt == 1 else f"  {title}: retrying once...")
                     text, bad = llm_section(facts, key, title, words, brief, s, log)
+                    log(f"  {title}: {time.time() - s0:.0f} s")
                     if bad:
                         flags[title] = bad
                         text = None
@@ -292,18 +306,23 @@ def write(facts, use_llm=True, log=print):
                     break
                 except Exception as e:
                     reason = f"{type(e).__name__}: {str(e)[:160]}"
-                    if attempt == 1:
+                    if "timeout" in reason.lower() or "timed out" in reason.lower():
+                        timeouts += 1
+                    if attempt == 1 and not too_slow():
                         log(f"  {title}: model error ({reason})")
                         time.sleep(5)
                     else:
-                        log(f"  {title}: model error again ({reason}); using the template")
+                        log(f"  {title}: model error ({reason}); using the template")
                         used[title] = "template (model error)"
+                        break
         if text is None:
             text = template_section(facts, key)
             used.setdefault(title, "template")
         parts.append((title, text))
+    if ok and too_slow():
+        log(f"  writer: model too slow today ({timeouts} timed-out calls, {(time.time() - t0) / 60:.0f} min); remaining sections used the template")
     summary = None
-    if ok:
+    if ok and not too_slow():
         try:
             summary, bad = llm_summary(facts, parts, s)
             if bad:

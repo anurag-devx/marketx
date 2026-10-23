@@ -101,7 +101,7 @@ def test_scan_presets_and_counts():
 
 
 def test_news_tone_and_filters():
-    assert NS.tone("Sensex surges as banks rally") == "positive"
+    assert NS.tone("Sensex surges as banks rally") == "neutral"                  # the index, not a stock: no direction claimed
     assert NS.tone("Government against new enterprise policy") == "neutral"     # no partial-word matches
     assert NS.tone("Shares plunge after loss") == "negative"
     d = pd.DataFrame(dict(published=pd.to_datetime(["2026-10-18 10:00", "2026-10-10 10:00", "2026-10-18 09:00"]),

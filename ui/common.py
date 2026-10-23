@@ -301,3 +301,53 @@ def sidebar_actions():
         venv = sys.prefix != getattr(sys, "base_prefix", sys.prefix)
         st.caption(f"v{C.VERSION} · runs on this Mac · places no orders · Python {sys.version.split()[0]} "
                    + ("(project .venv)" if venv else "(system — start with Start Dashboard.command to use .venv)"))
+
+
+def _md_text(t):
+    return str(t or "").replace("[", "\\[").replace("]", "\\]").replace("*", "\\*").replace("_", "\\_").replace("$", "\\$")
+
+
+def headline_list(v, key, per_page=50, show_summary=False):
+    """Headlines as clickable links. Under each: source and time, then ONLY the labels the headline itself supports
+    (stocks named, type and tone, each with the phrase that set it). No evidence -> just the plain headline."""
+    if v is None or v.empty:
+        st.caption("No headlines.")
+        return
+    v = v.sort_values("published", ascending=False, na_position="last")
+    pages = max(1, -(-len(v) // per_page))
+    page = st.number_input(f"Page (of {pages})", 1, pages, 1, key=f"{key}-page") if pages > 1 else 1
+    for r in v.iloc[(page - 1) * per_page: page * per_page].itertuples():
+        title, link = _md_text(r.title), str(getattr(r, "link", "") or "")
+        st.markdown(f"**[{title}]({link})**" if link.startswith("http") else f"**{title}**")
+        bits = [str(getattr(r, "source", "") or ""), pd.Timestamp(r.published).strftime("%d %b %H:%M") if pd.notna(r.published) else ""]
+        syms = r.symbols if isinstance(r.symbols, (list, tuple, np.ndarray)) else [x for x in str(r.symbols or "").split(",") if x]
+        if len(syms):
+            bits.append("Stocks: " + ", ".join(list(syms)[:6]) + (" (round-up)" if bool(getattr(r, "roundup", False)) else ""))
+        et, ew = str(getattr(r, "event_type", "") or ""), str(getattr(r, "type_why", "") or "")
+        if et:
+            bits.append(f"Type: {et}" + (f" — “{ew}”" if ew else ""))
+        tn, tw = str(getattr(r, "tone", "") or ""), str(getattr(r, "tone_why", "") or "")
+        if tn in ("positive", "negative"):
+            bits.append(f"Tone: {tn}" + (f" — “{tw}”" if tw else ""))
+        st.caption(_md_text(" · ".join(b for b in bits if b)))
+        if show_summary and getattr(r, "summary", ""):
+            st.write(str(r.summary)[:280])
+
+
+@st.cache_data(ttl=120)
+def _stale(mtime):
+    from core import freshness
+    return freshness.stale()
+
+
+def stale_notice(where="today's results"):
+    """A visible line for every stock missing the latest bar (they are left out of the screener and agents)."""
+    p = C.DATA / "prices.parquet"
+    f = C.DATA / "stale_symbols.json"
+    s = _stale((p.stat().st_mtime if p.exists() else 0, f.stat().st_mtime if f.exists() else 0))
+    rows = s.get("stocks") or []
+    if not rows:
+        return
+    with st.expander(f"⚠ {len(rows)} stock(s) have no price bar for {s.get('day')} and are left out of {where}"):
+        st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
+        st.caption("Run Fetch data again later to fill them in. Old prices are never passed off as today's.")

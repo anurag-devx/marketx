@@ -109,24 +109,24 @@ def news_tab():
         hours = c[0].selectbox("From the last", [6, 24, 72, 168, 720, 24 * 365 * 15], index=1, key="nw-h",
                                format_func=lambda h: "all stored" if h > 9000 else f"{h} hours" if h < 72 else f"{h // 24} days")
         srcs = c[1].multiselect("Sources", sorted(d.source.dropna().unique()), key="nw-src")
-        types = c[2].multiselect("Type", sorted(d.event_type.dropna().unique()), key="nw-kind",
-                                 help="Results, broker view, order win… from keyword rules on the headline")
+        types = c[2].multiselect("Type", sorted(x for x in d.event_type.fillna("").unique() if x) + ["(no type)"], key="nw-kind",
+                                 help="Set only when the headline contains an explicit phrase (shown next to it); otherwise no type")
         kw = c[3].text_input("Words (comma-separated, any)", key="nw-kw", placeholder="results, order, RBI, crude")
     with st.container(border=True):
         st.markdown("##### About which stocks")
         c = st.columns([2.5, 2.5, 1.6, 1.4])
         syms = c[0].multiselect("Stocks", sorted(uni.Symbol), key="nw-sym")
         secs = c[1].multiselect("Sectors", sorted(uni.Industry.dropna().unique()), key="nw-sec")
-        tones = c[2].multiselect("Tone (rough)", ["positive", "negative", "neutral"], key="nw-tone",
-                                 help="Keyword-based label on the headline; a reading aid, not a signal")
+        tones = c[2].multiselect("Tone", ["positive", "negative", "(no tone)"], key="nw-tone",
+                                 help="Only for a headline about one stock with a clear direction phrase (shown next to it). A reading aid, not a signal")
         tagged = c[3].toggle("Only headlines naming a stock", key="nw-tag")
         no_round = c[3].toggle("Hide market round-ups", key="nw-rnd", value=True, help="'Stocks to watch' style lists naming many companies")
         only_sl = c[3].toggle("Only stocks on the agents' shortlist", key="nw-sl")
     since = pd.Timestamp.now() - pd.Timedelta(hours=hours)
     sl = _shortlist_symbols()
-    v = NS.filter_items(d, since, srcs, (), kw, syms, secs, tones, tagged)
+    v = NS.filter_items(d, since, srcs, (), kw, syms, secs, [("" if t == "(no tone)" else t) for t in tones], tagged)
     if types:
-        v = v[v.event_type.isin(types)]
+        v = v[v.event_type.fillna("").isin([("" if t == "(no type)" else t) for t in types])]
     if no_round:
         v = v[~v.roundup.fillna(False).astype(bool)]
     if only_sl:
@@ -134,10 +134,7 @@ def news_tab():
     st.markdown(f"**{len(v)} headlines** of {len(d)} downloaded")
     a, b = st.columns([3, 2])
     with a:
-        t = v.assign(stocks=v.symbols.map(", ".join))[["published", "source", "event_type", "tone", "title", "stocks", "link"]]
-        st.dataframe(t, hide_index=True, width="stretch", height=_h(v), column_config={
-            "published": st.column_config.DatetimeColumn("time", format="DD MMM HH:mm"),
-            "event_type": "type", "title": st.column_config.TextColumn("headline", width="large"), "link": st.column_config.LinkColumn("open", display_text="open")})
+        headline_list(v, "nw")
     with b:
         st.markdown("**Stocks in these headlines**")
         snap, _ = snapshot()
@@ -145,7 +142,8 @@ def news_tab():
         show(s, "No stock named in these headlines.", height=_h(v), column_config={
             "latest": st.column_config.DatetimeColumn(format="DD MMM HH:mm"), "latest_item": st.column_config.TextColumn("latest headline"),
             "change_1d_pct": st.column_config.NumberColumn("last day %", format="%+.2f"), "rel_volume": st.column_config.NumberColumn("volume ×", format="%.1f")})
-    st.caption("Stock tags match the ticker or a distinctive part of the company name in the headline; they can miss or over-match.")
+    st.caption("Labels appear only when the headline itself shows them: a stock's name or ticker, an explicit phrase for the type, "
+               "a direction phrase about one stock for the tone. Anything without that evidence is shown as the plain headline.")
     _open_stock([x for xs in v.symbols for x in xs], "nw")
 
 

@@ -54,7 +54,7 @@ def events_from(news=None, ann=None, include_roundups=False):
         for r in n.itertuples():
             for s in str(r.symbols or "").split(","):
                 if s:
-                    rows.append((s, r.published, "news", r.event_type, r.tone, r.title))
+                    rows.append((s, r.published, "news", r.event_type or "Unclassified", r.tone or "neutral", r.title))
     if ann is not None and len(ann):
         from core.news import tone
         for r in ann.itertuples():

@@ -6,7 +6,12 @@ AngelProvider wraps the SmartAPI client:
   in any rolling minute / hour. Angel's published limits for getCandleData are 3/second, 180/minute
   (moderator correction of the table's 500) and 5000/hour (SmartAPI forum, "Changes in API Rate Limit",
   2024); the defaults stay just under them. The hourly cap is what makes a full all-NSE download take 3+ hours.
-- throttling ("exceeding access rate", raised as an exception or returned as an error): exponential back-off
+- throttling ("exceeding access rate", raised as an exception or returned as an error): Angel's server-side limiter
+  has been rejecting requests far below the published rates and blocking for minutes at a time (SmartAPI forum,
+  Aug-Sep 2026). So a throttle is treated as a pause for the WHOLE client, not a failure of one stock: wait
+  (cooldown, starting at `cooldown` seconds and doubling to `max_cooldown`), slow the pace (x1.5, up to `max_interval`),
+  then retry the same request. Throttle waits don't use up the request's retries; a request gives up only after
+  `throttle_budget` seconds of throttling. After `recover_after` successes in a row the pace speeds back up.
 - expired or invalid session (error codes AG8001 / AG8002 / AG8003 or a message about the token): one
   re-login, then the request is retried
 - other failures: retried `max_retries` times, then ProviderError (never an empty result passed off as data)
@@ -64,20 +69,25 @@ class AngelProvider(DataProvider):
     name = "angel_one"
     markets = ("NSE",)
 
-    def __init__(self, login, api=None, exchange="NSE", min_interval=0.35, max_retries=4, backoff=2.0,
-                 sleep=time.sleep, clock=time.monotonic, log=print, per_minute=170, per_hour=4800):
+    def __init__(self, login, api=None, exchange="NSE", min_interval=1.0, max_retries=4, backoff=2.0,
+                 sleep=time.sleep, clock=time.monotonic, log=print, per_minute=170, per_hour=4800,
+                 cooldown=20.0, max_cooldown=300.0, max_interval=3.0, throttle_budget=900.0, recover_after=25):
         self._login, self.api = login, api
         self.exchange, self.min_interval, self.max_retries, self.backoff = exchange, min_interval, max_retries, backoff
+        self.base_interval, self.interval = min_interval, min_interval
+        self.cooldown, self.max_cooldown, self.max_interval = cooldown, max_cooldown, max_interval
+        self.throttle_budget, self.recover_after = throttle_budget, recover_after
         self._sleep, self._clock, self._log = sleep, clock, log
         self._last = None
+        self._next_cool, self._ok_run = cooldown, 0
         self.per_minute, self.per_hour = per_minute, per_hour
         from collections import deque
         self._sent = deque()                 # monotonic times of requests in the last hour
-        self.stats = dict(requests=0, retries=0, throttled=0, relogins=0, waited_for_cap=0)
+        self.stats = dict(requests=0, retries=0, throttled=0, relogins=0, waited_for_cap=0, throttle_wait_s=0.0)
 
     def _pace(self):
         if self._last is not None:
-            wait = self.min_interval - (self._clock() - self._last)
+            wait = self.interval - (self._clock() - self._last)
             if wait > 0:
                 self._sleep(wait)
         for window, cap in ((60.0, self.per_minute), (3600.0, self.per_hour)):
@@ -95,15 +105,35 @@ class AngelProvider(DataProvider):
         self._last = self._clock()
         self._sent.append(self._last)
 
+    def _throttled(self):
+        """Angel said 'too fast': pause everything, then go slower."""
+        self.stats["throttled"] += 1
+        wait = self._next_cool
+        self.interval = min(self.max_interval, max(self.interval, self.base_interval) * 1.5)
+        if wait >= 60:
+            self._log(f"  Angel One is limiting requests: waiting {wait / 60:.0f} min, then {self.interval:.1f} s between requests")
+        self._sleep(wait)
+        self.stats["throttle_wait_s"] += wait
+        self._next_cool = min(self.max_cooldown, self._next_cool * 2)
+        self._ok_run = 0
+        return wait
+
+    def _succeeded(self):
+        self._ok_run += 1
+        self._next_cool = self.cooldown
+        if self._ok_run >= self.recover_after and self.interval > self.base_interval:
+            self.interval = max(self.base_interval, self.interval / 1.25)
+            self._ok_run = 0
+
     def _ensure(self):
         if self.api is None:
             self.api = self._login()
 
     def request(self, params):
-        """One getCandleData call with pacing, retries, throttle back-off and re-login. Returns raw rows."""
+        """One getCandleData call with pacing, retries, throttle pauses and re-login. Returns raw rows."""
         self._ensure()
-        relogged, last_err = False, ""
-        for attempt in range(self.max_retries + 1):
+        relogged, last_err, attempt, throttle_waited = False, "", 0, 0.0
+        while attempt <= self.max_retries:
             self._pace()
             self.stats["requests"] += 1
             try:
@@ -111,14 +141,16 @@ class AngelProvider(DataProvider):
             except Exception as e:                       # the library raises on HTTP / throttle errors
                 r, last_err = None, str(e)
                 if _is_throttle(e):
-                    self.stats["throttled"] += 1
-                    self._sleep(self.backoff * (2 ** attempt))
-                    continue
+                    if throttle_waited >= self.throttle_budget:
+                        raise ProviderError("throttled", f"Angel One kept refusing for {throttle_waited / 60:.0f} min ({last_err[:120]})")
+                    throttle_waited += self._throttled()
+                    continue                             # same attempt: throttling is not this request's fault
                 if _is_token("", e) and not relogged:
                     self._relogin(); relogged = True
                     continue
             if r is not None:
                 if r.get("status"):
+                    self._succeeded()
                     return r.get("data") or []
                 code, msg = r.get("errorcode", ""), r.get("message", "")
                 last_err = f"{code} {msg}".strip()
@@ -128,11 +160,13 @@ class AngelProvider(DataProvider):
                     self._relogin(); relogged = True
                     continue
                 if _is_throttle(msg):
-                    self.stats["throttled"] += 1
-                    self._sleep(self.backoff * (2 ** attempt))
+                    if throttle_waited >= self.throttle_budget:
+                        raise ProviderError("throttled", f"Angel One kept refusing for {throttle_waited / 60:.0f} min ({last_err[:120]})")
+                    throttle_waited += self._throttled()
                     continue
             self.stats["retries"] += 1
             self._sleep(self.backoff * (attempt + 1))
+            attempt += 1
         raise ProviderError("unavailable", f"no data after {self.max_retries + 1} attempts ({last_err or 'empty response'})")
 
     def _relogin(self):
