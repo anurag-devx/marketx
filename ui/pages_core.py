@@ -43,7 +43,7 @@ def page_overview():
     cols = st.columns(4)
     for i, a in enumerate([a for a in AGENTS]):
         k = "data" if a["key"] == "fetch" else a["key"]
-        with cols[i % 4]:
+        with cols[i % 4].container(border=True, key=f"tile-{a['key'].replace('+', '-')}"):
             if not a["built"]:
                 st.markdown(f"⚪ **{a['name']}**  \n<span style='color:{REF}'>not built yet</span>", unsafe_allow_html=True)
             elif k in ("macro-all", "market-report", "search-index", "debate"):

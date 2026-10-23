@@ -7,7 +7,7 @@ from core.data import has_broad
 from lab import engine as E, store as S
 from lab.expr import HELP, RuleError
 
-ACCENT, MUTED, GOOD, BAD, REF, WARN = "#2f6fd6", "#a7adb5", "#2e9d5b", "#d0453b", "#7b8189", "#c98a1a"
+ACCENT, MUTED, GOOD, BAD, REF, WARN = "#4F46E5", "#A8B0BF", "#059669", "#DC2626", "#94A3B8", "#D97706"
 NAV = {}
 STATE_LABEL = {"up_calm": "Uptrend, calm", "up_volatile": "Uptrend, volatile", "down_calm": "Downtrend, calm",
                "down_volatile": "Downtrend, volatile", "unknown": "Unknown"}

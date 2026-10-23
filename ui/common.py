@@ -14,7 +14,7 @@ from agents import strategy as strategy_agent
 
 LOGS = C.BASE / "logs"
 ANALYSIS = C.RESULTS / "analysis"
-ACCENT, MUTED, GOOD, BAD, REF = "#2f6fd6", "#a7adb5", "#2e9d5b", "#d0453b", "#7b8189"
+ACCENT, MUTED, GOOD, BAD, REF = "#4F46E5", "#A8B0BF", "#059669", "#DC2626", "#94A3B8"     # MarketX palette (ui/theme.py)
 STATE_LABEL = {"up_calm": "Uptrend, calm", "up_volatile": "Uptrend, volatile",
                "down_calm": "Downtrend, calm", "down_volatile": "Downtrend, volatile"}
 PERIOD_LABEL = {"design": "Design 2016–20", "validation": "Validation 2021–23", "holdout": "Holdout 2024–26"}
@@ -177,8 +177,11 @@ def job_panel(key):
 
 # ---------------- charts ----------------
 def fig_base(fig, h=360, legend=False):
-    fig.update_layout(height=h, margin=dict(l=8, r=8, t=8, b=8), showlegend=legend,
-                      legend=dict(orientation="h", y=1.08, x=0), hoverlabel=dict(namelength=-1))
+    fig.update_layout(height=h, margin=dict(l=8, r=12, t=8, b=8), showlegend=legend,
+                      legend=dict(orientation="h", y=1.08, x=0), hoverlabel=dict(namelength=-1),
+                      paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)")
+    fig.update_xaxes(gridcolor="#EEF1F6", zerolinecolor="#E2E8F0")
+    fig.update_yaxes(gridcolor="#EEF1F6", zerolinecolor="#E2E8F0")
     return fig
 
 
@@ -188,7 +191,7 @@ def heat(df, rows, cols, row_label=None, col_label=None, text_extra=None, h=None
             for c in cols] for r in rows]
     m = np.nanmax(np.abs(np.array(z, dtype=float))) or 1
     fig = go.Figure(go.Heatmap(z=z, x=[col_label(c) if col_label else c for c in cols], y=[row_label(r) if row_label else r for r in rows],
-                               text=txt, texttemplate="%{text}", colorscale=[[0, BAD], [0.5, "#f4f4f2"], [1, GOOD]],
+                               text=txt, texttemplate="%{text}", colorscale=[[0, BAD], [0.5, "#F1F5F9"], [1, GOOD]],
                                zmin=-m, zmax=m, showscale=False, xgap=3, ygap=3, hovertemplate="%{y} · %{x}<br>%{text}<extra></extra>"))
     fig.update_yaxes(autorange="reversed", type="category")
     fig.update_xaxes(type="category", side="top")

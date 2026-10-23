@@ -152,7 +152,7 @@ def sensitivity_tab():
     tt = [[s[(s.sector == r) & (s.factor == f)].t.mean() for f in facs] for r in secs]
     txt = [[("" if pd.isna(a) else f"{a:+.2f}%" + (" *" if abs(b) >= 2 else "")) for a, b in zip(ra, rb)] for ra, rb in zip(z, tt)]
     m = np.nanmax(np.abs(np.array(z, dtype=float))) or 1
-    fig = go.Figure(go.Heatmap(z=z, x=facs, y=secs, text=txt, texttemplate="%{text}", colorscale=[[0, BAD], [0.5, "#f4f4f2"], [1, GOOD]],
+    fig = go.Figure(go.Heatmap(z=z, x=facs, y=secs, text=txt, texttemplate="%{text}", colorscale=[[0, BAD], [0.5, "#F1F5F9"], [1, GOOD]],
                                zmin=-m, zmax=m, showscale=False, xgap=3, ygap=3,
                                customdata=np.round(np.array(tt, dtype=float), 1),
                                hovertemplate="%{y} · %{x}: %{text}<br>t = %{customdata}<extra></extra>"))

@@ -9,7 +9,9 @@ for _p in ["streamlit", "duckdb", "pandas", "pyarrow", "tabulate", "plotly", "re
         subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", _p])
 import streamlit as st
 
-st.set_page_config(page_title="Swing agents", page_icon="📈", layout="wide")
+st.set_page_config(page_title="MarketX", page_icon=str(__import__("pathlib").Path(__file__).resolve().parent / "ui" / "assets" / "icon.svg"), layout="wide")
+from ui import theme  # noqa: E402
+theme.apply()
 
 from ui import common, pages_core as P, signals, stocks, market, ask, settings, data_health, screener as scr, news_research, market_report, documents, macro, search, debate, scorecard  # noqa: E402
 

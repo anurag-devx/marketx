@@ -9,3 +9,29 @@ enableXsrfProtection = true
 [browser]
 gatherUsageStats = false
 serverAddress = "localhost"
+
+# ---- MarketX theme (colours, type, radius, chart colours). Card styling lives in ui/theme.py. ----
+[theme]
+base = "light"
+primaryColor = "#4F46E5"
+backgroundColor = "#F6F7FB"
+secondaryBackgroundColor = "#EEF1F7"
+textColor = "#0F172A"
+linkColor = "#4F46E5"
+borderColor = "#E3E6EE"
+dataframeBorderColor = "#E8EBF2"
+dataframeHeaderBackgroundColor = "#F3F5FA"
+greenColor = "#059669"
+redColor = "#DC2626"
+font = "-apple-system, BlinkMacSystemFont, Inter, Segoe UI, Roboto, sans-serif"
+headingFont = "-apple-system, BlinkMacSystemFont, Inter, Segoe UI, Roboto, sans-serif"
+codeFont = "SF Mono, Menlo, Consolas, monospace"
+baseRadius = "0.75rem"
+buttonRadius = "0.6rem"
+showWidgetBorder = true
+showSidebarBorder = false
+chartCategoricalColors = ["#4F46E5", "#06B6D4", "#F59E0B", "#10B981", "#EC4899", "#8B5CF6", "#64748B", "#EF4444"]
+
+[theme.sidebar]
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F3F5FA"

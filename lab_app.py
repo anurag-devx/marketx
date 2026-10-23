@@ -9,7 +9,9 @@ for _p in ["streamlit", "duckdb", "pandas", "pyarrow", "plotly"]:
         subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", _p])
 import streamlit as st
 
-st.set_page_config(page_title="Strategy Lab", page_icon="🧪", layout="wide")
+st.set_page_config(page_title="Strategy Lab · MarketX", page_icon=str(__import__("pathlib").Path(__file__).resolve().parent / "ui" / "assets" / "icon.svg"), layout="wide")
+from ui import theme  # noqa: E402
+theme.apply()
 
 from lab import ui  # noqa: E402
 

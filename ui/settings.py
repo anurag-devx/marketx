@@ -156,7 +156,7 @@ def backups():
 
 def page():
     st.title("Settings")
-    t = st.tabs(["Approvals and strategies", "Parameters", "Schedule and alerts", "News feeds", "Backups", "AI models"])
+    t = st.tabs(["Approvals and strategies", "Parameters", "Schedule and alerts", "News feeds", "Backups", "AI models", "Appearance"])
     with t[0]:
         approvals()
     with t[1]:
@@ -167,6 +167,18 @@ def page():
         feeds()
     with t[4]:
         backups()
+    with t[6]:
+        appearance()
     with t[5]:
         from ui import ai_settings
         ai_settings.panel()
+
+
+def appearance():
+    from ui import theme
+    on = st.toggle("Modern look (cards, soft shadows, gradients, transitions)", value=theme.modern(), key="ui-modern")
+    if on != theme.modern():
+        theme.set_modern(on)
+        st.rerun()
+    st.caption("Off = Streamlit's plain styling. Colours, fonts and rounded corners come from .streamlit/config.toml and stay "
+               "either way. Only the presentation changes; data and agents are not affected.")

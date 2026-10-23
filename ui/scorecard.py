@@ -56,9 +56,10 @@ def page():
     if isinstance(rng, tuple) and len(rng) == 2:
         v = v[(pd.to_datetime(v.as_of) >= pd.Timestamp(rng[0])) & (pd.to_datetime(v.as_of) <= pd.Timestamp(rng[1]))]
     h = SC.headline(v)
-    st.markdown(f"### {h['status']}")
+    status = h["status"]
+    (st.success if status.startswith("Better") else st.error if status.startswith("Worse") else st.info)(status)
     if h["n"]:
-        k = st.columns(7)
+        k = st.columns(4) + st.columns(3)
         k[0].metric("Scored forecasts", f"{h['n']:,}", f"{h['days']} days · {h['stocks']} stocks", delta_color="off")
         k[1].metric("Brier score", f"{h['brier']:.4f}", f"base rate {h['brier_base']:.4f}" if np.isfinite(h["brier_base"]) else None,
                     delta_color="off", help="Lower is better. 0.25 = always saying 50%.")

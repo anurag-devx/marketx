@@ -4,8 +4,8 @@ from ui.common import *  # noqa: F401,F403
 from core import news as newsmod, announcements as annmod
 from research.events import event_day
 
-KIND_STYLE = {"news": dict(symbol="circle", color="#2f6fd6", label="News"),
-              "announcement": dict(symbol="diamond", color="#c77d1a", label="NSE filing")}
+KIND_STYLE = {"news": dict(symbol="circle", color="#4F46E5", label="News"),
+              "announcement": dict(symbol="diamond", color="#D97706", label="NSE filing")}
 
 
 @st.cache_data(ttl=600)
