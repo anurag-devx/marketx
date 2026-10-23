@@ -159,6 +159,65 @@ def parse_fiidii(j):
 
 
 # ---------------- fetch ----------------
+GDELT_GAP = 10.0            # seconds between GDELT requests (GDELT asks for at most one every 5 s; it throttles harder in practice)
+GDELT_RETRIES = 3           # per request, waiting 20 s, 40 s, 60 s after a refusal or dropped connection
+GDELT_GIVE_UP = 3           # themes failing in a row -> GDELT is throttling us: stop and continue next run
+GDELT_BUDGET = 420          # seconds at most per run for GDELT
+
+
+def _gdelt_get(p, url):
+    """One GDELT request with backoff. Raises the last error after GDELT_RETRIES attempts."""
+    import requests
+    last = None
+    for k in range(GDELT_RETRIES):
+        try:
+            return p.get(url)
+        except requests.HTTPError as e:
+            code = getattr(e.response, "status_code", None)
+            if code is not None and code < 500 and code != 429:
+                raise                                   # a real error (bad query), not throttling
+            last = e
+        except (requests.ConnectionError, requests.Timeout) as e:
+            last = e
+        p._sleep(20 * (k + 1))
+    raise last
+
+
+def fetch_gdelt(p, log=print, gdelt_days=None, clock=time.monotonic):
+    """GDELT themes, stalest first, with backoff; stops early if GDELT keeps refusing. Missed themes are fetched next run
+    (each theme asks for the days since its own last success, up to 90)."""
+    status = {}
+    have = load()
+    def last_of(key):
+        d = have[have.series == f"GDELT_{key}_vol"].date.max() if len(have) else pd.NaT
+        return pd.Timestamp("1970-01-01") if pd.isna(d) else d
+    order = sorted(THEMES, key=last_of)
+    p.gap = max(p.gap, GDELT_GAP)
+    t0, fails = clock(), 0
+    for i, key in enumerate(order):
+        label, q, _ = THEMES[key]
+        if fails >= GDELT_GIVE_UP or clock() - t0 > GDELT_BUDGET:
+            for k2 in order[i:]:
+                status[f"GDELT {k2} vol"] = "skipped this run (GDELT throttling); retried next run"
+            log(f"GDELT: {len(order) - i} theme(s) left for the next run (GDELT is refusing requests right now)")
+            break
+        last = last_of(key)
+        days = gdelt_days or (90 if last.year == 1970 else max(3, min(90, (pd.Timestamp.now() - last).days + 2)))
+        ok = True
+        for mode, suf in (("timelinevolraw", "vol"), ("timelinetone", "tone")):
+            try:
+                j = json.loads(_gdelt_get(p, GDELT.format(q=quote(q), m=mode, t=f"timespan={days}d")).decode("utf-8", "ignore") or "{}")
+                n = _merge_save(parse_gdelt(j, f"GDELT_{key}_{suf}"))
+                status[f"GDELT {key} {suf}"] = f"ok (+{n})"
+            except Exception as e:
+                status[f"GDELT {key} {suf}"] = f"failed: {type(e).__name__}"
+                ok = False
+                break                                     # skip the tone request when volume already failed
+        fails = 0 if ok else fails + 1
+        log(f"GDELT {label}: {status[f'GDELT {key} vol']}")
+    return status
+
+
 def fetch_all(log=print, gdelt_days=None):
     from .news_sources import Polite
     p = Polite(gap=6.0)                       # GDELT asks for at most one request every 5 seconds
@@ -195,18 +254,7 @@ def fetch_all(log=print, gdelt_days=None):
     except Exception as e:
         status["GPR"] = f"failed: {type(e).__name__}: {str(e)[:120]}"
     log(f"GPR: {status['GPR']}")
-    have = load()
-    for key, (label, q, _) in THEMES.items():
-        last = have[have.series == f"GDELT_{key}_vol"].date.max() if len(have) else pd.NaT
-        days = gdelt_days or (90 if pd.isna(last) else max(3, min(90, (pd.Timestamp.now() - last).days + 2)))
-        for mode, suf in (("timelinevolraw", "vol"), ("timelinetone", "tone")):
-            try:
-                j = json.loads(p.get(GDELT.format(q=quote(q), m=mode, t=f"timespan={days}d")).decode("utf-8", "ignore") or "{}")
-                n = _merge_save(parse_gdelt(j, f"GDELT_{key}_{suf}"))
-                status[f"GDELT {key} {suf}"] = f"ok (+{n})"
-            except Exception as e:
-                status[f"GDELT {key} {suf}"] = f"failed: {type(e).__name__}"
-        log(f"GDELT {label}: {status[f'GDELT {key} vol']}")
+    status.update(fetch_gdelt(p, log, gdelt_days))
     try:
         from .announcements import NSESession
         n = _merge_save(parse_fiidii(NSESession(gap=1.5).get_json(NSE_FIIDII)))

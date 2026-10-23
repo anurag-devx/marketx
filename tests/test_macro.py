@@ -86,3 +86,57 @@ def test_summary_flows_are_totals(tmp_path, monkeypatch):
     assert s["FII_NET"]["chg_1d"] is None and s["FII_NET"]["chg_5d"] == 500 and s["FII_NET"]["change_kind"] == "total"
     assert s["DGS10"]["chg_1d"] == 0.5 and s["DGS10"]["change_kind"] == "points"
     assert s["DCOILBRENTEU"]["chg_1d"] == 10.0
+
+
+class _Resp:
+    def __init__(self, code):
+        self.status_code = code
+
+
+class _FakePolite:
+    """Simulates GDELT: refuses `refuse` times per URL with 429 / dropped connection, then answers."""
+    def __init__(self, refuse_all=False, refuse_first=0):
+        self.gap, self.calls, self.slept = 1.0, [], []
+        self.refuse_all, self.refuse_first = refuse_all, refuse_first
+
+    def _sleep(self, s):
+        self.slept.append(s)
+
+    def get(self, url, check_robots=True, timeout=25):
+        import requests
+        self.calls.append(url)
+        if self.refuse_all or len(self.calls) <= self.refuse_first:
+            if len(self.calls) % 2:
+                raise requests.HTTPError(response=_Resp(429))
+            raise requests.ConnectionError("dropped")
+        return b'{"timeline": [{"data": [{"date": "20261020T000000Z", "value": 5}]}]}'
+
+
+def test_gdelt_backs_off_then_succeeds(monkeypatch, tmp_path):
+    from core import macro as M
+    monkeypatch.setattr(M, "load", lambda: pd.DataFrame(columns=["date", "series", "value", "source"]))
+    monkeypatch.setattr(M, "_merge_save", lambda d: len(d))
+    p = _FakePolite(refuse_first=2)
+    st = M.fetch_gdelt(p, log=lambda *a: None)
+    assert all(v.startswith("ok") for k, v in st.items())
+    assert p.slept[:2] == [20, 40] and p.gap >= M.GDELT_GAP
+
+
+def test_gdelt_gives_up_after_repeated_refusals(monkeypatch):
+    from core import macro as M
+    monkeypatch.setattr(M, "load", lambda: pd.DataFrame(columns=["date", "series", "value", "source"]))
+    monkeypatch.setattr(M, "_merge_save", lambda d: len(d))
+    p = _FakePolite(refuse_all=True)
+    st = M.fetch_gdelt(p, log=lambda *a: None)
+    failed = [k for k, v in st.items() if v.startswith("failed")]
+    skipped = [k for k, v in st.items() if v.startswith("skipped")]
+    assert len(failed) == M.GDELT_GIVE_UP and len(skipped) == len(M.THEMES) - M.GDELT_GIVE_UP
+    assert len(p.calls) == M.GDELT_GIVE_UP * M.GDELT_RETRIES          # no tone request after a failed volume request
+
+
+def test_malformed_feed_is_recovered():
+    from core import news_sources as S
+    bad = b'<?xml version="1.0"?><rss><channel><item><title>Sensex & Nifty rise</title><link>https://x.com/a</link>' \
+          b'<pubDate>Thu, 22 Oct 2026 10:00:00 +0530</pubDate></item><item><title>Second</title><link>https://x.com/b</link></item></channel></rss>'
+    items = S.parse_rss(bad, {"name": "FE", "kind": "markets"})
+    assert [i["title"] for i in items] == ["Sensex & Nifty rise", "Second"]

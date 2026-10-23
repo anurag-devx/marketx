@@ -258,4 +258,6 @@ def sidebar_actions():
                     break
                 _t.sleep(0.25)
             st.rerun()
-        st.caption(f"v{C.VERSION} · runs on this Mac · places no orders")
+        venv = sys.prefix != getattr(sys, "base_prefix", sys.prefix)
+        st.caption(f"v{C.VERSION} · runs on this Mac · places no orders · Python {sys.version.split()[0]} "
+                   + ("(project .venv)" if venv else "(system — start with Start Dashboard.command to use .venv)"))

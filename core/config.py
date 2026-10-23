@@ -47,8 +47,6 @@ SCORE_W = dict(expectancy=0.5, strength=0.3, rr=0.2)
 NEWS_FEEDS = [
     dict(name="ET Markets", url="https://economictimes.indiatimes.com/markets/rssfeeds/1977021501.cms", kind="markets"),
     dict(name="ET Stocks", url="https://economictimes.indiatimes.com/markets/stocks/news/rssfeeds/2146842.cms", kind="companies"),
-    dict(name="Moneycontrol Markets", url="https://www.moneycontrol.com/rss/marketreports.xml", kind="markets"),
-    dict(name="Moneycontrol Business", url="https://www.moneycontrol.com/rss/business.xml", kind="companies"),
     dict(name="Livemint Markets", url="https://www.livemint.com/rss/markets", kind="markets"),
     dict(name="Business Standard Markets", url="https://www.business-standard.com/rss/markets-106.rss", kind="markets"),
     dict(name="BBC World", url="https://feeds.bbci.co.uk/news/world/rss.xml", kind="world"),

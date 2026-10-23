@@ -41,8 +41,7 @@ FEEDS = [
     dict(name="BusinessLine Economy", url="https://www.thehindubusinessline.com/economy/feeder/default.rss", kind="economy"),
     dict(name="Financial Express Markets", url="https://www.financialexpress.com/market/feed/", kind="markets"),
     dict(name="Financial Express Industry", url="https://www.financialexpress.com/business/industry/feed/", kind="companies"),
-    dict(name="Moneycontrol Markets", url="https://www.moneycontrol.com/rss/marketreports.xml", kind="markets"),
-    dict(name="Moneycontrol Business", url="https://www.moneycontrol.com/rss/business.xml", kind="companies"),
+    # Moneycontrol's RSS feeds stopped updating in 2024; its news sitemaps (below) supply its headlines instead.
     dict(name="BBC World", url="https://feeds.bbci.co.uk/news/world/rss.xml", kind="world"),
 ]
 # Sites whose news / archive sitemaps are read (found via robots.txt; never guessed).
@@ -87,7 +86,23 @@ def to_ist(value):
 
 
 def _local(tag):
-    return tag.rsplit("}", 1)[-1]
+    return tag.rsplit("}", 1)[-1] if isinstance(tag, str) else ""        # lxml comments / processing instructions
+
+
+def parse_xml(content):
+    """Strict XML first; if a publisher's feed is malformed (stray '&', bad characters), recover what's readable with lxml."""
+    try:
+        return ET.fromstring(content)
+    except ET.ParseError:
+        pass
+    try:                                    # most common fault: a bare '&' in a title
+        return ET.fromstring(re.sub(rb"&(?!#?\w+;)", b"&amp;", content if isinstance(content, bytes) else content.encode()))
+    except ET.ParseError:
+        from lxml import etree
+        root = etree.fromstring(content, parser=etree.XMLParser(recover=True, huge_tree=True, resolve_entities=False, no_network=True))
+        if root is None:
+            raise
+        return root
 
 
 # ---------------- politeness ----------------
@@ -137,7 +152,7 @@ class Polite:
 # ---------------- RSS ----------------
 def parse_rss(content, feed):
     """RSS or Atom bytes -> list of items (dicts)."""
-    root = ET.fromstring(content)
+    root = parse_xml(content)
     out = []
     for it in [e for e in root.iter() if _local(e.tag) in ("item", "entry")]:
         f = {_local(c.tag): c for c in it}
@@ -181,7 +196,7 @@ def fetch_rss(feeds=None, polite=None):
 # ---------------- sitemaps ----------------
 def parse_sitemap(content):
     """Returns ('index', [child urls]) or ('urlset', [entries]). Entries: loc, lastmod, published, title, keywords, tickers."""
-    root = ET.fromstring(content)
+    root = parse_xml(content)
     kind = _local(root.tag)
     if kind == "sitemapindex":
         kids = []

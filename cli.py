@@ -104,7 +104,7 @@ def main(argv):
         return sh("-m", "core.backup", "manual")
     if cmd == "dashboard":
         ensure_packages()
-        return streamlit("dashboard.py", argv[1] if len(argv) > 1 else "8501")
+        return streamlit("dashboard.py", argv[1] if len(argv) > 1 else "8503")
     if cmd == "fetch":
         return sh("fetch_angel.py", *argv[1:])
     if cmd == "run":

@@ -74,3 +74,19 @@ def test_job_args_are_restricted():
     assert jobs.SAFE_ARG.match("2026-10-16") and jobs.SAFE_ARG.match("--no-llm") and jobs.SAFE_ARG.match("start=2016-01-01")
     for bad in ("; rm -rf /", "$(whoami)", "2026-10-16; ls", "--x y"):
         assert not jobs.SAFE_ARG.match(bad)
+
+
+def test_model_error_is_retried_once(facts, monkeypatch):
+    monkeypatch.setattr(W, "ollama_status", lambda s=None: (True, "fake", ["fake"]))
+    monkeypatch.setattr(W.time, "sleep", lambda s: None)
+    n = {"calls": 0}
+
+    def flaky(msgs, s):
+        n["calls"] += 1
+        if n["calls"] == 1:
+            raise RuntimeError("model busy")
+        return "Breadth was mixed and no stock-specific reason was found."
+    monkeypatch.setattr(W, "_chat", flaky)
+    rep = W.write(facts, use_llm=True, log=lambda *a: None)
+    assert rep["writer"]["used"]["Market overview"] in ("model", "template (numbers failed the check)")
+    assert rep["writer"]["used"]["Market overview"] != "template (model error)"

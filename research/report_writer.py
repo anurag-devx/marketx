@@ -281,16 +281,23 @@ def write(facts, use_llm=True, log=print):
     for key, title, words, brief in SECTIONS:
         text = None
         if ok:
-            try:
-                log(f"  writing {title}...")
-                text, bad = llm_section(facts, key, title, words, brief, s, log)
-                if bad:
-                    flags[title] = bad
-                    text = None
-                used[title] = "model" if text else "template (numbers failed the check)"
-            except Exception as e:
-                log(f"  {title}: model error {type(e).__name__}; using the template")
-                used[title] = "template (model error)"
+            for attempt in (1, 2):                     # one retry: a busy or reloading local model often succeeds the second time
+                try:
+                    log(f"  writing {title}..." if attempt == 1 else f"  {title}: retrying once...")
+                    text, bad = llm_section(facts, key, title, words, brief, s, log)
+                    if bad:
+                        flags[title] = bad
+                        text = None
+                    used[title] = "model" if text else "template (numbers failed the check)"
+                    break
+                except Exception as e:
+                    reason = f"{type(e).__name__}: {str(e)[:160]}"
+                    if attempt == 1:
+                        log(f"  {title}: model error ({reason})")
+                        time.sleep(5)
+                    else:
+                        log(f"  {title}: model error again ({reason}); using the template")
+                        used[title] = "template (model error)"
         if text is None:
             text = template_section(facts, key)
             used.setdefault(title, "template")

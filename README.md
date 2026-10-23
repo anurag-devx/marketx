@@ -29,7 +29,7 @@ Copy `account.example.json` to `account.json` and set your capital; `positions.c
 
 ## Start here
 ```bash
-.venv/bin/python cli.py dashboard 8503     # or double-click "Start Dashboard.command"
+.venv/bin/python cli.py dashboard          # port 8503; or double-click "Start Dashboard.command"
 ```
 The launchers (`Start Dashboard.command`, `Start Strategy Lab.command`) use `.venv` when it exists, otherwise the system
 Python. After `setup.sh`, the after-close schedule (Settings) is re-pointed to `.venv` automatically
