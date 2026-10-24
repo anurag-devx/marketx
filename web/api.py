@@ -371,7 +371,7 @@ def stock(p):
     g = g.assign(sma50=c.rolling(50).mean(), sma200=c.rolling(200).mean())
     last = g.iloc[-1]
     ret = lambda n: 100 * (c.iat[-1] / c.iat[-1 - n] - 1) if len(c) > n else None
-    tail = g[g.date >= g.date.max() - pd.Timedelta(days=int(p.get("days", 1100)))]
+    tail = g[g.date >= g.date.max() - pd.Timedelta(days=int(p.get("days", 4000)))]   # ~11 years: enough for monthly candles
     bars = dict(t=tail.date.dt.strftime("%Y-%m-%d").tolist(), o=tail.open.round(2).tolist(), h=tail.high.round(2).tolist(),
                 l=tail.low.round(2).tolist(), c=tail.close.round(2).tolist(), v=tail.volume.astype(float).tolist(),
                 sma50=tail.sma50.round(2).tolist(), sma200=tail.sma200.round(2).tolist())

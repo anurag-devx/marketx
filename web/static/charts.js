@@ -59,7 +59,7 @@
     for (let i = 0; i < n; i += step) {
       const d = new Date(bars.t[i]);
       const tx = el("text", { x: x(i), y: H - 5, "text-anchor": "middle" }, svg);
-      tx.textContent = d.toLocaleDateString("en-IN", n > 400 ? { month: "short", year: "2-digit" } : { day: "numeric", month: "short" });
+      tx.textContent = d.toLocaleDateString("en-IN", spanDays(bars.t) > 400 ? { month: "short", year: "2-digit" } : { day: "numeric", month: "short" });
     }
     // volume
     const bw = Math.max(1, ((W - padL - padR) / n) * 0.7);

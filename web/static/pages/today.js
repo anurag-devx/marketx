@@ -110,18 +110,30 @@
           <div><div class="k">52-week range</div><div class="v">${inr(i.lo52)} – ${inr(i.hi52)}</div></div></div></div><div id="st"></div>`;
       tabs($("#st", el), ["Chart", "Results", "News & filings", "Agents"], (k, t) => {
         if (k === 0) {
-          t.innerHTML = `<div class="card"><div class="ct"><div class="seg" id="rng">${[["3M", 91], ["6M", 182], ["1Y", 365], ["3Y", 1100]].map(([l, n]) => `<button data-n="${n}" class="${n === 365 ? "on" : ""}">${l}</button>`).join("")}</div>
-            <div class="seg" id="mode" style="margin-left:8px"><button data-m="line" class="on">Line</button><button data-m="candle">Candles</button></div>
+          t.innerHTML = `<div class="card"><div class="ct"><div class="seg" id="rng">${[["3M", 91], ["6M", 182], ["1Y", 365], ["3Y", 1100], ["5Y", 1830], ["All", 99999]].map(([l, n]) => `<button data-n="${n}" class="${n === 365 ? "on" : ""}">${l}</button>`).join("")}</div>
+            <div class="seg" id="ivl" style="margin-left:8px"><button data-i="D" class="on" title="One candle per trading day">Daily</button><button data-i="W" title="One candle per week (Mon–Fri)">Weekly</button><button data-i="M" title="One candle per month">Monthly</button></div>
+            <div class="seg" id="mode" style="margin-left:8px"><button data-m="candle" class="on">Candles</button><button data-m="line">Line</button></div>
             <span class="aside">avg turnover ₹${num(i.avg_turnover_cr, 0)} cr/day · ${pct(i.from_hi)} from 52-week high</span></div>
             <div id="pc"></div><div class="legend"><span><i style="background:#f59e0b"></i>50-day average</span><span><i style="background:var(--faint)"></i>200-day average</span><span>volume: green up day, red down day</span></div></div>`;
-          let n = 365, mode = "line";
+          let n = 365, mode = "candle", ivl = "D";
+          // weekly / monthly candles from the daily bars: open = first, high = max, low = min, close = last, volume = sum;
+          // the 50- and 200-day averages are read at each period's last day, so they mean the same thing at every interval
+          const group = (bars, key) => { const out = { t: [], o: [], h: [], l: [], c: [], v: [], sma50: [], sma200: [] }; let cur = null;
+            bars.t.forEach((d, i) => { const k = key(d);
+              if (k !== cur) { cur = k; out.t.push(d); out.o.push(bars.o[i]); out.h.push(bars.h[i]); out.l.push(bars.l[i]); out.c.push(bars.c[i]); out.v.push(bars.v[i]); out.sma50.push(bars.sma50[i]); out.sma200.push(bars.sma200[i]); return; }
+              const j = out.t.length - 1; out.t[j] = d; out.h[j] = Math.max(out.h[j], bars.h[i]); out.l[j] = Math.min(out.l[j], bars.l[i]);
+              out.c[j] = bars.c[i]; out.v[j] += bars.v[i]; out.sma50[j] = bars.sma50[i]; out.sma200[j] = bars.sma200[i]; });
+            return out; };
+          const weekKey = (d) => { const x = new Date(d + "T00:00:00Z"); x.setUTCDate(x.getUTCDate() - ((x.getUTCDay() + 6) % 7)); return x.toISOString().slice(0, 10); };
           const draw = () => { if (!document.body.contains(t) || !$("#pc", t)) return;
             const cut = new Date(b.t[b.t.length - 1]); cut.setDate(cut.getDate() - n);
             const k0 = b.t.findIndex((x) => new Date(x) >= cut), sl = (a) => a.slice(Math.max(0, k0));
-            MXCharts.priceChart($("#pc", t), { t: sl(b.t), o: sl(b.o), h: sl(b.h), l: sl(b.l), c: sl(b.c), v: sl(b.v), sma50: sl(b.sma50), sma200: sl(b.sma200) }, { mode, height: 400 }); };
+            const daily = { t: sl(b.t), o: sl(b.o), h: sl(b.h), l: sl(b.l), c: sl(b.c), v: sl(b.v), sma50: sl(b.sma50), sma200: sl(b.sma200) };
+            const bars = ivl === "W" ? group(daily, weekKey) : ivl === "M" ? group(daily, (d) => d.slice(0, 7)) : daily;
+            MXCharts.priceChart($("#pc", t), bars, { mode, height: 400 }); };
           const seg = (id, attr, set) => $(id, t).addEventListener("click", (e) => { const btn = e.target.closest("button"); if (!btn) return;
             MX.$$("button", $(id, t)).forEach((x) => x.classList.toggle("on", x === btn)); set(btn.dataset[attr]); draw(); });
-          seg("#rng", "n", (v) => (n = +v)); seg("#mode", "m", (v) => (mode = v));
+          seg("#rng", "n", (v) => (n = +v)); seg("#mode", "m", (v) => (mode = v)); seg("#ivl", "i", (v) => (ivl = v));
           draw(); window.addEventListener("mx-resize", draw);
         } else if (k === 1) {
           const q = d.results.quarters || [], nx = d.results.next;
