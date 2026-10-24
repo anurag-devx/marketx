@@ -72,6 +72,13 @@ def kronos(p):
         if len(cal):
             secs.append(dict(kind="chart", type="line", title="Calibration: predicted P(up) vs share that went up", x=[f"{v:.2f}" for v in cal.predicted],
                              series=[dict(name="observed", y=cal.observed.round(3).tolist()), dict(name="perfect", y=cal.predicted.round(3).tolist(), dash=True)]))
+        sc = d[d.realized_ret_pct.notna()]
+        if len(sc) >= 10:
+            sc = sc.sample(min(len(sc), 2500), random_state=0)
+            secs.append(dict(kind="chart", type="scatter", title="Predicted vs actual 5-day return, one dot per forecast", height=320,
+                             points=[dict(x=round(float(r.pred_ret_pct), 2), y=round(float(r.realized_ret_pct), 2), label=f"{r.symbol} {r.as_of:%d %b}", sym=r.symbol) for r in sc.itertuples()],
+                             xlabel="Predicted %", ylabel="Actual %",
+                             note="A useful model shows a rising cloud. A flat, round cloud means no skill. Red dots are unusual cases worth a look; click one to open the stock."))
         secs.append(dict(kind="note", tone="warn", text="Replays score past days at once, but Kronos was trained on market data that may include those days, "
                                                          "so replay results can look better than reality. Live forecasts are the real test."))
         return dict(out, sections=secs)

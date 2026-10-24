@@ -2,6 +2,26 @@
 (function () {
   const { api, post, esc, num, pct, cls, inr, day, dt, $, $$, card, head, note, form, tabs, sections, startJob, dataTable, qs, spinner, md, kpi, openLog } = MX;
 
+  const VERB = { BUY: "Buy", ADD: "Buy", SELL: "Sell", TRIM: "Sell" };
+  function orderSentence(x) {
+    const q = Math.abs(x.order_qty), v = MX.inr(Math.abs(x.order_value || 0), 0), sym = `<a class="sym" href="#/stock/${encodeURIComponent(x.symbol)}">${esc(x.symbol)}</a>`;
+    const why = { BUY: "new pick this month", ADD: `top up: you hold ${x.held_qty}, target is ${x.target_qty}`, SELL: "dropped out of the top list: sell all",
+                  TRIM: `cut back: you hold ${x.held_qty}, target is ${x.target_qty}` }[x.action] || x.reason;
+    return `<b>${VERB[x.action] || x.action} ${num(q, 0)} share${q === 1 ? "" : "s"}</b> of ${sym} ≈ ${v} <span class="muted">(${esc(why)})</span>`;
+  }
+  function riskRows(R, a) {
+    const P = (x) => `${num(100 * x, 0)}%`;
+    return [
+      ["Risk per trade", P(R.risk_per_trade), `If a trade hits its stop you lose at most ${MX.inr(R.risk_per_trade * a.equity, 0)}. Share count is sized so this holds.`],
+      ["Most positions at once", String(R.max_positions), "No new trades once you hold this many."],
+      ["Biggest single position", P(R.max_position_pct), `No one stock above ${MX.inr(R.max_position_pct * a.equity, 0)}.`],
+      ["Most stocks per sector", String(R.max_per_sector), "Stops one sector news event hurting the whole account."],
+      ["Daily loss stop", P(R.daily_loss_cap), "No new trades for the rest of the day after losing this much."],
+      ["Cut size after a fall of", P(R.dd_half), "Below your peak by this much: new trades are half size."],
+      ["Pause trading after a fall of", P(R.dd_stop), "Below your peak by this much: no new trades until you recover."],
+    ];
+  }
+
   const RUN = { fetch: "Fetch latest data", regime: "Run regime", screener: "Run screener", strategy: "Run strategy", technical: "Run technical", risk: "Run risk",
     validation: "Run validation", report: "Build report", backtest: "Run backtest + analysis", "macro-all": "Fetch macro data + study", announcements: "Fetch news and filings",
     "market-report": "Write the market report", "search-index": "Build the search index" };
@@ -46,8 +66,29 @@
   MX.page("strategies", {
     title: "Strategies",
     async render(el) {
-      el.innerHTML = head("Strategies", "The swing backtest: what was tested, what works, and why most setups don't.", `<button class="btn" id="bt">Run backtest + analysis</button>`) + `<div id="stt"></div>`;
+      el.innerHTML = head("Strategies", "Each strategy is a fixed buy/sell rule. Pick one on the left to read it in plain words; the tabs show how they all did over 10 years.",
+        `<button class="btn" id="bt">Run backtest + analysis</button>`) + `<div class="split"><nav class="slist" id="sl"></nav><div><div id="sg" class="section"></div><div id="stt"></div></div></div>`;
       $("#bt", el).addEventListener("click", () => startJob("backtest"));
+      const G = await api("strategies/guide").catch(() => ({ items: [] }));
+      const fams = [...new Set(G.items.map((x) => x.family))];
+      const showS = (id) => {
+        const x = G.items.find((i) => i.id === id);
+        $$("#sl a", el).forEach((a) => a.classList.toggle("on", a.dataset.id === id));
+        if (!x) { $("#sg", el).innerHTML = note("Pick a strategy on the left to see what it buys, when it sells, why it might work and when it fails."); return; }
+        const res = x.net_pct != null ? `<span class="${cls(x.net_pct)}"><b>${pct(x.net_pct, 2)}</b></span> per trade after costs over ${num(x.trades, 0)} trades${x.win_pct != null ? `, ${num(x.win_pct, 0)}% winners` : ""}` : esc(x.verdict || "Not backtested yet.");
+        $("#sg", el).innerHTML = `<div class="card"><div class="ct"><h2>${esc(x.name)} <span class="code">${esc(x.id)}</span></h2><span class="tag">${esc(x.family)}</span><span class="tag ${/active|paper/.test(x.status) ? "acc" : ""}">${esc({ no_edge: "no edge found", paper: "paper trading", active: "live", research: "research only", "not registered": "not in use" }[x.status] || x.status)}</span></div>
+          <dl class="kv"><dt>What</dt><dd>${esc(x.what)}</dd><dt>Buys when</dt><dd>${esc(x.how)}</dd><dt>Sells when</dt><dd>${esc(x.exit)}</dd>
+          <dt>Why it might work</dt><dd>${esc(x.why)}</dd><dt>When it fails</dt><dd>${esc(x.fails)}</dd>
+          <dt>Backtest</dt><dd>${res}${x.net_pct != null ? ` <span class="muted small">(cost per round trip ${num(G.cost_pct, 1)}%)</span>` : ""}</dd>
+          ${x.works_in && x.works_in.length ? `<dt>Switched on in</dt><dd>${esc(x.works_in.join(", "))} markets</dd>` : x.net_pct != null ? `<dt>Switched on in</dt><dd class="muted">No market state: it didn't show an edge in any.</dd>` : ""}</dl></div>`;
+        try { sessionStorage.setItem("mx-strat", id); } catch (e) { /* ignore */ }
+      };
+      $("#sl", el).innerHTML = fams.map((f) => `<div class="grp">${esc(f)}</div>` + G.items.filter((x) => x.family === f).map((x) =>
+        `<a data-id="${esc(x.id)}"><span class="dot ${x.works_in && x.works_in.length || /active|paper/.test(x.status) ? "ok" : ""}"></span>${esc(x.name)}</a>`).join("")).join("") +
+        `<p class="muted small" style="margin:10px 6px">Green dot = switched on in at least one market state, or being paper-traded.</p>`;
+      $("#sl", el).addEventListener("click", (e) => { const a = e.target.closest("a"); if (a) showS(a.dataset.id); });
+      let s0 = null; try { s0 = sessionStorage.getItem("mx-strat"); } catch (e) { /* ignore */ }
+      showS(s0);
       tabs($("#stt", el), ["Report", "Summary", "Playbook and rules", "Momentum research"], async (i, b) => {
         const d = await api(`strategies?tab=${["report", "summary", "playbook", "momentum"][i]}`);
         if (d.empty) { b.innerHTML = note("No analysis yet. Run Backtest + analysis."); return; }
@@ -59,8 +100,12 @@
   MX.page("screener-research", {
     title: "Screener research",
     async render(el) {
-      el.innerHTML = head("Screener research", "Experiments on screener setups: development 2016–20, validation 2021–23, holdout 2024+ hidden by default.") + `<div id="srt"></div>`;
-      tabs($("#srt", el), ["Compare", "One result in detail", "Strategies", "Run experiments"], async (i, b) => {
+      el.innerHTML = head("Screener research", "Does a screener rule actually pick winners? This page tests each rule on past data before you trust it.") +
+        `<div class="steps section"><div><i>1</i><b>Pick rules</b>Each rule (e.g. breakout on high volume) is tried with a few settings.</div>
+          <div><i>2</i><b>Build on 2016–20</b>Did stocks it picked beat the average stock over the next 5–20 days, after costs?</div>
+          <div><i>3</i><b>Check on 2021–23</b>Same test on years it never saw. Passing both = <b style="display:inline">Passed</b>.</div>
+          <div><i>4</i><b>Switch on</b>Only passed rules should feed the live screener (Rules tab). 2024+ is kept for a final check.</div></div><div id="srt"></div>`;
+      tabs($("#srt", el), ["All results", "One result in detail", "Rules (switch on/off)", "Run tests"], async (i, b) => {
         if (i === 0) {
           b.innerHTML = `<div class="panel"><div id="cf"></div></div><div id="cs"></div>`;
           const f = form($("#cf", b), [{ k: "h", label: "Horizon (sessions)", type: "radio", options: [5, 10, 15, 20], value: 10 },
@@ -77,14 +122,15 @@
           sections($("#ds", b), first.sections);
         } else if (i === 2) {
           const d = await api("screener-research?tab=strategies");
-          b.innerHTML = note("Statuses: experimental (not yet validated) · validated (passed development and validation after costs) · enabled (used by the live screener). Enabling an unvalidated strategy is allowed but labelled.") +
-            d.strategies.map((s) => `<div class="card section"><div class="ct"><h2>${esc(s.key)}</h2><span class="tag ${s.status === "validated" ? "pos" : ""}">${esc(s.status)}</span>${s.enabled ? `<span class="tag acc">enabled</span>` : ""}
+          const ST = { experimental: "not passed yet", validated: "passed", enabled: "passed" };
+          b.innerHTML = note("Passed = beat the average stock in both 2016–20 and 2021–23 after costs. On = used by the live screener today. You can switch on a rule that hasn't passed, but it stays labelled.") +
+            d.strategies.map((s) => `<div class="card section"><div class="ct"><h2>${esc(s.description || s.key)} <span class="code">${esc(s.key)}</span></h2><span class="tag ${s.status === "validated" ? "pos" : ""}">${esc(ST[s.status] || s.status)}</span>${s.enabled ? `<span class="tag acc">on</span>` : ""}
               <span class="aside"><button class="btn small ${s.enabled ? "" : s.status === "validated" ? "primary" : ""}" data-k="${esc(s.key)}" data-on="${s.enabled ? "0" : "1"}">${s.enabled ? "Disable" : s.status === "validated" ? "Enable" : "Enable (unvalidated)"}</button></span></div>
-              <p style="margin:0">${esc(s.description || "")}</p><p class="muted small">Hypothesis: ${esc(s.hypothesis || "—")} · file ${esc(s.file || "")} · evaluate on ${esc(s.evaluate_on || "")} · primary horizon ${esc(s.horizon || "")}</p></div>`).join("");
+              <p style="margin:0"><b>Why it might work:</b> ${esc(s.hypothesis || "—")}</p><p class="muted small">Judged over ${esc(s.horizon || "")} trading days · ${s.evaluate_on === "shortlist" ? "tests the top-50 ranking" : "tests every stock that qualifies"} · file ${esc(s.file || "")}</p></div>`).join("");
           $$("[data-k]", b).forEach((x) => x.addEventListener("click", async () => { await post("screener-research/enable", { key: x.dataset.k, on: x.dataset.on === "1" }, "Saved"); MX.render(); }));
         } else {
           const d = await api("screener-research?tab=experiments");
-          b.innerHTML = `<div class="row section"><button class="btn primary" id="e1">Run all experiments (skips finished)</button><button class="btn" id="e2">Re-run everything</button><button class="btn" id="e3">Run today's screen now</button></div><div id="es"></div>
+          b.innerHTML = `<div class="row section"><button class="btn primary" id="e1">Run all tests (skips finished)</button><button class="btn" id="e2">Re-run everything</button><button class="btn" id="e3">Run today's screen now</button></div><div id="es"></div>
             <p class="muted small">About 15 seconds per configuration. Results are kept per data version, so new prices mean a fresh run.</p>`;
           $("#e1", b).addEventListener("click", () => startJob("screener-experiments"));
           $("#e2", b).addEventListener("click", () => confirm("Re-run every configuration? Only needed after a code change.") && startJob("screener-experiments-force"));
@@ -110,18 +156,23 @@
     async render(el) {
       const d = await api("positions");
       const a = d.account, R = d.risk;
-      el.innerHTML = head("Positions and risk", "Add a row when you buy, delete it when you sell, then Save. The risk agent reads this.") +
-        `<div class="grid g4">${kpi("Equity", inr(a.equity, 0))}${kpi("Drawdown from peak", `${num(100 * d.drawdown, 1)}%`, `half size at ${num(100 * R.dd_half, 0)}%, stop at ${num(100 * R.dd_stop, 0)}%`)}
-          ${kpi("Open positions", `${d.positions.length}/${R.max_positions}`, `capital deployed ${num(100 * d.deployed, 0)}%`)}${kpi("Today's P&L", inr(a.today_pnl, 0), `cap ${num(100 * R.daily_loss_cap, 0)}% of equity`)}</div>
-        <div class="section card"><div class="ct"><h2>Your positions</h2><span class="aside"><button class="btn small" id="padd">Add row</button> <button class="btn small primary" id="psave">Save positions</button></span></div><div class="scroll"><table class="tbl edit" id="ptab"></table></div></div>
+      const mean = (t) => `<div class="mean">${t}</div>`, ddp = 100 * d.drawdown;
+      const ddState = ddp >= 100 * R.dd_stop ? "New trades are paused until you recover." : ddp >= 100 * R.dd_half ? "New trades are half size." : "Normal sizing.";
+      el.innerHTML = head("Positions and risk", "Your holdings and the safety limits every new idea is checked against. MarketX never places orders: you do, then record them here.") +
+        `<div class="grid g4">${kpi("Account value", inr(a.equity, 0), "", mean("What your trading account is worth now (from Account below)."))}
+          ${kpi("Below your peak", `${num(ddp, 1)}%`, `half size at ${num(100 * R.dd_half, 0)}%, pause at ${num(100 * R.dd_stop, 0)}%`, mean(ddState))}
+          ${kpi("Open positions", `${d.positions.length} of ${R.max_positions} max`, `${num(100 * d.deployed, 0)}% of money invested`, mean(`Room for ${Math.max(0, R.max_positions - d.positions.length)} more.`))}
+          ${kpi("Today's profit/loss", inr(a.today_pnl, 0), `stop for the day at −${num(100 * R.daily_loss_cap, 0)}%`, mean(`No new trades today once losses reach ${inr(R.daily_loss_cap * a.equity, 0)}.`))}</div>
+        <div class="section card"><div class="ct"><h2>Your positions</h2><span class="aside muted small">Add a row when you buy, delete it when you sell, then Save.</span><span class="aside"><button class="btn small" id="padd">Add row</button> <button class="btn small primary" id="psave">Save positions</button></span></div><div class="scroll"><table class="tbl edit" id="ptab"></table></div></div>
         <div class="section grid g2"><div id="plive"></div><div id="psec"></div></div>
         <div id="pord"></div>
         <div class="section grid g2"><div class="card"><div class="ct"><h2>Account</h2></div><div id="acf"></div><div class="row" style="margin-top:12px"><button class="btn" id="acs">Save account</button></div></div>
-          <div class="card"><div class="ct"><h2>Risk limits</h2></div><dl class="kv">${Object.entries(R).map(([k, v]) => `<dt>${esc(k.replace(/_/g, " "))}</dt><dd>${esc(v)}</dd>`).join("")}</dl></div></div>`;
+          <div class="card"><div class="ct"><h2>Risk limits</h2></div><dl class="kv">${riskRows(R, a).map(([k, v, m]) => `<dt>${esc(k)}</dt><dd><b>${esc(v)}</b><div class="mean">${esc(m)}</div></dd>`).join("")}</dl></div></div>`;
       let rows = d.positions.map((r) => ({ ...r }));
       const drawEdit = () => {
-        $("#ptab", el).innerHTML = `<thead><tr>${d.columns.map((c) => `<th>${esc(c.replace(/_/g, " "))}</th>`).join("")}<th></th></tr></thead><tbody>${rows.map((r, i) => `<tr>${d.columns.map((c) =>
-          c === "strategy" ? `<td><select class="in" data-r="${i}" data-c="${c}">${["", ...d.strategy_options].map((o) => `<option ${String(r[c]) === o ? "selected" : ""}>${esc(o)}</option>`).join("")}</select></td>`
+        const L = (window.MXHELP && MXHELP.LABELS) || {};
+        $("#ptab", el).innerHTML = `<thead><tr>${d.columns.map((c) => `<th>${esc(L[c] || c.replace(/_/g, " "))}</th>`).join("")}<th></th></tr></thead><tbody>${rows.map((r, i) => `<tr>${d.columns.map((c) =>
+          c === "strategy" ? `<td><select class="in" data-r="${i}" data-c="${c}">${["", ...d.strategy_options].map((o) => `<option value="${esc(o)}" ${String(r[c]) === o ? "selected" : ""}>${esc(o ? (MX.nameOf(o) ? `${MX.nameOf(o)} (${o})` : o) : "")}</option>`).join("")}</select></td>`
             : `<td><input class="in" data-r="${i}" data-c="${c}" value="${esc(r[c] ?? "")}" placeholder="${c === "entry_date" ? "YYYY-MM-DD" : ""}"></td>`).join("")}<td><button class="btn small" data-del="${i}">✕</button></td></tr>`).join("")}</tbody>`;
         $$("[data-c]", el).forEach((x) => x.addEventListener("change", () => (rows[+x.dataset.r][x.dataset.c] = x.value)));
         $$("[data-del]", el).forEach((x) => x.addEventListener("click", () => { rows.splice(+x.dataset.del, 1); drawEdit(); }));
@@ -131,9 +182,9 @@
       $("#psave", el).addEventListener("click", async () => { await post("positions/save", { rows }, "Saved positions"); MX.render(); });
       if (d.live.length) {
         $("#plive", el).innerHTML = `<div class="card flush"><div class="ct" style="padding:14px 16px 0"><h2>Live view</h2></div><div id="plv"></div></div>`;
-        $("#plv", el).appendChild(dataTable(d.live, [["symbol", "Stock", "symonly"], ["strategy", "Strategy"], ["entry_price", "Entry", "inr"], ["last", "Last", "inr"], ["quantity", "Qty", "int"],
-          ["value", "Value", "inr0"], ["pnl_rs", "P&L ₹", "inr0"], ["pnl_pct", "P&L", "spct2"], ["to_stop_pct", "To stop", "spct2"]], { tools: false }));
-        $("#psec", el).innerHTML = card("Exposure by sector", MX.table(d.sectors, [["sector", "Sector"], ["positions", "Positions", "int"], ["value", "Value", "inr0"], ["limit", "Limit", "int"]]));
+        $("#plv", el).appendChild(dataTable(d.live, [["symbol", "Stock", "symonly"], ["strategy", "Strategy", "strat"], ["entry_price", "Bought at", "inr"], ["last", "Now", "inr"], ["quantity", "Shares", "int"],
+          ["value", "Cost ₹", "inr0"], ["pnl_rs", "Profit/loss ₹", "inr0"], ["pnl_pct", "Profit/loss", "spct2"], ["to_stop_pct", "Fall to stop", "spct2"]], { tools: false }));
+        $("#psec", el).innerHTML = card("Positions per sector (limit stops one sector dominating)", MX.table(d.sectors, [["sector", "Sector"], ["positions", "Positions", "int"], ["value", "Value", "inr0"], ["limit", "Limit", "int"]]));
       }
       const af = form($("#acf", el), [{ k: "capital", label: "Capital", type: "number", value: a.capital, step: 10000 }, { k: "equity", label: "Equity now", type: "number", value: a.equity, step: 1000 },
         { k: "peak_equity", label: "Peak equity", type: "number", value: a.peak_equity, step: 1000 }, { k: "today_pnl", label: "Today's P&L", type: "number", value: a.today_pnl, step: 100 }]);
@@ -142,7 +193,7 @@
         const box = document.createElement("div"); box.className = "section card"; $("#pord", el).appendChild(box);
         const draw = async (list = "this") => {
           const o = await api(`orders?${qs({ strategy: m.strategy, list })}`);
-          box.innerHTML = `<div class="ct"><h2>${esc(m.strategy)} orders</h2><span class="tag">${esc(m.status)}</span><span class="aside">${o.asof ? `targets from ${day(o.asof)} · ${o.due ? "<b>rebalance due now</b>" : `next rebalance ${day(o.next)}`}` : ""}</span></div>
+          box.innerHTML = `<div class="ct"><h2>Orders: ${MX.named(m.strategy) || esc(m.strategy)}</h2><span class="tag">${esc(m.status === "paper" ? "paper trading (practice)" : m.status)}</span><span class="aside">${o.asof ? `targets from ${day(o.asof)} · ${o.due ? "<b>rebalance due now</b>" : `next rebalance ${day(o.next)}`}` : ""}</span></div>
             <div class="row"><div class="fld narrow" style="max-width:220px"><label>Money for this strategy ₹</label><input class="in" type="number" id="al" value="${o.allocation}" step="50000"></div>
             <div class="seg" id="ol"><button data-v="this" class="${list === "this" ? "on" : ""}">This month</button><button data-v="next" class="${list === "next" ? "on" : ""}">Next month (provisional)</button></div></div>
             <div id="oc"></div>`;
@@ -152,10 +203,14 @@
           if (o.empty) { oc.innerHTML = note("No targets yet: run the agents."); return; }
           if (o.needs_money) { oc.innerHTML = note("Enter the money you want in this strategy to get share quantities."); return; }
           const s = o.summary;
-          oc.innerHTML = `<div class="grid g4 section">${kpi("Buy orders", s.buys, inr(s.buy_value, 0))}${kpi("Sell orders", s.sells, inr(s.sell_value, 0))}${kpi("Invested after", inr(s.invested_after, 0))}${kpi("Cash left", inr(s.cash_after, 0))}</div><div id="otab"></div>
+          const todo = o.orders.filter((x) => x.order_qty);
+          oc.innerHTML = `<div class="grid g4 section">${kpi("Buy orders", s.buys, inr(s.buy_value, 0))}${kpi("Sell orders", s.sells, inr(s.sell_value, 0))}${kpi("Invested after", inr(s.invested_after, 0))}${kpi("Cash left", inr(s.cash_after, 0))}</div>
+            <div class="card section"><div class="ct"><h2>${todo.length ? `What to do (${todo.length} order${todo.length > 1 ? "s" : ""})` : "Nothing to trade"}</h2><span class="aside muted small">Sells first, so the cash is there for the buys</span></div>
+              ${todo.length ? `<ol class="sent">${todo.map((x) => `<li>${orderSentence(x)}</li>`).join("")}</ol>` : `<p class="muted">Every stock is at or near its target. No orders needed.</p>`}</div>
+            <details class="fold section"><summary>Full order table</summary><div id="otab"></div></details>
             ${list === "this" ? `<div class="row" style="margin-top:12px"><button class="btn" id="oapply">I placed these orders: update my positions</button></div>` : ""}`;
-          $("#otab", oc).appendChild(dataTable(o.orders, [["action", "Action", "tag"], ["symbol", "Stock", "symonly"], ["order_qty", "Order qty", "int"], ["last_price", "Last", "inr"],
-            ["order_value", "Order ₹", "inr0"], ["held_qty", "Held", "int"], ["target_qty", "Target", "int"], ["target_weight_pct", "Weight %", "num2"], ["reason", "Why", "long"]], { csv: `orders_${m.strategy}` }));
+          $("#otab", oc).appendChild(dataTable(o.orders, [["action", "Action", "tag"], ["symbol", "Stock", "symonly"], ["order_qty", "Shares to trade", "int"], ["last_price", "Last price", "inr"],
+            ["order_value", "Order value", "inr0"], ["held_qty", "You hold", "int"], ["target_qty", "Should hold", "int"], ["target_weight_pct", "Share of money %", "num2"], ["reason", "Why", "long"]], { csv: `orders_${m.strategy}` }));
           $("#oapply", oc)?.addEventListener("click", async () => { if (!confirm("Set this strategy's rows in your positions to the target quantities at the last close?")) return;
             await post("orders/apply", { strategy: m.strategy }, "Positions updated"); MX.render(); });
         };

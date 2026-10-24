@@ -240,7 +240,71 @@
     d.innerHTML = series.map((s, k) => `<span><i style="background:${s.color || pal[k % pal.length]}"></i>${String(s.name || "").replace(/[<>&]/g, "")}</span>`).join("");
     host.appendChild(d);
   }
+  // robust z-score (median / MAD) so the outliers themselves don't hide the outliers
+  function robustZ(v) { const s = [...v].sort((a, b) => a - b), med = s[Math.floor(s.length / 2)];
+    const mad = [...v.map((x) => Math.abs(x - med))].sort((a, b) => a - b)[Math.floor(v.length / 2)] || 1e-9; return v.map((x) => (x - med) / (1.4826 * mad)); }
+
+  /* scatter: {points:[{x,y,label,sym}], xlabel, ylabel, height}; marks outliers (far from the trend line). Returns the points with .out set. */
+  function scatter(host, spec) {
+    host.innerHTML = ""; host.classList.add("chart");
+    const P = spec.points || []; if (P.length < 3) { host.innerHTML = '<div class="empty">Not enough points.</div>'; return P; }
+    const W = host.clientWidth || 700, H = spec.height || 320, padL = 54, padR = 14, padT = 10, padB = 38;
+    const xs = P.map((p) => p.x), ys = P.map((p) => p.y), n = P.length;
+    const mx = xs.reduce((a, b) => a + b, 0) / n, my = ys.reduce((a, b) => a + b, 0) / n;
+    const sxx = xs.reduce((a, x) => a + (x - mx) ** 2, 0), b = sxx ? xs.reduce((a, x, i) => a + (x - mx) * (ys[i] - my), 0) / sxx : 0, a0 = my - b * mx;
+    const zr = robustZ(P.map((p) => p.y - (a0 + b * p.x))), zx = robustZ(xs);
+    P.forEach((p, i) => (p.out = Math.abs(zr[i]) > 3.5 || Math.abs(zx[i]) > 3.5));
+    const r = (v) => { let lo = Math.min(...v), hi = Math.max(...v); if (!(hi > lo)) hi = lo + 1; const p = (hi - lo) * 0.06; return [lo - p, hi + p]; };
+    const [x0, x1] = r(xs), [y0, y1] = r(ys);
+    const X = (v) => padL + ((v - x0) / (x1 - x0)) * (W - padL - padR), Y = (v) => padT + (1 - (v - y0) / (y1 - y0)) * (H - padT - padB);
+    const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, height: H }); host.appendChild(svg);
+    const dec = (lo, hi) => Math.abs(hi - lo) < 10 ? 1 : 0;
+    for (const t of niceTicks(y0, y1, 5)) { el("line", { x1: padL, x2: W - padR, y1: Y(t), y2: Y(t), stroke: css("--line") }, svg); const tx = el("text", { x: padL - 6, y: Y(t) + 4, "text-anchor": "end" }, svg); tx.textContent = fmt(t, dec(y0, y1)); }
+    for (const t of niceTicks(x0, x1, 6)) { const tx = el("text", { x: X(t), y: H - padB + 16, "text-anchor": "middle" }, svg); tx.textContent = fmt(t, dec(x0, x1)); }
+    if (y0 < 0 && y1 > 0) el("line", { x1: padL, x2: W - padR, y1: Y(0), y2: Y(0), stroke: css("--faint"), "stroke-dasharray": "3 3" }, svg);
+    if (x0 < 0 && x1 > 0) el("line", { x1: X(0), x2: X(0), y1: padT, y2: H - padB, stroke: css("--faint"), "stroke-dasharray": "3 3" }, svg);
+    el("line", { x1: X(x0), y1: Y(a0 + b * x0), x2: X(x1), y2: Y(a0 + b * x1), stroke: css("--accent"), "stroke-width": 1, "stroke-dasharray": "5 4", opacity: 0.7 }, svg);
+    const lx = el("text", { x: (padL + W - padR) / 2, y: H - 4, "text-anchor": "middle" }, svg); lx.textContent = spec.xlabel || "";
+    const ly = el("text", { x: 12, y: padT + (H - padT - padB) / 2, transform: `rotate(-90 12 ${padT + (H - padT - padB) / 2})`, "text-anchor": "middle" }, svg); ly.textContent = spec.ylabel || "";
+    const tip = document.createElement("div"); tip.className = "tip"; tip.hidden = true; host.appendChild(tip);
+    P.forEach((p) => {
+      const c = el("circle", { cx: X(p.x), cy: Y(p.y), r: p.out ? 5 : 3.5, fill: p.out ? css("--down") : css("--accent"), opacity: p.out ? 0.95 : 0.55, stroke: p.out ? css("--surface") : "none" }, svg);
+      if (p.out && p.label) { const t = el("text", { x: X(p.x) + 7, y: Y(p.y) + 4, "font-weight": 600 }, svg); t.textContent = String(p.label).slice(0, 14); }
+      c.addEventListener("mouseenter", () => { const rr = svg.getBoundingClientRect(); tip.innerHTML = `<b>${String(p.label || "").replace(/[<>&]/g, "")}</b> · ${fmt(p.x, 2)} · ${fmt(p.y, 2)}${p.out ? " · outlier" : ""}`;
+        tip.hidden = false; tip.style.left = `${Math.min(rr.width - 120, Math.max(120, (X(p.x) / W) * rr.width))}px`; tip.style.top = `${(Y(p.y) / H) * rr.height - 34}px`; });
+      c.addEventListener("mouseleave", () => (tip.hidden = true));
+      if (p.sym) { c.style.cursor = "pointer"; c.addEventListener("click", () => (location.hash = `#/stock/${encodeURIComponent(p.sym)}`)); }
+    });
+    const lg = document.createElement("div"); lg.className = "legend";
+    lg.innerHTML = `<span><i style="background:${css("--accent")}"></i>${n} points</span><span><i style="background:${css("--down")}"></i>outliers (far from the trend line)</span><span>dashed line = trend</span>`;
+    host.appendChild(lg);
+    return P;
+  }
+
+  /* histogram: {values, xlabel, bins}; returns {outliers: values outside 1.5×IQR fences} */
+  function histogram(host, spec) {
+    host.innerHTML = ""; host.classList.add("chart");
+    const v = (spec.values || []).filter((x) => isFinite(x)).sort((a, b) => a - b), n = v.length;
+    if (n < 3) { host.innerHTML = '<div class="empty">Not enough values.</div>'; return { outliers: [] }; }
+    const qn = (p) => v[Math.min(n - 1, Math.floor(p * (n - 1)))], q1 = qn(0.25), q3 = qn(0.75), iqr = q3 - q1, lo = q1 - 1.5 * iqr, hi = q3 + 1.5 * iqr;
+    const k = spec.bins || Math.min(40, Math.max(8, Math.round(Math.sqrt(n)))), a = v[0], b = v[n - 1] > a ? v[n - 1] : a + 1, w = (b - a) / k;
+    const cnt = new Array(k).fill(0); v.forEach((x) => cnt[Math.min(k - 1, Math.floor((x - a) / w))]++);
+    const W = host.clientWidth || 700, H = spec.height || 300, padL = 40, padR = 14, padT = 10, padB = 38, mxc = Math.max(...cnt);
+    const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, height: H }); host.appendChild(svg);
+    const X = (x) => padL + ((x - a) / (b - a)) * (W - padL - padR), Y = (c) => padT + (1 - c / mxc) * (H - padT - padB);
+    for (const t of niceTicks(0, mxc, 4)) { el("line", { x1: padL, x2: W - padR, y1: Y(t), y2: Y(t), stroke: css("--line") }, svg); const tx = el("text", { x: padL - 6, y: Y(t) + 4, "text-anchor": "end" }, svg); tx.textContent = fmt(t, 0); }
+    cnt.forEach((c, i) => { const x0 = a + i * w, out = x0 + w < lo || x0 > hi;
+      el("rect", { x: X(x0) + 1, y: Y(c), width: Math.max(1, X(x0 + w) - X(x0) - 2), height: Math.max(0, Y(0) - Y(c)), fill: out ? css("--down") : css("--accent"), opacity: 0.75 }, svg); });
+    for (const t of niceTicks(a, b, 6)) { const tx = el("text", { x: X(t), y: H - padB + 16, "text-anchor": "middle" }, svg); tx.textContent = fmt(t, Math.abs(b - a) < 10 ? 1 : 0); }
+    [[q1, "25%"], [qn(0.5), "median"], [q3, "75%"]].forEach(([x, l]) => { el("line", { x1: X(x), x2: X(x), y1: padT, y2: H - padB, stroke: css("--faint"), "stroke-dasharray": "3 3" }, svg);
+      const t = el("text", { x: X(x) + 3, y: padT + 10 }, svg); t.textContent = l; });
+    const lx = el("text", { x: (padL + W - padR) / 2, y: H - 4, "text-anchor": "middle" }, svg); lx.textContent = `${spec.xlabel || ""} · ${n} values`;
+    return { outliers: v.filter((x) => x < lo || x > hi) };
+  }
+
   function draw(host, spec) {
+    if (spec.type === "scatter") return scatter(host, spec);
+    if (spec.type === "hist") return histogram(host, spec);
     if (spec.type === "line") return lineChart(host, spec);
     if (spec.type === "bars") return barsChart(host, spec);
     if (spec.type === "hbar") return hbar(host, spec);
@@ -248,5 +312,5 @@
     if (spec.type === "barline") return barLine(host, spec.x, spec.bars, spec.line, spec);
   }
 
-  window.MXCharts = { sparkline, priceChart, barLine, lineChart, barsChart, hbar, draw };
+  window.MXCharts = { sparkline, priceChart, barLine, lineChart, barsChart, hbar, scatter, histogram, draw };
 })();

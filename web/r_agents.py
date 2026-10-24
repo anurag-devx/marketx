@@ -187,7 +187,7 @@ def strategies(p):
                                          dict(label="With an edge", value=f"{len(edge)} of {len(s)}"),
                                          dict(label=f"Best CAGR ({s.loc[s.cagr_pct.idxmax(), 'strategy']})", value=f"{s.cagr_pct.max():+.1f}%")]),
                 table("Scorecard (per trade, after costs unless marked gross)", s.drop(columns=["states_with_edge"]),
-                      {"net_pct": "snum2", "gross_pct": "snum2", "win_pct": "num1", "avg_win_pct": "snum2", "avg_loss_pct": "snum2", "profit_factor": "num2",
+                      {"strategy": "tag", "net_pct": "snum2", "gross_pct": "snum2", "win_pct": "num1", "avg_win_pct": "snum2", "avg_loss_pct": "snum2", "profit_factor": "num2",
                        "cagr_pct": "snum1", "max_dd_pct": "num1", "sharpe": "num2", "trades": "int"}, tools=False, csv="strategies")]
         g = s.sort_values("gross_pct", ascending=False)
         secs.append(dict(kind="chart", type="hbar", title=f"Gross return per trade vs the {cost:.1f}% round-trip cost", labels=(g.strategy + " " + g["name"]).tolist(),
@@ -201,7 +201,7 @@ def strategies(p):
         ex = _csv("exits.csv")
         if ex is not None:
             pv, cols = _pivot(ex, "strategy", "exit", "share_pct", order)
-            secs.append(dict(kind="table", title="How trades end (% of trades)", rows=pv, columns=[c if i == 0 else [c[0], c[1], "pct1"] for i, c in enumerate(cols)], tools=False))
+            secs.append(dict(kind="table", fold="How trades end", title="How trades end (% of trades)", rows=pv, columns=[c if i == 0 else [c[0], c[1], "pct1"] for i, c in enumerate(cols)], tools=False))
         eq = _csv("equity_weekly.csv")
         if eq is not None:
             pv = eq.pivot_table(index="date", columns="strategy", values="equity")
@@ -211,18 +211,18 @@ def strategies(p):
         stt = _csv("states.csv")
         if stt is not None:
             pv, cols = _pivot(stt, "strategy", "state", "net_pct", order, list(STATE_LABEL), STATE_LABEL)
-            secs.append(dict(kind="table", title="Net return per trade by market state (%)", rows=pv, columns=cols, tools=False))
+            secs.append(dict(kind="table", fold="By market state", title="Net return per trade by market state (%)", rows=pv, columns=cols, tools=False))
         per = _csv("periods.csv")
         if per is not None:
             pv, cols = _pivot(per, "strategy", "period", "net_pct", order, list(PERIOD_LABEL), PERIOD_LABEL)
-            secs.append(dict(kind="table", title="Net return per trade by research period (%)", rows=pv, columns=cols, tools=False))
+            secs.append(dict(kind="table", fold="By research period", title="Net return per trade by research period (%)", rows=pv, columns=cols, tools=False))
         yr, mk = _csv("years.csv"), _csv("market_years.csv")
         if yr is not None:
             pv, cols = _pivot(yr.assign(year=yr.year.astype(str)), "year", "strategy", "net_pct", None, order)
             if mk is not None:
                 pv = pv.merge(mk.assign(year=mk.year.astype(str)).rename(columns={"nifty_return_pct": "Nifty", "random_stock_5d_gross_pct": "Random 5d"}), on="year", how="left")
                 cols += [["Nifty", "Nifty 50", "snum1"], ["Random 5d", "Random stock 5d", "snum2"]]
-            secs.append(dict(kind="table", title="Year by year: net return per trade (%) beside the market", rows=pv, columns=cols, tools=False))
+            secs.append(dict(kind="table", fold="Year by year", title="Year by year: net return per trade (%) beside the market", rows=pv, columns=cols, tools=False))
         stp = _csv("stops.csv")
         if stp is not None:
             secs.append(dict(kind="note", text=f"Stops aren't the problem: only {stp.recovered_10d_pct.iat[0]}% of {int(stp.stopped_trades.iat[0]):,} stopped trades would have been in profit 10 days later."))
@@ -265,9 +265,14 @@ def strategies(p):
                      "- The 2024–26 result is positive but not statistically significant.\n"
                      f"- Drawdowns are deep: the worst fall from a peak was {best.all_max_dd_pct:.0f}%. Paper trading is the real test before any money goes in.\n"
                      f"- Best-of-{verdict['variants_tested']} search: a t of {verdict['search_adjusted_t']:.1f} would be needed in 2016–20 alone to rule out luck; it scored {verdict['design_t']:.1f}."),
-                table(f"All {len(v)} variants tested", v[["variant", "design_avg_month_excess_pct", "design_t_excess", "validation_avg_month_excess_pct", "validation_t_excess",
+                dict(kind="chart", type="scatter", title="Did the variants that looked best in 2016–20 also do well in 2021–23?",
+                     points=[dict(x=round(float(r.design_avg_month_excess_pct), 3), y=round(float(r.validation_avg_month_excess_pct), 3), label=r.variant) for r in v.itertuples()
+                             if pd.notna(r.design_avg_month_excess_pct) and pd.notna(r.validation_avg_month_excess_pct)],
+                     xlabel="Beat control per month, 2016–20 (%)", ylabel="2021–23 (%)", height=300,
+                     note="Each dot is one variant. Dots up and to the right held up; a dot far right but low looked good only on the years it was picked on."),
+                dict(fold=f"All {len(v)} variants tested", **table(f"All {len(v)} variants tested", v[["variant", "design_avg_month_excess_pct", "design_t_excess", "validation_avg_month_excess_pct", "validation_t_excess",
                                                           "holdout_avg_month_excess_pct", "holdout_t_excess", "all_cagr_pct", "all_max_dd_pct", "all_sharpe"]]
-                      .sort_values("design_t_excess", ascending=False).round(2))]
+                      .sort_values("design_t_excess", ascending=False).round(2)))]
         return dict(sections=secs)
     if tab == "summary":
         prof = _csv("profiles.csv")
@@ -313,12 +318,21 @@ def screener_research(p):
                 "dev_ci95", "dev_t", "dev_p5_net_%", "val_signals", "val_win_%", "val_lift_pp", "val_mean_net_%", "val_excess_%", "val_ci95", "val_t",
                 "neighbours_val_positive"] + (["hold_signals", "hold_win_%", "hold_excess_%", "hold_ci95", "hold_t"] if hold else []) + ["dev_warning", "val_warning"]
         view = ok[[c for c in cols if c in ok]].round(2)
-        secs = [dict(kind="kpis", items=[dict(label="Configurations tested", value=str(n)), dict(label="t needed to beat luck", value=f"{bt:.1f}")]),
-                dict(kind="note", text=f"With {n} configurations tried, a development t of about {bt:.1f} is needed before the best one can be told apart from luck. "
-                     "Don't pick by win rate alone: look at the size of the edge, its interval, the downside and whether it holds in validation.")]
+        passed = ok[ok.validated == True] if "validated" in ok else ok.iloc[:0]  # noqa: E712
+        top = passed.sort_values("val_excess_%", ascending=False).iloc[0] if len(passed) and "val_excess_%" in passed else None
+        verdict = (f"{len(passed)} of {len(ok)} rule versions passed: they beat the average stock in 2016–20 and again in 2021–23, after costs. "
+                   + (f"Strongest in 2021–23: {top.strategy} ({top['val_excess_%']:+.2f}% per signal over {h} sessions)." if top is not None else "")
+                   if len(passed) else f"None of the {len(ok)} rule versions passed at {h} sessions: no rule beat the average stock in both periods after costs.")
+        secs = [dict(kind="note", tone="info" if len(passed) else "warn", text=verdict),
+                dict(kind="kpis", items=[dict(label="Rule versions with results", value=str(len(ok))), dict(label="Passed both periods", value=str(len(passed))),
+                                         dict(label="t needed to beat luck", value=f"{bt:.1f}", delta="confidence score the best 2016–20 result needs")]),
+                dict(kind="note", text=f"How to read the table: 'Beat avg stock by %' is the edge per signal. 'Confidence (t)' says how sure: with {n} versions tried, "
+                     f"about {bt:.1f} is needed in 2016–20 to rule out luck. Don't pick by win rate alone. More columns: use Columns.")]
         if len(bad):
             secs.append(dict(kind="note", tone="warn", text=f"{len(bad)} configuration(s) failed or are incomplete."))
-        secs.append(table(None, view, {"validated": "bool", "params": "long"}, csv=f"screener_comparison_h{h}"))
+        secs.append(table(None, view, {"validated": "bool", "params": "long"}, csv=f"screener_comparison_h{h}",
+                          show=["experiment", "strategy", "params", "validated", "dev_excess_%", "dev_t", "val_excess_%", "val_t", "neighbours_val_positive", "hold_excess_%", "hold_t"],
+                          chart=dict(x="dev_excess_%", y="val_excess_%")))
         return dict(sections=secs)
     if tab == "detail":
         idx = X.index()
@@ -351,8 +365,8 @@ def screener_research(p):
             d = pd.DataFrame(ev[key])
             if len(d):
                 d = d[(d.horizon == hz) & d.period.isin(["development", "validation"] + (["holdout"] if hold else []))]
-                secs.append(table(f"{title} (horizon {hz})", d, {"excess": "snum2"}, tools=False))
-        secs.append(dict(kind="md", title="Exact configuration", text="```\n" + json.dumps({k: res[k] for k in ("strategy", "strategy_version", "params", "config_id", "data_version", "run_key", "finished")}, indent=1, default=str) + "\n```"))
+                secs.append(dict(table(f"{title} (horizon {hz})", d, {"excess": "snum2"}, tools=False), fold=f"{title}"))
+        secs.append(dict(kind="md", fold="Exact configuration (for re-running)", title="Exact configuration", text="```\n" + json.dumps({k: res[k] for k in ("strategy", "strategy_version", "params", "config_id", "data_version", "run_key", "finished")}, indent=1, default=str) + "\n```"))
         return dict(options=opts, rk=rk, sections=secs)
     if tab == "strategies":
         strategies = X.load_strategies()

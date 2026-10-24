@@ -35,9 +35,19 @@
     try { const r = await api(path, body); if (okMsg) toast(okMsg); return r; } catch (e) { toast(e.message, true); throw e; }
   }
 
+  // ---------- plain names for strategy codes (S1, MOM_L6_S1_H3 ...) ----------
+  let NAMES = {};
+  function momName(v) {
+    const m = /^MOM_L(\d+)_S(\d+)_H(\d+)(_F)?$/.exec(v); if (!m) return null;
+    const [, L, S, H, F] = m;
+    return `Momentum: best ${L}-month return${+S ? `, skip latest ${S} mo` : ""}, hold ${H} mo${F ? ", cash in downtrends" : ""}`;
+  }
+  const nameOf = (v) => (typeof v === "string" && (momName(v) || NAMES[v])) || null;
+  const named = (v) => { const n = nameOf(v); return n ? `${esc(n)} <span class="code">${esc(v)}</span>` : null; };
+
   // ---------- formatting by column type ----------
   const FMT = {
-    text: (v) => esc(v ?? "—"),
+    text: (v) => named(v) || esc(v ?? "—"),
     long: (v) => `<span class="long">${esc(v ?? "")}</span>`,
     sym: (v, r) => v ? `<a class="sym" href="#/stock/${encodeURIComponent(v)}">${esc(v)}</a>${r && (r.company || r.company_name) ? `<div class="co">${esc(r.company || r.company_name)}</div>` : ""}` : "—",
     symonly: (v) => v ? `<a class="sym" href="#/stock/${encodeURIComponent(v)}">${esc(v)}</a>` : "—",
@@ -53,6 +63,7 @@
     bool: (v) => v === true || v === "True" || v === 1 ? `<span class="up">✓</span>` : v === false || v === 0 || v === "False" ? `<span class="muted">—</span>` : "—",
     link: (v) => safeUrl(v) ? `<a href="${esc(v)}" target="_blank" rel="noopener noreferrer">open</a>` : "—",
     tag: (v) => v ? `<span class="tag">${esc(v)}</span>` : "—",
+    strat: (v) => named(v) || esc(v ?? "—"),
     status: (v) => { const s = String(v || "").toLowerCase(); const c = /ok|pass|valid|enabled|approved|done|clean/.test(s) ? "pos" : /error|fail|reject|bad/.test(s) ? "neg" : ""; return v ? `<span class="tag ${c}">${esc(v)}</span>` : "—"; },
   };
   const RIGHT = /^(int|num|pct|spct|snum|frac|inr|cr|x1)/;
@@ -63,16 +74,21 @@
     if (!rows || !rows.length) return `<div class="empty">${esc(empty)}</div>`;
     const right = (c) => c[3] ?? (typeof c[2] === "string" && RIGHT.test(c[2]));
     return `<table class="tbl"><thead><tr>${cols.map((c) => `<th class="${right(c) ? "r" : ""}">${esc(c[1])}</th>`).join("")}</tr></thead><tbody>` +
-      rows.map((row) => `<tr>${cols.map((c) => `<td class="${right(c) ? "r" : ""}">${c[2] ? fmt(c[2], row[c[0]], row) : esc(row[c[0]] ?? "—")}</td>`).join("")}</tr>`).join("") + `</tbody></table>`;
+      rows.map((row) => `<tr>${cols.map((c) => `<td class="${right(c) ? "r" : ""}">${fmt(c[2] || "text", row[c[0]], row)}</td>`).join("")}</tr>`).join("") + `</tbody></table>`;
   }
 
   // data table: sortable, searchable, CSV, paged. Returns a DOM node.
-  function dataTable(rows, cols, opt = {}) {
+  function dataTable(rows, cols_, opt = {}) {
     const box = document.createElement("div"); box.className = "dt";
     rows = rows || [];
     let sortK = opt.sort || null, sortDir = opt.desc ? -1 : 1, filter = "", page = 0;
+    const allCols = cols_, ckey = `mx-cols-${allCols.map((c) => c[0]).join("|").slice(0, 180)}`;
+    let hidden = new Set(opt.show ? allCols.map((c) => c[0]).filter((k) => !opt.show.includes(k)) : []);
+    try { const sv = localStorage.getItem(ckey); if (sv) hidden = new Set(JSON.parse(sv)); } catch (e) { /* ignore */ }
+    const numCols = allCols.filter((c) => typeof c[2] === "string" && RIGHT.test(c[2]) || rows.slice(0, 20).some((r) => typeof r[c[0]] === "number"));
     const per = opt.per || 50, right = (c) => c[3] ?? (typeof c[2] === "string" && RIGHT.test(c[2]));
     const draw = () => {
+      const cols = allCols.filter((c) => !hidden.has(c[0]));
       let r = rows;
       if (filter) { const f = filter.toLowerCase(); r = r.filter((x) => cols.some((c) => String(x[c[0]] ?? "").toLowerCase().includes(f))); }
       if (sortK) r = [...r].sort((a, b) => { const x = a[sortK], y = b[sortK]; if (x == null) return 1; if (y == null) return -1;
@@ -81,14 +97,25 @@
       const vis = r.slice(page * per, page * per + per);
       box.innerHTML = `${opt.tools === false ? "" : `<div class="dt-tools">${rows.length > 8 ? `<input class="in dt-f" placeholder="Filter rows" value="${esc(filter)}">` : ""}
           <span class="muted">${r.length.toLocaleString("en-IN")} row${r.length === 1 ? "" : "s"}</span><span class="spacer"></span>
+          ${numCols.length >= 1 && rows.length >= 5 ? `<button class="btn small dt-chart" title="Scatter or histogram of any columns, with outliers marked">Chart</button>` : ""}
+          ${allCols.length > 6 ? `<button class="btn small dt-cols" title="Show or hide columns">Columns${hidden.size ? ` (${allCols.length - hidden.size}/${allCols.length})` : ""}</button>` : ""}
           ${opt.csv ? `<button class="btn small dt-csv">Download CSV</button>` : ""}</div>`}
         <div class="scroll" ${opt.height ? `style="max-height:${opt.height}px"` : ""}>${!r.length ? `<div class="empty">${esc(opt.empty || "Nothing here.")}</div>` :
         `<table class="tbl"><thead><tr>${cols.map((c) => `<th data-k="${esc(c[0])}" class="${right(c) ? "r" : ""} sortable">${esc(c[1])}${sortK === c[0] ? (sortDir > 0 ? " ↑" : " ↓") : ""}</th>`).join("")}</tr></thead>
-        <tbody>${vis.map((row) => `<tr${opt.onRow ? ' class="click"' : ""}>${cols.map((c) => `<td class="${right(c) ? "r" : ""}">${c[2] ? fmt(c[2], row[c[0]], row) : esc(row[c[0]] ?? "—")}</td>`).join("")}</tr>`).join("")}</tbody></table>`}</div>
+        <tbody>${vis.map((row) => `<tr${opt.onRow ? ' class="click"' : ""}>${cols.map((c) => `<td class="${right(c) ? "r" : ""}">${fmt(c[2] || "text", row[c[0]], row)}</td>`).join("")}</tr>`).join("")}</tbody></table>`}</div>
         ${pages > 1 ? `<div class="dt-pages"><button class="btn small dt-prev" ${page ? "" : "disabled"}>‹</button><span class="muted">page ${page + 1} of ${pages}</span><button class="btn small dt-next" ${page < pages - 1 ? "" : "disabled"}>›</button></div>` : ""}`;
       $$("th.sortable", box).forEach((th) => th.addEventListener("click", () => { const k = th.dataset.k; sortDir = sortK === k ? -sortDir : (isNum(rows.find((x) => x[k] != null)?.[k]) ? -1 : 1); sortK = k; draw(); }));
       const f = $(".dt-f", box); if (f) f.addEventListener("input", () => { filter = f.value; page = 0; const pos = f.selectionStart; draw(); const g = $(".dt-f", box); g.focus(); g.setSelectionRange(pos, pos); });
-      $(".dt-csv", box)?.addEventListener("click", () => csv(r, cols, opt.csv));
+      $(".dt-csv", box)?.addEventListener("click", () => csv(r, allCols, opt.csv));
+      $(".dt-chart", box)?.addEventListener("click", () => chartDrawer(r, allCols, numCols, opt.chart));
+      $(".dt-cols", box)?.addEventListener("click", () => {
+        const d = drawer("Columns", `<p class="muted small">Tick the columns to show. Remembered for this table.</p><div class="colpick">${allCols.map((c) =>
+          `<label class="switch"><input type="checkbox" data-k="${esc(c[0])}" ${hidden.has(c[0]) ? "" : "checked"}><span></span>${esc(c[1])}</label>`).join("")}</div>
+          <div class="row" style="margin-top:12px"><button class="btn small" id="cp-all">Show all</button></div>`);
+        const save = () => { try { localStorage.setItem(ckey, JSON.stringify([...hidden])); } catch (e) { /* ignore */ } draw(); };
+        $$("[data-k]", d).forEach((x) => x.addEventListener("change", () => { x.checked ? hidden.delete(x.dataset.k) : hidden.add(x.dataset.k); save(); }));
+        $("#cp-all", d).addEventListener("click", () => { hidden.clear(); $$("[data-k]", d).forEach((x) => (x.checked = true)); save(); });
+      });
       $(".dt-prev", box)?.addEventListener("click", () => { page--; draw(); });
       $(".dt-next", box)?.addEventListener("click", () => { page++; draw(); });
       if (opt.onRow) $$("tbody tr", box).forEach((tr, i) => tr.addEventListener("click", (e) => { if (!e.target.closest("a")) opt.onRow(vis[i]); }));
@@ -102,12 +129,42 @@
     const text = [keys.join(","), ...rows.map((r) => keys.map((k) => q(r[k])).join(","))].join("\n");
     download(text, `${name || "table"}.csv`, "text/csv");
   }
+  // Chart any table: scatter (x vs y) or histogram, with outliers listed
+  function chartDrawer(rows, allCols, numCols, pre = {}) {
+    const labCol = allCols.find((c) => /sym/.test(c[2])) || allCols.find((c) => !numCols.includes(c));
+    const opts = numCols.map((c) => [c[0], c[1]]);
+    const d = drawer("Chart this table", `<div id="cdf"></div><div class="ch section"></div><div id="cdo"></div>`);
+    const f = form($("#cdf", d), [
+      { k: "kind", label: "Chart", type: "radio", options: [["scatter", "Scatter"], ["hist", "Histogram"]], value: numCols.length > 1 ? "scatter" : "hist" },
+      { k: "x", label: "X axis / column", type: "select", options: opts, value: pre.x && opts.some((o) => o[0] === pre.x) ? pre.x : opts[0][0] },
+      { k: "y", label: "Y axis", type: "select", options: opts, value: pre.y && opts.some((o) => o[0] === pre.y) ? pre.y : (opts[1] || opts[0])[0] }], () => go());
+    const go = () => {
+      const v = f.values(), host = $(".ch", d), lab = (r) => labCol ? String(r[labCol[0]] ?? "") : "";
+      const xl = opts.find((o) => o[0] === v.x)[1], yl = opts.find((o) => o[0] === v.y)[1];
+      $("#f-y", d).closest(".fld").style.display = v.kind === "hist" ? "none" : "";
+      let outs = [];
+      if (v.kind === "hist") {
+        const vals = rows.map((r) => +r[v.x]).filter((x) => isFinite(x));
+        outs = MXCharts.histogram(host, { values: vals, xlabel: xl }).outliers;
+        outs = rows.filter((r) => outs.includes(+r[v.x])).map((r) => [lab(r), r[v.x], null]);
+      } else {
+        const pts = rows.map((r) => ({ x: +r[v.x], y: +r[v.y], label: lab(r), sym: labCol && /sym/.test(labCol[2]) ? r[labCol[0]] : null })).filter((p) => isFinite(p.x) && isFinite(p.y) && r0(p));
+        outs = MXCharts.scatter(host, { points: pts, xlabel: xl, ylabel: yl, height: 360 }).filter((p) => p.out).map((p) => [p.label, p.x, p.y]);
+      }
+      $("#cdo", d).innerHTML = outs.length ? card(`Outliers (${outs.length})`, table(outs.slice(0, 50).map(([l, x, y]) => ({ l, x, y })),
+        [["l", labCol ? labCol[1] : "Row", labCol && /sym/.test(labCol[2]) ? "symonly" : "text"], ["x", xl, "num2"]].concat(v.kind === "hist" ? [] : [["y", yl, "num2"]])),
+        "far from the rest") : `<p class="muted small">No clear outliers.</p>`;
+    };
+    const r0 = (p) => p.x === p.x && p.y === p.y;
+    go();
+  }
   function download(text, name, type = "text/plain") {
     const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([text], { type })); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
   }
 
   // columns from the server: [[key, label, type]]
-  const cols = (spec) => (spec || []).map(([k, l, t]) => [k, l, t || "text"]);
+  const LAB = () => (window.MXHELP && MXHELP.LABELS) || {};
+  const cols = (spec) => (spec || []).map(([k, l, t]) => [k, (l == null || l === String(k).replace(/_/g, " ")) && LAB()[k] ? LAB()[k] : l, t || "text"]);
 
   // ---------- small components ----------
   const kpi = (label, value, delta, extra = "") => `<div class="card kpi"><div class="label">${label}</div><div class="value">${value}</div>${delta ? `<div class="delta">${delta}</div>` : ""}${extra}</div>`;
@@ -204,6 +261,8 @@
     return host;
   }
   function section(s) {
+    if (s.fold) { const det = document.createElement("details"); det.className = "fold section"; det.innerHTML = `<summary>${esc(s.fold === true ? (s.title || "More details") : s.fold)}</summary>`;
+      const inner = section({ ...s, fold: null }); inner.classList.remove("section"); det.appendChild(inner); return det; }
     const wrap = document.createElement("div");
     wrap.className = s.kind === "grid" ? `grid g${s.cols || 2} section` : "section";
     if (s.kind === "grid") { (s.items || []).forEach((x) => { const e = section(x); e.classList.remove("section"); wrap.appendChild(e); }); return wrap; }
@@ -213,7 +272,7 @@
     if (s.kind === "table") {
       wrap.innerHTML = `<div class="card ${s.title ? "" : "flush"}">${s.title ? `<div class="ct"><h2>${esc(s.title)}</h2><span class="aside">${esc(s.aside || "")}</span></div>` : ""}</div>`;
       const c = $(".card", wrap);
-      c.appendChild(dataTable(s.rows, cols(s.columns), { csv: s.csv, empty: s.empty, per: s.per, height: s.height, tools: s.tools, sort: s.sort, desc: s.desc }));
+      c.appendChild(dataTable(s.rows, cols(s.columns), { csv: s.csv, empty: s.empty, per: s.per, height: s.height, tools: s.tools, sort: s.sort, desc: s.desc, show: s.show, chart: s.chart }));
       if (s.note) c.insertAdjacentHTML("beforeend", `<p class="muted small">${esc(s.note)}</p>`);
       return wrap;
     }
@@ -266,6 +325,40 @@
     document.addEventListener("keydown", function k(e) { if (e.key === "Escape") { d.remove(); document.removeEventListener("keydown", k); } });
     return d;
   }
+
+  // ---------- page guide (How to use) ----------
+  function addGuide(el, page) {
+    const g = window.MXHELP && MXHELP.GUIDES[page], h = $(".head", el);
+    if (!g || !h || $(".guide-btn", h)) return;
+    let act = $(".actions", h); if (!act) { act = document.createElement("div"); act.className = "actions"; h.appendChild(act); }
+    act.insertAdjacentHTML("afterbegin", `<button class="btn guide-btn" title="What this page is for, how to use it, and the terms it uses">? How to use</button>`);
+    const panel = document.createElement("div"); panel.className = "guide card section"; panel.hidden = true; h.after(panel);
+    const G = MXHELP.GLOSSARY;
+    tabs(panel, ["What it is", "How to use", "Glossary", "The idea"], (i, b) => {
+      b.innerHTML = i === 0 ? `<p>${esc(g.what)}</p>` : i === 1 ? `<ol>${g.steps.map((x) => `<li>${esc(x)}</li>`).join("")}</ol>`
+        : i === 2 ? (g.terms.length ? `<dl class="kv gl-list">${g.terms.filter((t) => G[t]).map((t) => `<dt>${esc(t)}</dt><dd>${esc(G[t])}</dd>`).join("")}</dl>` : `<p class="muted">No special terms on this page.</p>`)
+        : `<p>${esc(g.idea)}</p>`;
+    }, `guide-${page}`);
+    let open = false; try { open = sessionStorage.getItem(`mx-guide-${page}`) === "1"; } catch (e) { /* ignore */ }
+    panel.hidden = !open;
+    $(".guide-btn", h).addEventListener("click", () => { panel.hidden = !panel.hidden; try { sessionStorage.setItem(`mx-guide-${page}`, panel.hidden ? "0" : "1"); } catch (e) { /* ignore */ } });
+  }
+
+  // hover definitions: wraps glossary terms found in headings, column titles, KPI labels and form labels
+  let GLRE = null;
+  function glossarize(root) {
+    const G = window.MXHELP && MXHELP.GLOSSARY; if (!G) return;
+    if (!GLRE) { const keys = Object.keys(G).sort((a, b) => b.length - a.length).map((k) => k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+      GLRE = new RegExp(`(^|[^A-Za-z0-9])(${keys.join("|")})(?![A-Za-z0-9])`); }
+    $$("th, .kpi .label, .ct h2, .fld > label, .tabs button, .head .sub", root).forEach((e) => {
+      if (e.dataset.gl || e.closest(".guide") || e.querySelector(".switch, input, select") || e.classList.contains("switch")) return; e.dataset.gl = "1";
+      const walk = document.createTreeWalker(e, NodeFilter.SHOW_TEXT); let n;
+      while ((n = walk.nextNode())) { const m = GLRE.exec(n.nodeValue); if (!m) continue;
+        const at = m.index + m[1].length, rest = n.splitText(at); rest.splitText(m[2].length);
+        const sp = document.createElement("span"); sp.className = "gl"; sp.title = G[m[2]]; sp.textContent = m[2]; rest.replaceWith(sp); break; }
+    });
+  }
+  let glT; new MutationObserver(() => { clearTimeout(glT); glT = setTimeout(() => glossarize($("#page")), 120); }).observe(document.documentElement, { childList: true, subtree: true });
 
   // ---------- navigation ----------
   const NAV = [
@@ -364,14 +457,15 @@
     if (!p) { el.innerHTML = head("Not found") + note("No such page.", "warn"); return; }
     document.title = `${p.title || "MarketX"} · MarketX`;
     el.innerHTML = loading();
-    try { await p.render(el, arg, () => seq !== renderSeq); }
+    try { await p.render(el, arg, () => seq !== renderSeq); if (seq === renderSeq) addGuide(el, page); }
     catch (e) { if (seq === renderSeq) el.innerHTML = head(esc(p.title || "Error")) + note(`Couldn't load this page: ${esc(e.message)}`, "warn"); console.error(e); }
   }
   window.addEventListener("hashchange", () => { render(); window.scrollTo(0, 0); });
   let rz; window.addEventListener("resize", () => { clearTimeout(rz); rz = setTimeout(() => window.dispatchEvent(new Event("mx-resize")), 200); });
 
   window.MX = { api, qs, post, toast, startJob, esc, num, pct, cls, inr, day, dt, mmss, safeUrl, isNum, $, $$, table, dataTable, csv, download,
-                cols, kpi, card, head, note, loading, spinner, md, form, tabs, sections, section, newsList, drawer, editTable, openLog, fmt, debounce,
+                cols, kpi, card, nameOf, named, chartDrawer, head, note, loading, spinner, md, form, tabs, sections, section, newsList, drawer, editTable, openLog, fmt, debounce,
                 page: (k, def) => (PAGES[k] = def), status: () => lastStatus, refreshStatus, route, render };
-  document.addEventListener("DOMContentLoaded", () => { setupTheme(); setupSearch(); refreshStatus(); render(); });
+  document.addEventListener("DOMContentLoaded", async () => { setupTheme(); setupSearch(); refreshStatus();
+    try { NAMES = await api("meta/names"); } catch (e) { /* names are a nicety */ } render(); });
 })();
