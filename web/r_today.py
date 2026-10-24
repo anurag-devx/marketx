@@ -60,7 +60,32 @@ def highlights(p):
             dict(kind="table", title="New 52-week highs", columns=MCOLS, rows=d[d.new_high].sort_values("r1", ascending=False).head(15),
                  tools=False, empty="None that day.")]),
     ]
+    out += _fo_section(day)
     return dict(day=day, first=panel.date.min(), last=panel.date.max(), sections=out)
+
+
+def _fo_section(day):
+    """F&O positioning (core/derivatives.py), as of the chosen day. Nothing if F&O data isn't downloaded."""
+    from core import derivatives as DV
+    try:
+        p = cached("fo_part", _mtime(DV.PART), DV.participants)
+        d = cached("fo_daily", _mtime(DV.DAILY), DV.daily)
+    except Exception:
+        return []
+    pos = DV.fii_index_positioning(p, day) if len(p) else None
+    if not pos:
+        return []
+    n = d[(d.symbol == "NIFTY") & (d.date <= day)].sort_values("date") if len(d) else d
+    items = [dict(label=f"FII index futures: long share ({pos['date']:%d %b})", value=f"{pos['long_pct']:.0f}%",
+                  delta=(f"{pos['long_pct'] - pos['long_pct_5d_ago']:+.0f} pts in 5 sessions" if pos["long_pct_5d_ago"] is not None else None))]
+    if len(n) and pd.notna(n.pcr.iat[-1]):
+        items.append(dict(label="Nifty options put-call ratio (OI)", value=f"{n.pcr.iat[-1]:.2f}",
+                          delta=f"{n.pcr.iat[-1] - n.pcr.iat[-6]:+.2f} in 5 sessions" if len(n) > 5 and pd.notna(n.pcr.iat[-6]) else None))
+    s = pos["series"].tail(250)
+    return [dict(kind="kpis", cols=4, items=items),
+            dict(kind="chart", type="line", title="FII index futures: long contracts as a share of their long + short (%)", ysuffix="%", hlines=[50],
+                 x=s.date.dt.strftime("%Y-%m-%d").tolist(), series=[dict(name="FII long share", y=s.long_pct.round(1).tolist(), area=True)],
+                 note="From NSE's participant-wise open interest. Below 50% = FIIs hold more short than long index futures. Positioning is context, not a tested signal.")]
 
 
 @route("GET", "market/news")

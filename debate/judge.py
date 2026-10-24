@@ -11,7 +11,7 @@ Verdicts: Bullish bias / Bearish bias / Neutral or mixed / Insufficient evidence
   Neutral or mixed       model edge vs the base rate below EDGE_MIN, or the edge and the supported evidence disagree
   Bullish / Bearish bias the model has skill, its edge clears EDGE_MIN, and the supported evidence does not disagree
 Correlated evidence: signals are grouped (trend, breakout, mean reversion, ...); each group counts once per side
-(1 if any claim in it is supported, 0.5 if only partially supported); news/filing tests form one 'events' group."""
+(1 if any claim in it is supported, 0.5 if only partially supported); news/filing tests form one 'events' group; the post-results drift test is its own 'results' group."""
 import numpy as np, pandas as pd
 from . import VERSIONS, stats as S
 from .signals import GROUPS
@@ -105,7 +105,7 @@ def decide(spec, info, last, items, ledger, model, fc, ctx, unverified):
              else "experimental: not calibrated" if "Not calibrated" in cal else "experimental: not evaluated")
     return dict(verdict=verdict, reasons=why, probabilities=probs, base_rates=base, edge=edge, probability_label=label,
                 calibration=cal, calibration_detail=model.get("calibration_why") if model else None, expected_return=exp,
-                downside=downside(ctx, info["symbol"], spec["h"]), evidence_groups={GROUPS.get(k, "News / filings (event studies)"): v for k, v in groups.items()},
+                downside=downside(ctx, info["symbol"], spec["h"]), evidence_groups={GROUPS.get(k, {"results": "Quarterly results (post-results drift)", "macro": "Macro associations"}.get(k, "News / filings (event studies)")): v for k, v in groups.items()},
                 net_supported_groups=net, top_drivers=(fc or {}).get("top_drivers", []), version=VERSIONS["judge"],
                 note="A probability is a forecast, not a guarantee. Bias verdicts describe the balance of tested evidence, not trade advice.")
 

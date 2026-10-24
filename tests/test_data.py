@@ -177,7 +177,7 @@ def test_secrets_are_redacted_from_errors():
 def test_optional_job_steps_do_not_block():
     from core import jobs
     chain = " && ".join(jobs._cmd(c) for c in jobs.COMMANDS["fetch+pipeline"])
-    assert '|| echo "(optional step failed: continuing)"' in chain and chain.count("||") == 9
+    assert '|| echo "(optional step failed: continuing)"' in chain and chain.count("||") == 10       # every step except prices and the agents is optional
     assert chain.index("fetch_angel.py") < chain.index("pipeline.py")
 
 

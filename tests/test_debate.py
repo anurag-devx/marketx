@@ -347,3 +347,56 @@ def test_only_web_links_are_kept():
 def test_model_cache_key_changes_with_data_or_settings():
     a = PR._key(5, "rel", None, "2026-10-22", "aaaa1111")
     assert a != PR._key(5, "rel", None, "2026-10-22", "bbbb2222") and a == PR._key(5, "rel", None, "2026-10-22", "aaaa1111")
+
+
+# ---------------- quarterly results as evidence ----------------
+def _quarters(syms, seed=7):
+    rng = np.random.default_rng(seed)
+    rows = []
+    for s in syms:
+        for k, pe in enumerate(pd.date_range("2016-03-31", "2023-12-31", freq="QE")):
+            sue = float(rng.normal(0, 1.5))
+            rows.append(dict(symbol=s, period_end=pe, filed_at=pe + pd.Timedelta(days=40, hours=17), quarter=f"Q{k % 4 + 1} FY{(pe.year + 1) % 100:02d}",
+                             basis="consolidated", revenue_cr=1000.0 + k, revenue_yoy=5.0, profit_cr=100.0 + k, profit_yoy=8.0, margin_pct=10.0,
+                             eps=4.2, sue_profit=sue, revised=False))
+    q = pd.DataFrame(rows)
+    q.loc[(q.symbol == "S01") & (q.period_end == q.period_end.max()), "sue_profit"] = 2.5      # S01's latest quarter: a clear beat
+    return q
+
+
+def test_results_evidence_is_point_in_time(fixture_data):
+    data = dict(fixture_data, quarters=_quarters(SYMS))
+    ctx = E.Context(5, "2024-02-09", log=lambda *a: None, data=data)        # S01's Dec-23 results were filed 2024-02-09 17:00
+    before = {e["id"]: e for e in E.results_evidence(ctx, "S01")}
+    assert before["RS-LATEST"]["period"] != "Q4 FY24"                       # filed after the 15:30 cutoff that day: not yet visible
+    ctx2 = E.Context(5, "2024-02-12", log=lambda *a: None, data=data)
+    after = {e["id"]: e for e in E.results_evidence(ctx2, "S01")}
+    assert after["RS-LATEST"]["direction"] == "bull" and after["RS-LATEST"]["extra"]["category"] == "beat"
+    assert "RS-TREND" in after and all(k not in E.UNAVAILABLE for k in ("UA-BSE", "UA-POSITIONING"))
+
+
+def test_results_drift_tested_with_past_results_only(fixture_data, lab_dirs):
+    from debate import engine as EN
+    data = dict(fixture_data, quarters=_quarters(SYMS))
+    rec = EN.run("S01", h=5, target="abs", as_of="2024-03-05", rounds=1, use_llm=False, log=lambda *a: None, data=data, save=False)
+    assert any(e["id"] == "RS-LATEST" for e in rec["evidence"])
+    ev = rec["statistics"]["events"]
+    assert "results|beat|bull" in ev and ev["results|beat|bull"].get("n_events", 0) > 50
+    assert ev["results|beat|bull"]["last"] < "2024-03-05"                   # every tested result's window ended before the cutoff
+
+
+def test_holdings_and_fo_evidence_point_in_time(fixture_data):
+    days = pd.bdate_range("2024-02-26", "2024-03-05")
+    fo = pd.DataFrame(dict(date=days, symbol="S01", index=False, fut_oi=np.linspace(1e6, 1.5e6, len(days)), fut_oi_chg=1e4, fut_close=100.0,
+                           fut_expiry=pd.Timestamp("2024-03-28"), underlying=np.nan, basis_pct=np.nan, call_oi=1e6, put_oi=8e5, pcr=0.8,
+                           call_oi_chg=0.0, put_oi_chg=0.0))
+    part = pd.DataFrame([dict(date=d, client="FII", fut_idx_long=100 + i, fut_idx_short=300) for i, d in enumerate(days)])
+    hold = pd.DataFrame([dict(symbol="S01", period_end=pd.Timestamp("2023-09-30"), published=pd.Timestamp("2023-10-20 18:00"), promoter_pct=60.0,
+                              fii_pct=20.0, dii_pct=10.0, mf_pct=5.0, retail_pct=8.0, public_pct=40.0, holders=1e5, detail=True),
+                         dict(symbol="S01", period_end=pd.Timestamp("2023-12-31"), published=pd.Timestamp("2024-03-05 18:00"), promoter_pct=58.0,
+                              fii_pct=22.0, dii_pct=10.0, mf_pct=5.0, retail_pct=8.0, public_pct=42.0, holders=1e5, detail=True)])
+    ctx = E.Context(5, "2024-03-05", log=lambda *a: None, data=dict(fixture_data, holdings=hold, fo_daily=fo, fo_part=part))
+    ev = {e["id"]: e for e in E.holdings_evidence(ctx, "S01") + E.fo_evidence(ctx, "S01")}
+    assert "30 Sep 2023" in ev["SH-LATEST"]["fact"]                         # the Dec pattern is published after the 15:30 cutoff
+    assert ev["FO-STOCK"]["observed"] == "2024-03-04"                       # the day's own F&O file comes out after the close
+    assert ev["FO-FII"]["observed"] == "2024-03-04" and ev["FO-STOCK"]["direction"] is None and ev["SH-LATEST"]["direction"] is None

@@ -346,6 +346,26 @@ def event_sample(news, ann, P, cutoff, h, dedupe_sessions=3):
     return ev.loc[keep]
 
 
+def earnings_sample(q, P, cutoff, h):
+    """Past quarterly results whose drift window (sessions +1..+h after the reaction day) had ended by the cutoff.
+    category = surprise kind (beat / in line / miss) from the profit SUE, the same rule the evidence uses."""
+    from research.events import event_day
+    from .evidence import surprise_kind
+    if q is None or q.empty:
+        return pd.DataFrame(columns=["symbol", "d0", "pos", "category"])
+    dates = P["dates"]
+    ev = q[q.symbol.isin(P["ar"].columns)][["symbol", "filed_at", "sue_profit"]].copy()
+    ev["category"] = [surprise_kind(x) for x in ev.sue_profit.astype(float)]
+    ev = ev[ev.category.notna()].copy()
+    ev["d0"] = [event_day(t, dates) for t in ev.filed_at]
+    ev = ev[ev.d0.notna()].copy()
+    ev["pos"] = dates.get_indexer(ev.d0)
+    ci = dates.get_indexer([pd.Timestamp(cutoff)])[0]
+    if ci < 0:
+        ci = dates.searchsorted(pd.Timestamp(cutoff), side="right") - 1
+    return ev[(ev.pos >= 0) & (ev.pos + h <= ci)].reset_index(drop=True)
+
+
 def car(ev, P, h, model="market_adjusted"):
     """CAR(1,h) and AR(0) in % per event."""
     ret, nr = P["ret"], P["nifty"].to_numpy()

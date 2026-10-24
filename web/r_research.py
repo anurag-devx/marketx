@@ -41,6 +41,14 @@ def _availability(last):
         rows.append(dict(data="NSE filings", status=f"{len(a):,} since {a.published.min():%d %b %Y}" if len(a) else "none"))
     except Exception:
         pass
+    try:
+        from core import fundamentals as FN
+        qf = FN.DIR / "quarters.parquet"
+        q = pd.read_parquet(qf, columns=["symbol", "period_end"]) if qf.exists() else pd.DataFrame()
+        rows.append(dict(data="Quarterly results as numbers (NSE XBRL)", status=f"{len(q):,} stock-quarters, {q.symbol.nunique()} stocks, since "
+                         f"{pd.to_datetime(q.period_end).min():%b %Y}" if len(q) else "none yet (Screener → Results → download history)"))
+    except Exception:
+        pass
     rows.append(dict(data="Macro sensitivities", status="ready" if (C.RESULTS / "macro" / "sens_3y.csv").exists() else "run the macro study"))
     for k, (a_, b_) in EVM.UNAVAILABLE.items():
         rows.append(dict(data=a_, status="not available: " + b_))

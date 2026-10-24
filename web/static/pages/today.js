@@ -108,7 +108,7 @@
           <div><div class="k">3 months</div><div class="v ${cls(i.r3m)}">${pct(i.r3m)}</div></div>
           <div><div class="k">1 year</div><div class="v ${cls(i.r1y)}">${pct(i.r1y)}</div></div>
           <div><div class="k">52-week range</div><div class="v">${inr(i.lo52)} – ${inr(i.hi52)}</div></div></div></div><div id="st"></div>`;
-      tabs($("#st", el), ["Chart", "Results", "News & filings", "Agents"], (k, t) => {
+      tabs($("#st", el), ["Chart", "Results", "Ownership", "F&O", "News & filings", "Agents"], (k, t) => {
         if (k === 0) {
           t.innerHTML = `<div class="card"><div class="ct"><div class="seg" id="rng">${[["3M", 91], ["6M", 182], ["1Y", 365], ["3Y", 1100], ["5Y", 1830], ["All", 99999]].map(([l, n]) => `<button data-n="${n}" class="${n === 365 ? "on" : ""}">${l}</button>`).join("")}</div>
             <div class="seg" id="ivl" style="margin-left:8px"><button data-i="D" class="on" title="One candle per trading day">Daily</button><button data-i="W" title="One candle per week (Mon–Fri)">Weekly</button><button data-i="M" title="One candle per month">Monthly</button></div>
@@ -146,6 +146,36 @@
           $("#rt", t).appendChild(dataTable(q, [["quarter", "Quarter"], ["revenue_cr", "Revenue ₹ cr", "num0"], ["revenue_yoy", "YoY", "spct1"], ["profit_cr", "Profit ₹ cr", "num1"], ["profit_yoy", "YoY", "spct1"],
             ["margin_pct", "Net margin", "pct1"], ["sue_profit", "Surprise", "snum1"], ["react_rel", "Reaction vs Nifty", "spct1"], ["filed_at", "Filed", "dt"], ["basis", "Basis"]], { tools: false }));
         } else if (k === 2) {
+          const h = d.holdings || [];
+          if (!h.length) { t.innerHTML = card("Shareholding", `<div class="empty">No shareholding stored for this stock yet. Data health → History downloads → Shareholding patterns.</div>`); return; }
+          const pc = (v) => (v == null ? "—" : `${num(v, 2)}%`);
+          const chg = (a, b) => (a == null || b == null ? "" : ` <span class="${cls(a - b)} small">${a - b > 0 ? "+" : ""}${num(a - b, 2)}</span>`);
+          const rows = h.map((r, i) => ({ ...r, prev: h[i + 1] }));
+          t.innerHTML = card("Shareholding by quarter", table(rows, [["quarter", "Quarter"], ["promoter", "Promoter", (v, r) => pc(v) + chg(v, r.prev?.promoter), true],
+            ["fii", "Foreign inst.", (v, r) => pc(v) + chg(v, r.prev?.fii), true], ["dii", "Domestic inst.", (v, r) => pc(v) + chg(v, r.prev?.dii), true],
+            ["mf", "Mutual funds", (v, r) => pc(v) + chg(v, r.prev?.mf), true], ["retail", "Retail (< ₹2 lakh)", (v) => pc(v), true],
+            ["holders", "Shareholders", (v) => (v == null ? "—" : num(v, 0)), true], ["published", "Published", "dt"]]),
+            "small numbers = change vs the quarter before, in percentage points") +
+            `<p class="muted small">From NSE shareholding filings. Promoter and public go back to listing; the foreign / domestic / mutual fund / retail split is read for the latest quarters only.</p>`;
+          const ch = h.slice().reverse();
+          if (ch.length > 1) {
+            t.insertAdjacentHTML("beforeend", `<div class="card section"><div class="ct"><h2>Promoter and institutional holding</h2></div><div class="ch"></div></div>`);
+            MXCharts.draw($(".ch", t), { type: "line", height: 260, ysuffix: "%", x: ch.map((r) => String(r.period_end).slice(0, 10)),
+              series: [{ name: "Promoter", y: ch.map((r) => r.promoter) }, { name: "Foreign inst.", y: ch.map((r) => r.fii) }, { name: "Domestic inst.", y: ch.map((r) => r.dii) }] });
+          }
+        } else if (k === 3) {
+          const f = d.fo;
+          if (!f) { t.innerHTML = card("F&O", `<div class="empty">No F&O data for this stock: either it isn't in the F&O segment, or the F&O history isn't downloaded yet (Data health → History downloads).</div>`); return; }
+          t.innerHTML = `<div class="grid g4">${kpi("Futures open interest", `${num(f.fut_oi / 1e5, 1)} lakh shares`, `${f.oi_5d != null ? pct(f.oi_5d, 1) : "—"} over 5 sessions`)}
+            ${kpi("Put-call ratio (open interest)", f.pcr != null ? num(f.pcr, 2) : "—", "above 1 = more puts open than calls")}
+            ${kpi("Futures basis", f.basis_pct != null ? pct(f.basis_pct, 2) : "—", "nearest future vs the share price")}
+            ${kpi("Price and OI, 5 sessions", esc(f.reading || "—"), f.price_5d != null ? `price ${pct(f.price_5d, 1)}` : "")}</div>
+            <div class="card section"><div class="ct"><h2>Futures open interest (lakh shares) and share price</h2><span class="aside">${day(f.date)}</span></div><div class="ch"></div></div>
+            <div class="card section"><div class="ct"><h2>Put-call ratio of open interest</h2></div><div class="ch2"></div></div>
+            <p class="muted small">"Long build-up" = price and open interest both up; "short build-up" = price down, OI up; "short covering" = price up, OI down; "long unwinding" = both down. These are common readings, not tested signals.</p>`;
+          MXCharts.draw($(".ch", t), { type: "line", height: 260, x: f.x, series: [{ name: "Futures OI (lakh)", y: f.oi }, { name: "Close ₹", y: f.close_series, axis: "right" }] });
+          MXCharts.draw($(".ch2", t), { type: "line", height: 200, x: f.x, hlines: [1], series: [{ name: "PCR", y: f.pcr_series }] });
+        } else if (k === 4) {
           t.innerHTML = card("News & filings", newsList(d.news.map((n) => ({ ...n, source: n.kind === "filing" ? "NSE filing" : n.source })), "No news or filings stored for this stock."), "labels only where the headline shows them");
         } else {
           const sc = d.screener;

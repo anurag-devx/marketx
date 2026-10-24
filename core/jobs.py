@@ -11,9 +11,9 @@ LOCK = JOBS / "current.json"
 #   history  long history downloads and indexing (hours), so they never block the daily run
 #   lab      Market Debate Lab analyses (minutes, mostly waiting on the local model); writes only data/debate/
 # Lanes never share the database; files they share are protected by core/filelock.py and written atomically.
-LANES = {"news": {"news", "news-check", "announcements", "macro-fetch", "macro-all", "fundamentals"},
+LANES = {"news": {"news", "news-check", "announcements", "macro-fetch", "macro-all", "fundamentals", "fo"},
          "history": {"history-all", "announcements-backfill", "news-backfill", "news-articles", "search-index",
-                     "library-ingest", "news-retag", "fundamentals-backfill"},
+                     "library-ingest", "news-retag", "fundamentals-backfill", "shareholding", "fo-backfill"},
          "lab": {"debate", "debate-eval", "debate-batch", "debate-replay", "stock-lists"},
          "kronos": {"kronos-install", "kronos-forecast", "kronos-replay"}}      # experimental, separate: see kronos_lab/README.md
 SIDE = LANES["news"]                         # kept for older callers
@@ -42,7 +42,7 @@ COMMANDS = {
     "screener-experiments-force": [[PY, "-u", "-m", "screener", "experiments", "--force"]],
     "pipeline": [[PY, "-u", "pipeline.py", "all"]],
     "fetch+pipeline": [[PY, "-u", "fetch_angel.py"], [PY, "-u", "news_fetch.py"], [PY, "-u", "-m", "core.announcements"],
-                       [PY, "-u", "-m", "core.fundamentals"], [PY, "-u", "-m", "research.earnings"], [PY, "-u", "-m", "core.macro"], [PY, "-u", "pipeline.py", "all"], [PY, "-u", "-m", "research.macro_impact"],
+                       [PY, "-u", "-m", "core.fundamentals"], [PY, "-u", "-m", "research.earnings"], [PY, "-u", "-m", "core.derivatives"], [PY, "-u", "-m", "core.macro"], [PY, "-u", "pipeline.py", "all"], [PY, "-u", "-m", "research.macro_impact"],
                        [PY, "-u", "-m", "research.market_report"], [PY, "-u", "-m", "debate.batch"], [PY, "-u", "-m", "debate.evaluate"]],
     "announcements": [[PY, "-u", "news_fetch.py"], [PY, "-u", "-m", "core.announcements"]],
     "backtest": [[PY, "-u", "backtest.py"], [PY, "-u", "strategy_research.py"], [PY, "-u", "analysis.py"]],
@@ -60,8 +60,11 @@ COMMANDS = {
     "macro-research": [[PY, "-u", "-m", "research.macro_impact"]],
     "macro-all": [[PY, "-u", "-m", "core.macro"], [PY, "-u", "-m", "research.macro_impact"]],
     "search-index": [[PY, "-u", "-m", "core.search_index"]],
-    "history-all": [[PY, "-u", "-m", "core.announcements", "backfill", "start=2016-01-01"],
-                    [PY, "-u", "-m", "core.news", "backfill", "start=2016-01-01"], [PY, "-u", "-m", "core.articles", "max=300"],
+    "shareholding": [[PY, "-u", "-m", "core.shareholding"]],
+    "fo": [[PY, "-u", "-m", "core.derivatives"]],
+    "fo-backfill": [[PY, "-u", "-m", "core.derivatives", "backfill"]],
+    "history-all": [[PY, "-u", "-m", "core.announcements", "backfill", "start=2016-01-01"], [PY, "-u", "-m", "core.shareholding"],
+                    [PY, "-u", "-m", "core.derivatives", "backfill"], [PY, "-u", "-m", "core.news", "backfill", "start=2016-01-01"], [PY, "-u", "-m", "core.articles", "max=300"],
                     [PY, "-u", "-m", "core.search_index"]],
     "library-ingest": [[PY, "-u", "-m", "core.library", "ingest"]],
     "news-articles": [[PY, "-u", "-m", "core.articles"]],
@@ -85,7 +88,7 @@ COMMANDS = {
 
 
 KEEP_GOING = {"history-all"}
-OPTIONAL = ("news_fetch.py", "core.announcements", "core.fundamentals", "research.earnings", "research.market_report", "core.macro", "research.macro_impact", "debate.batch", "debate.evaluate")   # a failure here is reported but never stops the agents
+OPTIONAL = ("news_fetch.py", "core.announcements", "core.fundamentals", "core.derivatives", "research.earnings", "research.market_report", "core.macro", "research.macro_impact", "debate.batch", "debate.evaluate")   # a failure here is reported but never stops the agents
 
 
 def _cmd(cmd):
@@ -223,7 +226,7 @@ STEPS = [("fetch_angel.py", "Downloading prices", "fetch"), ("news_fetch.py", "F
          ("backtest.py", "Backtesting strategies", "backtest"), ("strategy_research.py", "Strategy research", "backtest"),
          ("analysis.py", "Strategy analysis", "backtest"), ("research.events", "Running the news study", "announcements"),
          ("core.quality", "Checking data quality", "fetch"), ("pip", "Installing packages", None),
-         ("kronos_lab.forecast", "Kronos forecasts", None), ("kronos_lab/setup.sh", "Installing Kronos", None)]
+         ("kronos_lab.forecast", "Kronos forecasts", None), ("core.shareholding", "Reading shareholding patterns", "announcements"), ("core.derivatives", "Downloading F&O data", "announcements"), ("kronos_lab/setup.sh", "Installing Kronos", None)]
 AGENT_STEP = {"regime": "regime", "screener": "screener", "strategy": "strategy", "technical": "technical", "risk": "risk",
               "validation": "validation", "report": "report"}
 

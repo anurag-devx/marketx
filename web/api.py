@@ -164,7 +164,7 @@ JOB_LABEL = {"strategy-research": "Strategy research", "screener-experiments": "
              "announcements": "Fetch news and filings", "fundamentals": "Update quarterly results",
              "fundamentals-backfill": "Download results history", "macro-all": "Fetch macro data + study", "market-report": "Write market report",
              "debate-batch": "Nightly forecasts", "backtest": "Run backtest + analysis", "screener": "Run screener",
-             "kronos-install": "Install Kronos", "kronos-forecast": "Kronos forecasts", "kronos-replay": "Kronos replay"}
+             "shareholding": "Download shareholding patterns", "fo": "Update F&O data", "fo-backfill": "Download F&O history", "kronos-install": "Install Kronos", "kronos-forecast": "Kronos forecasts", "kronos-replay": "Kronos replay"}
 STARTABLE = set(jobs.COMMANDS)                # only the fixed commands in core/jobs.py; arguments are dates and flags only
 
 
@@ -389,7 +389,38 @@ def stock(p):
         s = scr.iloc[0]
         screener = dict(date=s.screen_date, qualifies=bool(s.qualified), rank=s["rank"] if s.qualified else None,
                         reasons=s.qualification_reasons or s.rejection_reasons)
-    return dict(info=info, bars=bars, signals=sig, screener=screener, results=_stock_results(sym), news=_stock_news(sym))
+    return dict(info=info, bars=bars, signals=sig, screener=screener, results=_stock_results(sym), news=_stock_news(sym), holdings=_stock_holdings(sym), fo=_stock_fo(sym))
+
+
+def _stock_holdings(sym):
+    """Shareholding pattern by quarter (newest first), from data/shareholding (core/shareholding.py)."""
+    from core import shareholding as SH
+    def build():
+        return SH.load()
+    d = cached("shareholding", _mtime(SH.FILE), build)
+    g = d[d.symbol == sym].sort_values("period_end", ascending=False).head(12) if len(d) else d
+    return [dict(quarter=f"{pd.Timestamp(r.period_end):%b %Y}", period_end=r.period_end, published=r.published,
+                 promoter=r.promoter_pct, fii=r.fii_pct, dii=r.dii_pct, mf=r.mf_pct, retail=r.retail_pct, public=r.public_pct,
+                 holders=r.holders, detail=bool(r.detail)) for r in g.itertuples()]
+
+
+def _stock_fo(sym):
+    """Daily F&O open interest for one stock (last ~6 months) from data/derivatives (core/derivatives.py)."""
+    from core import derivatives as DV
+    d = cached("fo_daily", _mtime(DV.DAILY), DV.daily)
+    g = d[d.symbol == sym].sort_values("date").tail(130) if len(d) else d
+    if g.empty:
+        return None
+    px = prices()
+    c = px[px.symbol == sym].set_index("date").close if px is not None else pd.Series(dtype=float)
+    g = g.assign(close=g.date.map(c))
+    last = g.iloc[-1]
+    w = g.tail(6)
+    p5 = 100 * (w.close.iat[-1] / w.close.iat[0] - 1) if len(w) > 1 and pd.notna(w.close.iat[0]) else None
+    oi5 = 100 * (w.fut_oi.iat[-1] / w.fut_oi.iat[0] - 1) if len(w) > 1 and w.fut_oi.iat[0] else None
+    return dict(date=last.date, fut_oi=last.fut_oi, pcr=last.pcr, basis_pct=last.basis_pct, price_5d=p5, oi_5d=oi5,
+                reading=DV.buildup(p5, oi5), x=g.date.dt.strftime("%Y-%m-%d").tolist(), oi=(g.fut_oi / 1e5).round(2).tolist(),
+                pcr_series=g.pcr.round(3).tolist(), close_series=g.close.round(2).tolist())
 
 
 def _stock_results(sym):

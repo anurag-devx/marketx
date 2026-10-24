@@ -291,6 +291,31 @@ def _history():
     except Exception:
         pass
     try:
+        from core import shareholding as SH
+        sh = SH.load()
+        sh = sh[sh.symbol.isin(set(uni.Symbol))] if len(sh) else sh
+        n_list = sh.symbol.nunique() if len(sh) else 0
+        det = sh[sh.detail.astype(bool)] if len(sh) else sh
+        latest_q = det.period_end.max() if len(det) else None
+        n_det = det[det.period_end == latest_q].symbol.nunique() if latest_q is not None else 0
+        rows.append(dict(label="Shareholding patterns (NSE)", frac=n_list / n_uni, job="shareholding", button="Download / update",
+                         detail=f"{n_list} of {n_uni} stocks listed (promoter / public, every quarter)"
+                                + (f" · full split (FII, DII, MF, retail) for {n_det} stocks as of {pd.Timestamp(latest_q):%b %Y}" if latest_q is not None else ""),
+                         help="One list request per stock (~15 min), then the latest 4 quarters' detailed filings (~1 MB each); resumes where it stopped"))
+    except Exception:
+        pass
+    try:
+        from core import derivatives as DV
+        dd = DV.daily()
+        days_have = dd.date.nunique() if len(dd) else 0
+        rows.append(dict(label="F&O open interest (NSE, daily)", frac=min(1.0, days_have / 250), job="fo-backfill", button="Download / continue",
+                         detail=(f"{days_have} trading days, {dd.date.min():%d %b %Y} to {dd.date.max():%d %b %Y} · "
+                                 f"{dd[~dd['index'].astype(bool)].symbol.nunique()} stocks in F&O" if days_have else "nothing yet")
+                                + " · new days are added by the daily run",
+                         help="Two small NSE files per trading day (F&O bhavcopy + participant positions); the last year by default, ~15 min"))
+    except Exception:
+        pass
+    try:
         from core import search_index as SI
         pr = SI.progress()
         rows.append(dict(label="Search index", frac=pr["indexed"] / max(pr["total"], 1), job="search-index", button="Update index",

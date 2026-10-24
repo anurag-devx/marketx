@@ -76,13 +76,27 @@ def event_tests(ctx, spec, items, log):
             kinds.add(("news", x.get("event_type"), x.get("tone")))
         elif e["id"].startswith("AN-"):
             kinds.add(("announcement", x.get("category"), x.get("tone")))
+    out = {}
+    res_kind = next(((e.get("extra") or {}).get("category") for e in items if e["id"] == "RS-LATEST"), None)
+    if res_kind:                                             # post-results drift: past results with the same kind of surprise
+        log(f"Statistical agent: post-results drift after a '{res_kind}'...")
+        rs = S.earnings_sample(ctx.Q, ctx.P, ctx.as_of, spec["h"])
+        if len(rs):
+            rs["car"], rs["ar0"] = S.car(rs, ctx.P, spec["h"])
+        sub = rs[rs.category == res_kind] if len(rs) else rs
+        for side in ("bull", "bear"):
+            r = S.event_test(sub, side, spec["h"])
+            if "status" not in r:
+                r["status"], r["why"] = S.classify(r, side)
+            r["method"] = (f"Post-results drift: stock minus Nifty over sessions +1..+{spec['h']} after the reaction day, for past "
+                           f"quarterly results with the same kind of profit surprise ({res_kind}); first half vs second half of the dates")
+            out[f"results|{res_kind}|{side}"] = r
     if not kinds:
-        return {}, None
+        return out, None
     log(f"Statistical agent: event studies for {len(kinds)} kind(s) of news / filings...")
     ev = S.event_sample(ctx.news, ctx.ann, ctx.P, ctx.as_of, spec["h"])
     if len(ev):
         ev["car"], ev["ar0"] = S.car(ev, ctx.P, spec["h"])
-    out = {}
     for st, cat, tone in kinds:
         sub = ev[(ev.source_type == st) & (ev.category == cat)] if len(ev) else ev
         if cat == "Other" and len(sub):
@@ -133,6 +147,11 @@ def claim_tests(claim, side, by_id, sig_res, stock_res, ev_res, h):
             r = ev_res.get(_event_key(e, side), {})
             tests.append(dict(evidence_id=eid, kind="event study", status=r.get("status", S.INSUFF), why=r.get("why", ""),
                               summary=_summ(r, h) + (f"; {r.get('n_events', 0)} past events" if r else ""), group="events"))
+        elif eid == "RS-LATEST":
+            cat = (e.get("extra") or {}).get("category")
+            r = ev_res.get(f"results|{cat}|{side}", {})
+            tests.append(dict(evidence_id=eid, kind="results drift study", status=r.get("status", S.INSUFF), why=r.get("why", "no past results to test against"),
+                              summary=_summ(r, h) + (f"; {r.get('n_events', 0)} past results with a '{cat}'" if r else ""), group="results"))
         elif eid.startswith("MC-"):
             x = e.get("extra") or {}
             r = S.macro_test({"t": x.get("t", np.nan) if x.get("t") is not None else np.nan, "per_1sd_pct": x.get("per_1sd_pct", np.nan) or np.nan,

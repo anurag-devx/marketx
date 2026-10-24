@@ -35,13 +35,13 @@ MATERIAL = {"Results", "Acquisition / merger", "Legal / regulatory", "Fund raisi
             "Order / contract", "Buyback", "Dividend", "Bonus / split", "Block / bulk deal", "Block / bulk deal / stake",
             "Dividend / bonus / split / buyback"}
 UNAVAILABLE = {
-    "UA-FUNDAMENTALS": ("Financial statements (revenue, margins, EPS, cash flow, debt, ROE/ROIC) and valuation multiples",
-                        "No point-in-time fundamentals provider is connected. Results filings appear only as announcements (text), not numbers."),
+    "UA-FUNDAMENTALS": ("Balance sheet, cash flow, debt, ROE/ROIC and valuation multiples",
+                        "Quarterly results give the profit and loss numbers only (see 'Quarterly results' evidence); balance sheets "
+                        "are filed half-yearly and are not read yet, and no valuation provider is connected."),
     "UA-ESTIMATES": ("Analyst estimates and revisions", "No licensed estimates provider. 'Broker view' headlines exist as news only."),
-    "UA-DERIVATIVES": ("Options / futures data (open interest, implied volatility, put-call ratio)", "Equities only; no F&O data is downloaded."),
-    "UA-POSITIONING": ("Short interest, institutional and insider holdings as numbers", "Only as filing text (Shareholding / insider category)."),
+    "UA-DERIVATIVES": ("Implied volatility, option Greeks and intraday option flow",
+                       "Only end-of-day F&O open interest, put-call ratio, futures basis and participant positions are stored (see 'F&O' evidence)."),
     "UA-INTRADAY": ("Intraday bars, VWAP, intraday horizons", "Only daily bars are stored."),
-    "UA-BSE": ("BSE prices", "Prices come from NSE via Angel One; BSE-only instruments are not covered."),
 }
 
 
@@ -115,6 +115,9 @@ class Context:
             self.news = N.load_store()
             self.ann = A.load()
             self.uni = pd.read_csv(C.DATA / "universe.csv")
+        self._quarters_data = data.get("quarters") if data is not None else None
+        self._holdings_data = data.get("holdings") if data is not None else None
+        self._fo_data = (data.get("fo_daily"), data.get("fo_part")) if data is not None else None
         self.prices_file = C.DATA / "prices.parquet"
         self.retrieved_prices = _mtime(self.prices_file)
         self._P = None
@@ -127,6 +130,58 @@ class Context:
             idx = self.market[["date", "nifty"]]
             self._P = returns_panel(px, idx)
         return self._P
+
+    @property
+    def Q(self):
+        """Quarterly results (first filing per quarter, research/earnings.py), with filed_at as naive IST."""
+        if not hasattr(self, "_Q"):
+            q = self._quarters_data
+            if q is None:
+                from core import fundamentals as FN
+                f = FN.DIR / "quarters.parquet"
+                try:
+                    if f.exists():
+                        q = pd.read_parquet(f)
+                    else:
+                        from research.earnings import quarters
+                        q = quarters()
+                except Exception:
+                    q = pd.DataFrame()
+            if q is not None and len(q):
+                q = q.copy()
+                q["filed_at"] = pd.to_datetime(q.filed_at)
+                q["period_end"] = pd.to_datetime(q.period_end)
+            self._Q = q if q is not None else pd.DataFrame()
+        return self._Q
+
+    @property
+    def SH(self):
+        """Shareholding patterns (core/shareholding.py), published time as naive IST."""
+        if not hasattr(self, "_SH"):
+            d = self._holdings_data
+            if d is None:
+                try:
+                    from core import shareholding
+                    d = shareholding.load()
+                except Exception:
+                    d = pd.DataFrame()
+            self._SH = d if d is not None else pd.DataFrame()
+        return self._SH
+
+    @property
+    def FO(self):
+        """(F&O daily per underlying, participant positions) from core/derivatives.py."""
+        if not hasattr(self, "_FO"):
+            if self._fo_data is not None:
+                d, p = self._fo_data
+            else:
+                try:
+                    from core import derivatives as DV
+                    d, p = DV.daily(), DV.participants()
+                except Exception:
+                    d, p = pd.DataFrame(), pd.DataFrame()
+            self._FO = (d if d is not None else pd.DataFrame(), p if p is not None else pd.DataFrame())
+        return self._FO
 
     def rows(self, symbol):
         if not hasattr(self, "_rows"):
@@ -471,6 +526,129 @@ def macro_evidence(ctx, symbol, sector):
     return out
 
 
+RESULT_BAND = 0.5          # |SUE| below this = "in line" (same bands as research/earnings.py)
+
+
+def surprise_kind(sue):
+    """Pre-registered: profit surprise vs the company's own trend (SUE) >= 0.5 is a beat, <= -0.5 a miss."""
+    if sue is None or not np.isfinite(sue):
+        return None
+    return "beat" if sue >= RESULT_BAND else "miss" if sue <= -RESULT_BAND else "in line"
+
+
+def results_evidence(ctx, symbol, fresh_days=120):
+    """Quarterly results as numbers (NSE XBRL), only what was filed by the cutoff."""
+    q = ctx.Q
+    if q is None or q.empty:
+        return []
+    mine = q[(q.symbol == symbol) & (q.filed_at <= ctx.cutoff)].sort_values("filed_at")
+    if mine.empty:
+        return []
+    from research.events import event_day
+    out = []
+    r = mine.iloc[-1]
+    age = int((ctx.cutoff - r.filed_at).days)
+    sue = r.get("sue_profit")
+    kind = surprise_kind(sue)
+    d0 = event_day(r.filed_at, ctx.P["dates"])
+    ar0, since = _event_reaction(ctx, symbol, d0) if pd.notna(d0) and d0 <= ctx.as_of else (None, None)
+    def money(x):
+        return "n/a" if x is None or pd.isna(x) else f"₹{x:,.0f} cr"
+    def pc(x):
+        return "n/a" if x is None or pd.isna(x) else f"{x:+.1f}%"
+    fact = (f"{r.quarter} results ({r.basis}), filed {pd.Timestamp(r.filed_at):%Y-%m-%d %H:%M} IST, {age} days before the analysis: "
+            f"revenue {money(r.revenue_cr)} ({pc(r.revenue_yoy)} YoY), profit {money(r.profit_cr)} ({pc(r.profit_yoy)} YoY)"
+            + (f", net margin {r.margin_pct:.1f}%" if pd.notna(r.get("margin_pct")) else "")
+            + (f", EPS {r.eps:.2f}" if pd.notna(r.get("eps")) else "")
+            + (f"; profit surprise vs its own trend (SUE) {sue:+.1f} = {kind}" if kind else "; surprise not measurable (fewer than 4 earlier comparable quarters)")
+            + (f"; stock vs Nifty on the reaction day {ar0:+.1f}%, since then {since:+.1f}%" if ar0 is not None else ""))
+    out.append(_item("RS-LATEST", "Quarterly results", fact, source="NSE results filing (XBRL), core/fundamentals.py + research/earnings.py",
+                     published=ist(r.filed_at), event_day=None if pd.isna(d0) else str(pd.Timestamp(d0).date()), period=str(r.quarter),
+                     reliability=PRIMARY, value=_f(sue) if sue is not None and pd.notna(sue) else None, unit="SUE (profit)",
+                     direction={"beat": "bull", "miss": "bear"}.get(kind) if age <= fresh_days else None,
+                     quality="ok" if age <= fresh_days else "stale",
+                     horizon_note=None if age <= fresh_days else f"older than {fresh_days} days: shown for context, not used as a direction",
+                     extra=dict(category=kind, sue=_f(sue) if sue is not None and pd.notna(sue) else None, revenue_yoy=_f(r.revenue_yoy),
+                                profit_yoy=_f(r.profit_yoy), ar0=_f(ar0), since=_f(since), revised=bool(r.get("revised", False)), age_days=age)))
+    last4 = mine.tail(4)
+    if len(last4) >= 2 and (last4.revenue_yoy.notna().any() or last4.profit_yoy.notna().any()):
+        trend = "; ".join(f"{x.quarter}: revenue {pc(x.revenue_yoy)}, profit {pc(x.profit_yoy)}" for x in last4.itertuples())
+        out.append(_item("RS-TREND", "Quarterly results", f"Year-on-year growth, last {len(last4)} quarters: {trend}",
+                         source="NSE results filings (XBRL)", reliability=PRIMARY, period=f"{last4.quarter.iat[0]} to {last4.quarter.iat[-1]}",
+                         extra=dict(quarters=list(last4.quarter))))
+    if ctx.as_of >= ctx.panel.date.max():            # the results calendar is only known as of today, so live analyses only
+        try:
+            from core import fundamentals as FN
+            cal = FN.calendar(upcoming_only=False)
+            cal = cal[(cal.symbol == symbol) & (pd.to_datetime(cal.date) > ctx.as_of)].sort_values("date") if len(cal) else cal
+            if len(cal):
+                nd = pd.Timestamp(cal.date.iat[0])
+                sessions = int(np.busday_count(ctx.as_of.date(), nd.date()))
+                out.append(_item("RS-NEXT", "Quarterly results", f"Next results / board meeting on {nd:%Y-%m-%d} (about {sessions} sessions away)"
+                                 + (": inside the forecast horizon, so a results move can dominate it" if sessions <= ctx.h else ""),
+                                 source=str(cal.source.iat[0]) if "source" in cal else "NSE", reliability=PRIMARY,
+                                 extra=dict(date=str(nd.date()), sessions=sessions, inside_horizon=sessions <= ctx.h)))
+        except Exception:
+            pass
+    return out
+
+
+def holdings_evidence(ctx, symbol):
+    """Latest published shareholding pattern and the change from the quarter before. Descriptive: no pre-registered test."""
+    from core import shareholding as SHM
+    rows = SHM.as_of(ctx.SH, symbol, ctx.cutoff)
+    if rows is None or rows.empty:
+        return []
+    r = rows.iloc[-1]
+    ch = SHM.changes(rows)
+    def pc(x):
+        return "n/a" if x is None or pd.isna(x) else f"{x:.2f}%"
+    def dpp(k):
+        return f" ({ch[k]:+.2f} pp vs the quarter before)" if k in ch else ""
+    parts = [f"promoter {pc(r.promoter_pct)}{dpp('promoter_pct')}"]
+    for k, lab in (("fii_pct", "foreign institutions"), ("dii_pct", "domestic institutions"), ("mf_pct", "mutual funds"), ("retail_pct", "retail (< Rs 2 lakh)")):
+        if pd.notna(r.get(k)):
+            parts.append(f"{lab} {pc(r[k])}{dpp(k)}")
+    fact = (f"Shareholding at {pd.Timestamp(r.period_end):%d %b %Y} (published {pd.Timestamp(r.published):%Y-%m-%d %H:%M} IST): " + ", ".join(parts)
+            + (f"; {int(r.holders):,} shareholders" if pd.notna(r.get("holders")) else ""))
+    return [_item("SH-LATEST", "Shareholding pattern", fact, source="NSE shareholding pattern filing", published=ist(r.published),
+                  period=f"quarter ended {pd.Timestamp(r.period_end):%Y-%m-%d}", reliability=PRIMARY,
+                  extra=dict(changes_pp={k: round(v, 2) for k, v in ch.items()}, detail=bool(r.get("detail", False))))]
+
+
+def fo_evidence(ctx, symbol):
+    """F&O context. NSE publishes these files after the close, so an analysis cut off at 15:30 uses the previous session's
+    file at the latest. Descriptive readings: no pre-registered test."""
+    from core import derivatives as DV
+    d, p = ctx.FO
+    out = []
+    if d is not None and len(d):
+        g = d[(d.symbol == symbol) & (d.date < ctx.as_of)].sort_values("date").tail(6)
+        if len(g):
+            last = g.iloc[-1]
+            r = ctx.rows(symbol)
+            c = r.set_index("date").close if len(r) else pd.Series(dtype=float)
+            p5 = 100 * (c.get(last.date) / c.get(g.date.iat[0]) - 1) if len(g) > 1 and g.date.iat[0] in c.index and last.date in c.index else None
+            oi5 = 100 * (last.fut_oi / g.fut_oi.iat[0] - 1) if len(g) > 1 and g.fut_oi.iat[0] else None
+            reading = DV.buildup(p5, oi5)
+            fact = (f"F&O on {pd.Timestamp(last.date):%Y-%m-%d} (the latest file published before the cutoff): futures open interest "
+                    f"{last.fut_oi / 1e5:,.1f} lakh shares" + (f" ({oi5:+.1f}% over {len(g) - 1} sessions, price {p5:+.1f}%: {reading})" if reading else "")
+                    + (f"; put-call ratio of open interest {last.pcr:.2f}" if pd.notna(last.pcr) else "")
+                    + (f"; futures basis {last.basis_pct:+.2f}%" if pd.notna(last.basis_pct) else ""))
+            out.append(_item("FO-STOCK", "F&O data", fact, source="NSE F&O bhavcopy (end of day)", observed=str(pd.Timestamp(last.date).date()),
+                             reliability=PRIMARY, value=_f(oi5) if oi5 is not None else None, unit="% change in futures OI",
+                             extra=dict(reading=reading, pcr=_f(last.pcr), basis_pct=_f(last.basis_pct), price_chg=_f(p5) if p5 is not None else None)))
+    if p is not None and len(p):
+        pos = DV.fii_index_positioning(p, ctx.as_of - pd.Timedelta(days=1))
+        if pos:
+            ch = pos["long_pct"] - pos["long_pct_5d_ago"] if pos["long_pct_5d_ago"] is not None else None
+            out.append(_item("FO-FII", "F&O data", f"FII index futures on {pos['date']:%Y-%m-%d}: {pos['long_pct']:.0f}% of their contracts long"
+                             + (f" ({ch:+.0f} pts in 5 sessions)" if ch is not None else "") + " (market-wide positioning, applies to every stock)",
+                             source="NSE participant-wise open interest (end of day)", observed=str(pd.Timestamp(pos["date"]).date()),
+                             reliability=PRIMARY, value=_f(pos["long_pct"]), unit="% long", extra=dict(change_5d=_f(ch) if ch is not None else None)))
+    return out
+
+
 def unavailable():
     return [_item(k, "Unavailable", f"{a} — not available: {b}", source="none", reliability="n/a", quality="unavailable") for k, (a, b) in UNAVAILABLE.items()]
 
@@ -482,7 +660,8 @@ def gather(ctx, symbol, news_days=30, filing_days=60):
         return [], None, dict(error="no price data for this stock on or before the analysis day")
     sector = last.sector
     items = (px_items + technical_evidence(ctx, last) + market_evidence(ctx, last) + signal_evidence(ctx, symbol)
-             + news_evidence(ctx, symbol, news_days) + filing_evidence(ctx, symbol, filing_days) + macro_evidence(ctx, symbol, sector) + unavailable())
+             + results_evidence(ctx, symbol) + holdings_evidence(ctx, symbol) + fo_evidence(ctx, symbol) + news_evidence(ctx, symbol, news_days) + filing_evidence(ctx, symbol, filing_days)
+             + macro_evidence(ctx, symbol, sector) + unavailable())
     company = ctx.uni.loc[ctx.uni.Symbol == symbol, "Company Name"]
     info = dict(symbol=symbol, exchange="NSE", company=company.iloc[0] if len(company) else symbol, sector=sector,
                 last_bar=str(pd.Timestamp(last.date).date()), stale_sessions=int((ctx.panel.date.max() > last.date) and
