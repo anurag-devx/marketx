@@ -305,6 +305,18 @@ def _history():
     except Exception:
         pass
     try:
+        from core import intraday as ID
+        sm = ID.summary()
+        n_uni = max(1, len(ID.universe()))
+        rows.append(dict(label="5-minute bars (Angel One)", frac=min(1.0, sm["stocks"] / n_uni), job="intraday", button="Download / continue",
+                         detail=(f"{sm['stocks']} of {n_uni} stocks · {sm['bars']:,} bars · from {sm['start'] or '—'}"
+                                 + (f" · last bar {sm['last'][:16]}" if sm["last"] else "") if sm["stocks"] else
+                                 f"nothing yet{' · Angel serves from ' + sm['start'] if sm['start'] else ''}") + " · topped up by the daily run",
+                         help="First finds how far back Angel keeps 5-minute bars, then downloads each Nifty 500 stock in 90-day requests "
+                              "(Angel allows ~5,000 an hour, so a few hours for the full history). Resumes where it stopped."))
+    except Exception:
+        pass
+    try:
         from core import derivatives as DV
         dd = DV.daily()
         days_have = dd.date.nunique() if len(dd) else 0

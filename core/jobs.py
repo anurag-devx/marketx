@@ -15,7 +15,8 @@ LANES = {"news": {"news", "news-check", "announcements", "macro-fetch", "macro-a
          "history": {"history-all", "announcements-backfill", "news-backfill", "news-articles", "search-index",
                      "library-ingest", "news-retag", "fundamentals-backfill", "shareholding", "fo-backfill"},
          "lab": {"debate", "debate-eval", "debate-batch", "debate-replay", "stock-lists"},
-         "kronos": {"kronos-install", "kronos-forecast", "kronos-replay"}}      # experimental, separate: see kronos_lab/README.md
+         "kronos": {"kronos-install", "kronos-forecast", "kronos-replay"},      # experimental, separate: see kronos_lab/README.md
+         "intraday": {"intraday", "intraday-probe"}}      # 5-minute bars from Angel One: core/intraday.py
 SIDE = LANES["news"]                         # kept for older callers
 SIDE_LOCK = JOBS / "current_side.json"
 
@@ -43,7 +44,8 @@ COMMANDS = {
     "pipeline": [[PY, "-u", "pipeline.py", "all"]],
     "fetch+pipeline": [[PY, "-u", "fetch_angel.py"], [PY, "-u", "news_fetch.py"], [PY, "-u", "-m", "core.announcements"],
                        [PY, "-u", "-m", "core.fundamentals"], [PY, "-u", "-m", "research.earnings"], [PY, "-u", "-m", "core.derivatives"], [PY, "-u", "-m", "core.macro"], [PY, "-u", "pipeline.py", "all"], [PY, "-u", "-m", "research.macro_impact"],
-                       [PY, "-u", "-m", "research.market_report"], [PY, "-u", "-m", "debate.batch"], [PY, "-u", "-m", "debate.evaluate"]],
+                       [PY, "-u", "-m", "research.market_report"], [PY, "-u", "-m", "debate.batch"], [PY, "-u", "-m", "debate.evaluate"],
+                       [PY, "-u", "-m", "core.intraday", "update"]],
     "announcements": [[PY, "-u", "news_fetch.py"], [PY, "-u", "-m", "core.announcements"]],
     "backtest": [[PY, "-u", "backtest.py"], [PY, "-u", "strategy_research.py"], [PY, "-u", "analysis.py"]],
     "analysis": [[PY, "-u", "analysis.py"]],
@@ -62,6 +64,8 @@ COMMANDS = {
     "search-index": [[PY, "-u", "-m", "core.search_index"]],
     "shareholding": [[PY, "-u", "-m", "core.shareholding"]],
     "fo": [[PY, "-u", "-m", "core.derivatives"]],
+    "intraday": [[PY, "-u", "-m", "core.intraday"]],
+    "intraday-probe": [[PY, "-u", "-m", "core.intraday", "probe"]],
     "fo-backfill": [[PY, "-u", "-m", "core.derivatives", "backfill"]],
     "history-all": [[PY, "-u", "-m", "core.announcements", "backfill", "start=2016-01-01"], [PY, "-u", "-m", "core.shareholding"],
                     [PY, "-u", "-m", "core.derivatives", "backfill"], [PY, "-u", "-m", "core.news", "backfill", "start=2016-01-01"], [PY, "-u", "-m", "core.articles", "max=300"],
@@ -88,7 +92,7 @@ COMMANDS = {
 
 
 KEEP_GOING = {"history-all"}
-OPTIONAL = ("news_fetch.py", "core.announcements", "core.fundamentals", "core.derivatives", "research.earnings", "research.market_report", "core.macro", "research.macro_impact", "debate.batch", "debate.evaluate")   # a failure here is reported but never stops the agents
+OPTIONAL = ("core.intraday", "news_fetch.py", "core.announcements", "core.fundamentals", "core.derivatives", "research.earnings", "research.market_report", "core.macro", "research.macro_impact", "debate.batch", "debate.evaluate")   # a failure here is reported but never stops the agents
 
 
 def _cmd(cmd):
@@ -226,7 +230,8 @@ STEPS = [("fetch_angel.py", "Downloading prices", "fetch"), ("news_fetch.py", "F
          ("backtest.py", "Backtesting strategies", "backtest"), ("strategy_research.py", "Strategy research", "backtest"),
          ("analysis.py", "Strategy analysis", "backtest"), ("research.events", "Running the news study", "announcements"),
          ("core.quality", "Checking data quality", "fetch"), ("pip", "Installing packages", None),
-         ("kronos_lab.forecast", "Kronos forecasts", None), ("core.shareholding", "Reading shareholding patterns", "announcements"), ("core.derivatives", "Downloading F&O data", "announcements"), ("kronos_lab/setup.sh", "Installing Kronos", None)]
+         ("kronos_lab.forecast", "Kronos forecasts", None), ("core.shareholding", "Reading shareholding patterns", "announcements"), ("core.derivatives", "Downloading F&O data", "announcements"), ("kronos_lab/setup.sh", "Installing Kronos", None),
+         ("core.intraday", "Downloading 5-minute bars", None)]
 AGENT_STEP = {"regime": "regime", "screener": "screener", "strategy": "strategy", "technical": "technical", "risk": "risk",
               "validation": "validation", "report": "report"}
 

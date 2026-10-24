@@ -43,7 +43,7 @@
     const lows = opt.mode === "candle" ? bars.l : bars.c, highs = opt.mode === "candle" ? bars.h : bars.c;
     let lo = Infinity, hi = -Infinity;
     for (let i = 0; i < n; i++) { lo = Math.min(lo, lows[i]); hi = Math.max(hi, highs[i]);
-      for (const s of [bars.sma50, bars.sma200]) if (s && s[i] != null) { lo = Math.min(lo, s[i]); hi = Math.max(hi, s[i]); } }
+      for (const s of [bars.sma50, bars.sma200, bars.vwap]) if (s && s[i] != null) { lo = Math.min(lo, s[i]); hi = Math.max(hi, s[i]); } }
     const pad = (hi - lo) * 0.05; lo -= pad; hi += pad;
     const x = (i) => padL + ((i + 0.5) / n) * (W - padL - padR);
     const y = (v) => padT + (1 - (v - lo) / (hi - lo)) * priceH;
@@ -57,9 +57,17 @@
     // date labels
     const step = Math.max(1, Math.floor(n / 6));
     for (let i = 0; i < n; i += step) {
+      if (opt.intraday) continue;
       const d = new Date(bars.t[i]);
       const tx = el("text", { x: x(i), y: H - 5, "text-anchor": "middle" }, svg);
       tx.textContent = d.toLocaleDateString("en-IN", spanDays(bars.t) > 400 ? { month: "short", year: "2-digit" } : { day: "numeric", month: "short" });
+    }
+    if (opt.intraday) {                                      // time labels; a dashed line and the date where each day starts
+      const days = []; bars.t.forEach((t, i) => { if (!i || t.slice(0, 10) !== bars.t[i - 1].slice(0, 10)) days.push(i); });
+      const mon = (t) => new Date(t.slice(0, 10) + "T00:00:00").toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+      if (days.length > 1) days.forEach((i, k) => { if (i) el("line", { x1: x(i) - 0.5 * (W - padL - padR) / n, x2: x(i) - 0.5 * (W - padL - padR) / n, y1: padT, y2: vTop + volH, stroke: line, "stroke-dasharray": "2 3" }, svg);
+        if (days.length <= 12 || k % Math.ceil(days.length / 10) === 0) { const tx = el("text", { x: x(i), y: H - 5, "text-anchor": "start" }, svg); tx.textContent = mon(bars.t[i]); } });
+      else for (let i = 0; i < n; i += Math.max(1, Math.floor(n / 7))) { const tx = el("text", { x: x(i), y: H - 5, "text-anchor": "middle" }, svg); tx.textContent = bars.t[i].slice(11, 16); }
     }
     // volume
     const bw = Math.max(1, ((W - padL - padR) / n) * 0.7);
@@ -91,7 +99,9 @@
       const pts = s.map((v, i) => v == null ? null : `${x(i)},${y(v)}`).filter(Boolean).join(" ");
       if (pts) el("polyline", { points: pts, fill: "none", stroke: col, "stroke-width": 1.2, "stroke-dasharray": dash || "" }, svg);
     };
-    sma(bars.sma50, "#f59e0b"); sma(bars.sma200, css("--faint"), "4 3");
+    sma(bars.sma50, "#f59e0b"); sma(bars.sma200, css("--faint"), "4 3"); if (bars.vwap) { let seg = [];                      // VWAP restarts each day: one line per day
+      const flush = () => { if (seg.length) el("polyline", { points: seg.join(" "), fill: "none", stroke: "#0ea5e9", "stroke-width": 1.4 }, svg); seg = []; };
+      bars.vwap.forEach((v, i) => { if (i && bars.t[i].slice(0, 10) !== bars.t[i - 1].slice(0, 10)) flush(); if (v != null) seg.push(`${x(i)},${y(v)}`); }); flush(); }
     (opt.levels || []).forEach((lv) => el("line", { x1: x(lv.from ?? 0), x2: x(lv.to ?? n - 1), y1: y(lv.price), y2: y(lv.price), stroke: lv.color === "up" ? up : lv.color === "down" ? down : acc, "stroke-dasharray": "4 3", "stroke-width": 1.4 }, svg));
     (opt.marks || []).forEach((m) => { const c0 = m.color === "up" ? up : m.color === "down" ? down : acc, cx = x(m.i), cy = y(m.price), d = m.dir === "down" ? -1 : 1;
       el("polygon", { points: `${cx},${cy + d * 2} ${cx - 6},${cy + d * 12} ${cx + 6},${cy + d * 12}`, fill: c0 }, svg); });
@@ -106,7 +116,8 @@
       cross.setAttribute("x1", x(i)); cross.setAttribute("x2", x(i)); cross.setAttribute("visibility", "visible");
       dotc.setAttribute("cx", x(i)); dotc.setAttribute("cy", y(bars.c[i])); dotc.setAttribute("visibility", "visible");
       const prev = i > 0 ? bars.c[i - 1] : bars.c[i], ch = 100 * (bars.c[i] / prev - 1);
-      tip.innerHTML = `${new Date(bars.t[i]).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })} · ` +
+      tip.innerHTML = (opt.intraday ? `${new Date(bars.t[i].slice(0, 10) + "T00:00:00").toLocaleDateString("en-IN", { day: "numeric", month: "short" })} ${bars.t[i].slice(11, 16)} · `
+        : `${new Date(bars.t[i]).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })} · `) +
         (opt.mode === "candle" ? `O ${fmt(bars.o[i])} H ${fmt(bars.h[i])} L ${fmt(bars.l[i])} ` : "") +
         `C <b>${fmt(bars.c[i])}</b> <span>${ch >= 0 ? "+" : ""}${fmt(ch)}%</span>`;
       tip.hidden = false;

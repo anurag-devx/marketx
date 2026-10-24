@@ -1,5 +1,29 @@
 /* Today: Overview, Market, Stock. */
 (function () {
+  // Stock → Intraday: 5-minute bars from Angel One (core/intraday.py), grouped to 5/15/30/60 minutes, with VWAP
+  async function intradayTab(t, sym) {
+    const { $, $$, esc, inr, num, pct, cls } = MX;
+    t.innerHTML = `<div class="card"><div class="ct"><div class="seg" id="idd"><button data-v="1" class="on">1 day</button><button data-v="5">5 days</button><button data-v="20">1 month</button></div>
+      <div class="seg" id="idb" style="margin-left:8px"><button data-v="5" class="on">5 min</button><button data-v="15">15 min</button><button data-v="30">30 min</button><button data-v="60">1 hour</button></div>
+      <div class="seg" id="idm" style="margin-left:8px"><button data-v="candle" class="on">Candles</button><button data-v="line">Line</button></div><span class="aside" id="ida"></span></div>
+      <div id="idc"></div><div class="legend"><span><i style="background:#0ea5e9"></i>VWAP (volume-weighted average price, restarts each day)</span><span>volume: green up bar, red down bar</span></div><p class="muted small" id="idn"></p></div>`;
+    let days = 1, bar = 5, mode = "candle", d = null;
+    const load = async () => {
+      d = await MX.api(`stock/intraday?${MX.qs({ symbol: sym, days, bar })}`);
+      if (d.empty) { $("#idc", t).innerHTML = `<div class="empty">${esc(d.note)}</div>`; $("#ida", t).textContent = ""; return; }
+      const L = d.last, ch = 100 * (L.close / L.open - 1);
+      $("#ida", t).innerHTML = `${esc(MX.day(d.day))} · O ${inr(L.open)} H ${inr(L.high)} L ${inr(L.low)} C ${inr(L.close)} <span class="${cls(ch)}">${pct(ch, 2)} from open</span>`;
+      $("#idn", t).textContent = d.note; draw();
+    };
+    const draw = () => { if (d && !d.empty && document.body.contains(t)) MXCharts.priceChart($("#idc", t), d.bars, { mode, height: 380, intraday: true }); };
+    const seg = (id, set, reload) => $(id, t).addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return;
+      $$("button", $(id, t)).forEach((x) => x.classList.toggle("on", x === b)); set(b.dataset.v); reload ? load() : draw(); });
+    seg("#idd", (v) => { days = +v; if (days >= 20 && bar < 30) { bar = 30; $$("#idb button", t).forEach((x) => x.classList.toggle("on", x.dataset.v === "30")); } }, true);
+    seg("#idb", (v) => (bar = +v), true); seg("#idm", (v) => (mode = v));
+    window.addEventListener("mx-resize", draw);
+    await load();
+  }
+
   const { api, esc, num, pct, cls, inr, day, dt, $, table, kpi, card, head, note, form, tabs, sections, newsList, startJob, dataTable, qs } = MX;
   const sym = "sym";
 
@@ -108,7 +132,9 @@
           <div><div class="k">3 months</div><div class="v ${cls(i.r3m)}">${pct(i.r3m)}</div></div>
           <div><div class="k">1 year</div><div class="v ${cls(i.r1y)}">${pct(i.r1y)}</div></div>
           <div><div class="k">52-week range</div><div class="v">${inr(i.lo52)} – ${inr(i.hi52)}</div></div></div></div><div id="st"></div>`;
-      tabs($("#st", el), ["Chart", "Results", "Ownership", "F&O", "News & filings", "Agents"], (k, t) => {
+      tabs($("#st", el), ["Chart", "Intraday", "Results", "Ownership", "F&O", "News & filings", "Agents"], (k, t) => {
+        if (k === 1) { intradayTab(t, i.symbol); return; }
+        if (k > 1) k -= 1;
         if (k === 0) {
           t.innerHTML = `<div class="card"><div class="ct"><div class="seg" id="rng">${[["3M", 91], ["6M", 182], ["1Y", 365], ["3Y", 1100], ["5Y", 1830], ["All", 99999]].map(([l, n]) => `<button data-n="${n}" class="${n === 365 ? "on" : ""}">${l}</button>`).join("")}</div>
             <div class="seg" id="ivl" style="margin-left:8px"><button data-i="D" class="on" title="One candle per trading day">Daily</button><button data-i="W" title="One candle per week (Mon–Fri)">Weekly</button><button data-i="M" title="One candle per month">Monthly</button></div>

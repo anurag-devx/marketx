@@ -121,7 +121,7 @@ def warm():
 
 
 # ---------------- status (every page) ----------------
-LANE_PROBE = {"main": "fetch", "news": "news", "history": "history-all", "lab": "debate", "kronos": "kronos-forecast"}
+LANE_PROBE = {"main": "fetch", "news": "news", "history": "history-all", "lab": "debate", "kronos": "kronos-forecast", "intraday": "intraday"}
 
 
 @route("GET", "status")
@@ -164,7 +164,7 @@ JOB_LABEL = {"strategy-research": "Strategy research", "screener-experiments": "
              "announcements": "Fetch news and filings", "fundamentals": "Update quarterly results",
              "fundamentals-backfill": "Download results history", "macro-all": "Fetch macro data + study", "market-report": "Write market report",
              "debate-batch": "Nightly forecasts", "backtest": "Run backtest + analysis", "screener": "Run screener",
-             "shareholding": "Download shareholding patterns", "fo": "Update F&O data", "fo-backfill": "Download F&O history", "kronos-install": "Install Kronos", "kronos-forecast": "Kronos forecasts", "kronos-replay": "Kronos replay"}
+             "shareholding": "Download shareholding patterns", "fo": "Update F&O data", "fo-backfill": "Download F&O history", "kronos-install": "Install Kronos", "kronos-forecast": "Kronos forecasts", "kronos-replay": "Kronos replay", "intraday": "Download 5-minute bars", "intraday-probe": "Check Angel's intraday history"}
 STARTABLE = set(jobs.COMMANDS)                # only the fixed commands in core/jobs.py; arguments are dates and flags only
 
 
@@ -356,6 +356,37 @@ def _results_today():
 
 
 # ---------------- stock ----------------
+@route("GET", "stock/intraday")
+def stock_intraday(p):
+    """5-minute bars for the last `days` trading days (1-20), re-grouped to `bar` minutes, with each day's VWAP."""
+    from core import intraday as I
+    sym = str(p.get("symbol", "")).upper().strip()
+    days, bar = max(1, min(20, int(p.get("days", 1)))), int(p.get("bar", 5))
+    if bar not in (5, 15, 30, 60):
+        raise UserError("bar must be 5, 15, 30 or 60 minutes")
+    d = I.load(sym)
+    if d.empty:
+        sm = I.summary()
+        return dict(empty=True, note=("No 5-minute bars for this stock yet. Data health → History downloads → 5-minute bars."
+                                      if not sm["stocks"] else f"No 5-minute bars for {sym} yet ({sm['stocks']} stocks downloaded so far)."))
+    d = d.copy()
+    d["day"] = d.ts.dt.normalize()
+    keep = sorted(d.day.unique())[-days:]
+    d = d[d.day.isin(keep)]
+    if bar > 5:
+        mins = (d.ts - d.day - pd.Timedelta(hours=9, minutes=15)).dt.total_seconds() // 60
+        d["grp"] = d.day + pd.Timedelta(hours=9, minutes=15) + pd.to_timedelta((mins // bar) * bar, unit="m")
+        d = d.groupby("grp").agg(ts=("ts", "first"), open=("open", "first"), high=("high", "max"), low=("low", "min"),
+                                 close=("close", "last"), volume=("volume", "sum"), day=("day", "first")).reset_index(drop=True)
+    tp = (d.high + d.low + d.close) / 3
+    d["vwap"] = (tp * d.volume).groupby(d.day).cumsum() / d.volume.groupby(d.day).cumsum().replace(0, np.nan)
+    last = d.groupby("day").agg(o=("open", "first"), h=("high", "max"), l=("low", "min"), c=("close", "last"), v=("volume", "sum")).iloc[-1]
+    return dict(bars=dict(t=d.ts.dt.strftime("%Y-%m-%dT%H:%M").tolist(), o=d.open.round(2).tolist(), h=d.high.round(2).tolist(), l=d.low.round(2).tolist(),
+                          c=d.close.round(2).tolist(), v=d.volume.astype(float).tolist(), vwap=d.vwap.round(2).tolist()),
+                day=str(keep[-1])[:10], last=dict(open=float(last.o), high=float(last.h), low=float(last.l), close=float(last.c), volume=float(last.v)),
+                note="Raw prices from Angel One (not adjusted for splits). VWAP = volume-weighted average price, restarting each day.")
+
+
 @route("GET", "stock")
 def stock(p):
     sym = str(p.get("symbol", "")).upper().strip()
