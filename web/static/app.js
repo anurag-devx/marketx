@@ -363,7 +363,7 @@
   // ---------- navigation ----------
   const NAV = [
     ["Today", [["overview", "Overview"], ["market", "Market"], ["screener", "Screener"], ["stock", "Stock"]]],
-    ["Research", [["debate", "Debate Lab"], ["scorecard", "Forecast scorecard"], ["macro", "Macro"], ["report", "Market report"], ["news-research", "News research"]]],
+    ["Research", [["market-lab", "Market Lab"], ["scorecard", "Forecast scorecard"], ["macro", "Macro"], ["report", "Market report"], ["news-research", "News research"]]],
     ["Agents", [["agents", "Agents"], ["signals", "Signals"], ["strategies", "Strategies"], ["screener-research", "Screener research"], ["validation", "Validation"]]],
     ["Portfolio", [["positions", "Positions & risk"]]],
     ["Tools", [["search", "Search"], ["ask", "Ask"], ["documents", "Documents"], ["lab", "Strategy Lab"], ["records", "Reports & logs"]]],

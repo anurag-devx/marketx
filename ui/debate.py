@@ -43,6 +43,12 @@ def _availability(last):
         rows.append(("NSE filings", f"✅ {len(a):,} since {a.published.min():%d %b %Y}" if len(a) else "⚠️ none (Data health → Download all history)"))
     except Exception:
         rows.append(("NSE filings", "⚠️ not loaded"))
+    qf = C.DATA / "fundamentals" / "quarters.parquet"
+    if qf.exists():
+        q = pd.read_parquet(qf, columns=["symbol", "period_end"])
+        rows.append(("Quarterly results as numbers (NSE XBRL)", f"✅ {len(q):,} stock-quarters, {q.symbol.nunique()} stocks"))
+    else:
+        rows.append(("Quarterly results as numbers (NSE XBRL)", "⚠️ none yet (Screener → Results)"))
     rows.append(("Macro sensitivities", "✅" if (C.RESULTS / "macro" / "sens_3y.csv").exists() else "⚠️ run Macro & geopolitics → study"))
     for k, (a, b) in __import__("debate.evidence", fromlist=["x"]).UNAVAILABLE.items():
         rows.append((a, "❌ " + b))

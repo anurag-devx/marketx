@@ -164,7 +164,7 @@ JOB_LABEL = {"strategy-research": "Strategy research", "screener-experiments": "
              "announcements": "Fetch news and filings", "fundamentals": "Update quarterly results",
              "fundamentals-backfill": "Download results history", "macro-all": "Fetch macro data + study", "market-report": "Write market report",
              "debate-batch": "Nightly forecasts", "backtest": "Run backtest + analysis", "screener": "Run screener",
-             "shareholding": "Download shareholding patterns", "fo": "Update F&O data", "fo-backfill": "Download F&O history", "kronos-install": "Install Kronos", "kronos-forecast": "Kronos forecasts", "kronos-replay": "Kronos replay", "intraday": "Download 5-minute bars", "intraday-probe": "Check Angel's intraday history"}
+             "shareholding": "Download shareholding patterns", "fo": "Update F&O data", "fo-backfill": "Download F&O history", "kronos-install": "Install Kronos", "kronos-forecast": "Kronos forecasts", "kronos-replay": "Kronos replay", "intraday": "Download 5-minute bars", "intraday-probe": "Check Angel's intraday history", "market-lab": "Market Lab radar", "market-lab-test": "Market Lab Scorecard test"}
 STARTABLE = set(jobs.COMMANDS)                # only the fixed commands in core/jobs.py; arguments are dates and flags only
 
 
@@ -490,4 +490,4 @@ def _stock_news(sym, n=40):
 
 
 # route modules register themselves on import
-from web import r_today, r_screener, r_agents, r_research, r_tools, r_setup, r_kronos, r_help  # noqa: E402,F401
+from web import r_today, r_screener, r_agents, r_research, r_tools, r_setup, r_kronos, r_help, r_marketlab  # noqa: E402,F401
