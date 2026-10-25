@@ -68,7 +68,7 @@
     const rows = d.rows.filter((r) => !st.sector || r.sector === st.sector).map((r) => { const t = tp.rows[r.symbol] || {};
       return { ...r, chance_pct: 100 * r.chance, usual_pct: 100 * r.usual, edge: 100 * r.lift, plan: t.ok == null ? null : t.ok ? `✓ ${t.n}` : "no trade", plan_why: t.why, rr: t.rr }; });
     host.innerHTML = note(`Radar for ${esc(day(d.day))} → next session · ${esc(d.moves[d.move])} · at least ${esc(d.size)}% · status: <b>${esc(d.status)}</b>.
-      Sorted by edge: the chance minus the stock's usual chance. Click a row for its influence map.`, d.status === "tested" ? "info" : "warn") + `<div class="card flush section" id="mlt"></div>`;
+      Sorted by edge: the chance minus the stock's usual chance. Click a row for its influence map.`, d.status === "tested" ? "info" : "warn") + (d.day_note ? note(esc(d.day_note), "warn") : "") + `<div class="card flush section" id="mlt"></div>`;
     $("#mlt", host).appendChild(dataTable(rows, [
       ["symbol", "Stock", "sym"], ["nodes", "Map", (v) => mini(v)],
       ["chance_pct", `Chance ≥${d.size}%`, (v, r) => `<span class="mlbar"><i style="width:${Math.min(100, v)}%"></i><b style="left:${Math.min(100, r.usual_pct)}%"></b></span><b>${num(v, 0)}%</b>`],

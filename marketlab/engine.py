@@ -8,6 +8,7 @@ SHRINK = 40             # pseudo-cases at the stock's usual rate (pulls thin evi
 LEAN_SHRINK = 10        # pseudo-cases at 50% for the direction
 LEAN_EDGE = 0.08        # lean shown only when the shrunk up-share is this far from 50%
 MIN_BIG = 15            # cases with a big move needed before giving a lean
+DAY_GROUPS = ("Market", "Macro")   # the same for every stock on a day: kept out of confidence, reported as "unusual market day"
 CLIP = {"f_ret1": 8, "f_ret5": 8, "f_gap": 8, "x_brent": 15, "x_inr": 3, "x_vix": 10, "x_y10": 0.4}
 
 
@@ -47,11 +48,24 @@ class Library:
         self.meta = lib[["symbol", "date"]].reset_index(drop=True)
         self.vol_scale = vol_scale
         self.rv = lib["f_rv"].to_numpy(np.float32)
-        rng = np.random.default_rng(0)                         # typical neighbour distance, for confidence
-        s = self.X[rng.choice(len(self.X), min(1000, len(self.X)), replace=False)]
-        self.dist_ref = np.array([])
-        dd, _ = self.query(s, k=min(self.k + 1, len(self.X)))
-        self.dist_ref = np.sort(dd[:, 1:].mean(axis=1))
+        day_cols = {f for g in DAY_GROUPS for f in groups.get(g, [])}
+        self.own = np.array([c not in day_cols for c in self.sc.cols])   # the stock's own features
+        rng = np.random.default_rng(0)                         # typical neighbour distances, for confidence
+        ri = rng.choice(len(self.X), min(1000, len(self.X)), replace=False)
+        self.dist_ref = self.day_ref = np.array([])
+        _, ii = self.query(self.X[ri], k=min(self.k + 1, len(self.X)))
+        own, day = self.part_dist(self.X[ri], ii[:, 1:])
+        self.dist_ref, self.day_ref = np.sort(own), np.sort(day)
+
+    def part_dist(self, Z, idx, chunk=2000):
+        """Mean distance to the matched cases, split into the stock's own features and the day-wide ones (Market, Macro)."""
+        Z = np.asarray(Z, np.float32)
+        own, day = np.empty(len(Z)), np.empty(len(Z))
+        for a in range(0, len(Z), chunk):
+            d2 = (Z[a:a + chunk, None, :] - self.X[idx[a:a + chunk]]) ** 2
+            own[a:a + chunk] = np.sqrt(d2[..., self.own].sum(axis=2)).mean(axis=1)
+            day[a:a + chunk] = np.sqrt(d2[..., ~self.own].sum(axis=2)).mean(axis=1) if (~self.own).any() else 0.0
+        return own, day
 
     def query(self, Z, k=None):
         """Exact nearest neighbours by chunked matrix search (fast for this many dimensions)."""
@@ -73,7 +87,9 @@ class Library:
         """Q: query rows (needs u_<move>_<size>). Returns one row per query with chance / lean / n for each combo."""
         Z = self.sc.transform(Q) if Z is None else Z
         dist, idx = self.query(Z)
-        out = {"dist_pct": np.searchsorted(self.dist_ref, dist.mean(axis=1)) / max(1, len(self.dist_ref))}
+        own, day = self.part_dist(Z, idx)
+        out = {"dist_pct": np.searchsorted(self.dist_ref, own) / max(1, len(self.dist_ref)),      # confidence: the stock's own situation
+               "day_pct": np.searchsorted(self.day_ref, day) / max(1, len(self.day_ref))}         # how unusual the market / macro day is
         scale = 1.0
         if self.vol_scale:
             qrv = Q["f_rv"].to_numpy(np.float32)

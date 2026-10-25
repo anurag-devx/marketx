@@ -113,3 +113,30 @@ def test_scaler_keeps_every_feature():
     z = sc.transform(d)
     varying = [c for c in F.FEATURES if d[c].std() > 0]
     assert all(np.abs(z[:, sc.cols.index(c)]).max() > 0 for c in varying)
+
+
+def test_macro_changes_count_from_publication_and_are_not_carried_forward():
+    days = pd.bdate_range("2026-10-01", periods=20)
+    d = pd.DataFrame({"date": days, "symbol": "S0"})
+    obs = pd.bdate_range("2026-09-28", periods=6)                     # Brent observed for 6 days, then nothing new
+    macro = pd.DataFrame({"date": obs, "series": "DCOILBRENTEU", "value": [100, 101, 99, 99, 103, 103]})
+    out = F._macro(d.copy(), macro).set_index("date")
+    # the 2.4% rise observed on 2 Oct is known 7 days later (9 Oct), not the next day
+    assert out.loc["2026-10-05", "x_brent"] == 0 or abs(out.loc["2026-10-05", "x_brent"]) < 3
+    assert out.loc["2026-10-09", "x_brent"] == pytest.approx(100 * (103 / 99 - 1))
+    assert (out.loc["2026-10-16":, "x_brent"] == 0).all()           # stale: no new observation, no change carried forward
+    assert (out.x_vix == 0).all()                                       # a missing series is neutral
+
+
+def test_confidence_uses_the_stocks_own_features_and_flags_unusual_days():
+    px, idx, uni = synth()
+    d = F.build(px, idx, uni, log=lambda *_: None)
+    last = d.date.max()
+    lib, q = d[(d.next_date <= last) & d.cc.notna()], d[d.date == last].reset_index(drop=True)
+    L = E.Library(lib, k=50)
+    base = L.estimate(q)[0]
+    wild = q.copy()
+    wild[[f for g in E.DAY_GROUPS for f in F.GROUPS[g]]] = 50.0          # an extreme market / macro day for everyone
+    w = L.estimate(wild)[0]
+    assert (w.day_pct >= 0.99).all() and base.day_pct.between(0, 1).all()
+    assert w.dist_pct.median() <= base.dist_pct.median() + 0.35     # the stock's own confidence isn't wrecked by the day

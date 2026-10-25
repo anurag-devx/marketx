@@ -155,7 +155,13 @@ def _events(d, days, news=None, ann=None, quarters=None):
     return d.drop(columns=["q_s", "q_e"])
 
 
+MACRO_LAG = {"x_brent": 7, "x_inr": 7, "x_vix": 1, "x_y10": 1}   # days after the observation date a value is taken as known
+MACRO_FRESH = 4                                                     # a change counts only if it became known in the last 4 days
+
+
 def _macro(d, macro):
+    """Each series' latest change, counted from the day it was published (FRED: Brent and USD-INR come about a week late),
+    so history only uses what was known then. A change is used once (within MACRO_FRESH days), never carried forward."""
     names = {"DCOILBRENTEU": "x_brent", "DEXINUS": "x_inr", "VIXCLS": "x_vix", "DGS10": "x_y10"}
     if macro is None or not len(macro):
         for c in names.values():
@@ -163,20 +169,16 @@ def _macro(d, macro):
         return d
     macro = macro.assign(date=pd.to_datetime(macro.date).astype(NS))
     m = macro[macro.series.isin(names)].pivot_table(index="date", columns="series", values="value").sort_index()
-    out = pd.DataFrame(index=m.index)
+    d = d.assign(date=d.date.astype(NS)).sort_values("date")
     for s, c in names.items():
         if s not in m:
-            out[c] = 0.0
+            d[c] = 0.0
             continue
         x = m[s].dropna()
-        ch = 100 * x.pct_change(fill_method=None) if c in ("x_brent", "x_inr") else x.diff()
-        out[c] = ch.reindex(m.index).ffill()
-    out = out.reset_index().rename(columns={"date": "mdate"}).sort_values("mdate")
-    d = d.sort_values("date")
-    d["key"] = (d.date - pd.Timedelta(days=1)).astype(NS)          # lagged a day: known by the evening of t
-    out["mdate"] = out.mdate.astype(NS)
-    d = pd.merge_asof(d, out, left_on="key", right_on="mdate", direction="backward").drop(columns=["key", "mdate"])
-    for c in names.values():
+        ch = (100 * x.pct_change(fill_method=None) if c in ("x_brent", "x_inr") else x.diff()).dropna()
+        k = pd.DataFrame({"known": (ch.index + pd.Timedelta(days=MACRO_LAG[c])).astype(NS), c: ch.to_numpy(float)}).sort_values("known")
+        d = pd.merge_asof(d, k, left_on="date", right_on="known", direction="backward",
+                          tolerance=pd.Timedelta(days=MACRO_FRESH)).drop(columns="known")
         d[c] = d[c].fillna(0.0)
     return d
 

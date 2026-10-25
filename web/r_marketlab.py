@@ -110,7 +110,10 @@ def radar(p):
     rows.sort(key=lambda x: -x["lift"])
     status = ("no skill: the walk-forward test didn't beat the usual rate for this combination" if skill and not skill.get("skill") else
               "tested" if skill else "not tested yet: run the Scorecard test (Scorecard tab)")
-    return dict(base, ready=True, rows=rows, status=status, skill=skill, sectors=sorted(set(rd.sector.dropna()) - {""}))
+    dp = float(rd.day_pct.median()) if "day_pct" in rd else None
+    day_note = ("Unusual market day: few past days had market / macro moves like these, so the matches lean on each stock's own situation."
+                if dp is not None and dp >= 0.9 else None)
+    return dict(base, ready=True, rows=rows, status=status, skill=skill, day_pct=dp, day_note=day_note, sectors=sorted(set(rd.sector.dropna()) - {""}))
 
 
 def _evidence(sym, day):
