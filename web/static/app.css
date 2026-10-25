@@ -412,3 +412,8 @@ details.fold > .card, details.fold > div { border: 0; margin: 0; }
 .sugg-wrap > .in, .sugg-wrap > textarea { width: 100%; }
 .qres.sugg { top: calc(100% + 4px); right: auto; min-width: 100%; max-width: 560px; }
 .qres.sugg span { white-space: normal; }
+
+/* text selection: clear in both themes (the browser default looked grey and faint on the dark theme) */
+::selection { background: rgba(79, 70, 229, .32); color: inherit; }
+:root[data-theme="dark"] ::selection { background: rgba(129, 140, 248, .45); color: #fff; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) ::selection { background: rgba(129, 140, 248, .45); color: #fff; } }
