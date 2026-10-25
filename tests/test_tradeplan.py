@@ -75,3 +75,33 @@ def test_builtin_matches_talib_on_engulfing():
 def test_recent_reports_source_and_direction():
     out, src = PT.recent(bars(60), days=5)
     assert src in ("TA-Lib", "built-in") and all(x["direction"] in ("bullish", "bearish", "neutral") for x in out)
+
+
+def _facts(lean="up"):
+    from tradeplan import agent as AG
+    g = bars()
+    lv = TP.levels(g)
+    p = TP.plan_for(lv, dict(lean=lean, lift=0.05, size=1.0), {"p25": -1.5, "p75": 1.5}, "intraday", ACCT, RISK)
+    return AG.facts("TEST", "intraday", p, [dict(label="Hammer", direction="bullish", date="2026-05-01")], g, dict(chance_pct=70, usual_pct=55, lean=lean))
+
+
+def test_ta_template_uses_only_plan_numbers():
+    from tradeplan import agent as AG
+    for lean in ("up", "down", "unclear"):
+        f = _facts(lean)
+        t = AG.template(f)
+        assert "Caution" in t and not AG.check(t, f)
+
+
+def test_ta_check_catches_invented_numbers_and_falls_back(monkeypatch):
+    from tradeplan import agent as AG
+    from core import llm
+    f = _facts()
+    assert AG.check("Target 99999.5 looks good", f) == {"99999.5"}
+    monkeypatch.setattr(llm, "status", lambda feat: (True, "fake"))
+    monkeypatch.setattr(llm, "chat", lambda *a, **k: "Stop at 12345.6 is safe.")
+    text, writer = AG.explain(f, log=lambda *_: None)
+    assert writer == "template" and "12345.6" not in text
+    e1 = next(x["price"] for x in f["legs"] if x["leg"] == "E1")
+    monkeypatch.setattr(llm, "chat", lambda *a, **k: f"Entry on a break of {e1}; cancel below the stop.")
+    assert AG.explain(f, log=lambda *_: None)[1] == "model"
