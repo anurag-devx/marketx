@@ -410,11 +410,11 @@
         <button class="btn small" data-log="${j.lane}">Log</button><button class="btn small" data-stop="${j.lane}">Stop</button></div>`).join("");
     const j0 = s.running[0];
     const jobs = j0 ? `<span class="jobs-wrap"><button class="chip jobs-btn" id="jobsbtn" aria-expanded="${jobsOpen}"><span class="dot run"></span>${s.running.length > 1 ? `${s.running.length} jobs running` : esc(j0.title)} · ${mmss(j0.elapsed)}
-        <span class="bar"><i style="width:${(fr(j0) * 100).toFixed(0)}%"></i></span> ▾</button><div class="jobs-dd" id="jobsdd" ${jobsOpen ? "" : "hidden"}>${rows}</div></span>` : "";
+        ${jobsOpen ? "" : `<span class="bar"><i style="width:${(fr(j0) * 100).toFixed(0)}%"></i></span>`} ▾</button><div class="jobs-dd" id="jobsdd" ${jobsOpen ? "" : "hidden"}>${rows}</div></span>` : "";
     if (!j0) jobsOpen = false;
     const busyMain = s.running.some((j) => j.lane === "main");
     $("#status").innerHTML = `${fresh}${stale}${qual}<span class="job">${jobs}${busyMain ? "" : `<button class="btn primary small" id="runall" title="Download the latest prices, news and filings, then run every agent">Fetch + run all</button>`}</span>`;
-    $("#jobsbtn")?.addEventListener("click", (e) => { e.stopPropagation(); jobsOpen = !jobsOpen; $("#jobsdd").hidden = !jobsOpen; $("#jobsbtn").setAttribute("aria-expanded", jobsOpen); });
+    $("#jobsbtn")?.addEventListener("click", (e) => { e.stopPropagation(); jobsOpen = !jobsOpen; drawStatus(lastStatus); });
     $("#jobsdd")?.addEventListener("click", (e) => e.stopPropagation());
     $("#runall")?.addEventListener("click", () => startJob("fetch+pipeline"));
     $("#stale")?.addEventListener("click", () => showStale(s.stale));

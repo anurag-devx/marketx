@@ -276,6 +276,14 @@ def activity(name=None):
             frac = k / (len(order) + 1)
         else:
             agent, label, frac = "fetch", "Running the agents: loading data and checking quality", 0.05
+    else:                                            # most long jobs log "i/N" (articles, replays, downloads): use the latest one
+        tail = txt[txt.rfind("__STEP__"):] if "__STEP__" in txt else txt
+        cnt = re.findall(r"(?<![\d.])(\d[\d,]*)\s*/\s*(\d[\d,]*)(?![\d/])", tail[-4000:])
+        cnt = [(int(a.replace(",", "")), int(b.replace(",", ""))) for a, b in cnt if int(b.replace(",", "")) >= 2]
+        if cnt and cnt[-1][0] <= cnt[-1][1]:
+            done, tot = cnt[-1]
+            frac = max(0.02, min(0.98, done / tot))
+            label = f"{label} · {done:,} / {tot:,}"
     try:
         elapsed = time.time() - time.mktime(time.strptime(j["started"], "%Y-%m-%d %H:%M:%S"))
     except Exception:

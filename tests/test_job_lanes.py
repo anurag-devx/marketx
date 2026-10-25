@@ -104,3 +104,13 @@ def test_market_report_runs_nightly_only_when_auto_is_on(tmp_path, monkeypatch):
     assert MR.auto_on() is False                                                     # default: on demand
     assert api.ROUTES[("POST", "report/auto")](None, {"on": True})["on"] and MR.auto_on()
     assert api.ROUTES[("GET", "report/auto")]({})["on"]
+
+
+def test_activity_reads_progress_counts_from_the_log(tmp_path, monkeypatch):
+    from core import jobs
+    log = tmp_path / "x.log"
+    log.write_text("job articles-90d started\n__STEP__ 1/1 Reading article text\n6746 articles to try\n  25/6746: ok 20, paywall 5\n  50/6746: ok 44\n")
+    monkeypatch.setattr(jobs, "current", lambda name=None: dict(name="articles-90d", log=str(log), started="2026-10-26 01:00:00", pid=1))
+    a = jobs.activity("articles-90d")
+    assert abs(a["frac"] - 50 / 6746) < 0.01 or a["frac"] == 0.02
+    assert a["label"].endswith("50 / 6,746")
