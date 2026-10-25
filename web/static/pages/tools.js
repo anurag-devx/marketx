@@ -214,7 +214,7 @@
   async function labHome(el) {
     const d = await api("lab");
     el.innerHTML = head("Strategy Lab", "Your own workspace for testing strategy ideas. The daily agents never read it, until you send a strategy that passes to the Strategy agent and approve it.",
-      `<a class="btn" href="#/lab/compare">Compare runs</a><a class="btn" href="#/lab/rules">Rule language</a>`) +
+      `<a class="btn primary" href="#/lab/charts">Chart workspace</a><a class="btn" href="#/lab/compare">Compare runs</a><a class="btn" href="#/lab/rules">Rule language</a>`) +
       `<div class="card section"><div class="ct"><h2>New strategy</h2></div><div id="lnew"></div><div class="row" style="margin-top:10px"><button class="btn primary" id="lcreate">Create</button></div></div>
       <div id="llist"></div>`;
     const f = form($("#lnew", el), [{ k: "template", label: "Start from", type: "select", options: d.templates, value: d.templates[0] }, { k: "name", label: "Name", type: "text", placeholder: "New strategy" }]);
@@ -376,6 +376,7 @@
         const f = form($("#cf", el), [{ k: "runs", label: "Runs", type: "multi", options: d0.options, value: d0.picked, wide: true }], async () => sections($("#cs", el), (await api(`lab/compare?${qs({ runs: f.values().runs.join(",") })}`)).sections));
         return sections($("#cs", el), d0.sections);
       }
+      if (sub === "charts") return MX.workspacePage(el, id ? decodeURIComponent(id) : null);
       if (sub === "rules") { el.innerHTML = head("Rule language", "", `<a class="btn" href="#/lab">All strategies</a>`) + `<div id="rs"></div>`; return sections($("#rs", el), (await api("lab/rules")).sections); }
       return labHome(el);
     },

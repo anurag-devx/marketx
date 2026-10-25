@@ -352,3 +352,12 @@ details.fold > .card, details.fold > div { border: 0; margin: 0; }
 .tp-legs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
 .tp-leg { font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 6px; color: #fff; white-space: nowrap; }
 .tp-up { background: var(--up); } .tp-down { background: var(--down); } .tp-blue { background: #0ea5e9; } .tp-faint { background: var(--line); color: var(--ink-2); }
+.tp-ta { border-top: 1px solid var(--line); margin-top: 10px; padding-top: 8px; }
+
+/* ---- Chart workspace ---- */
+.ws-tile { display: block; color: inherit; text-decoration: none; } .ws-tile:hover { border-color: var(--accent); }
+.ws-tools { gap: 6px; flex-wrap: wrap; } .ws-tools .btn.on { background: var(--accent-soft); color: var(--accent-ink); border-color: var(--accent); }
+.ws-sw { display: inline-flex; gap: 4px; } .sw { width: 18px; height: 18px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; padding: 0; }
+.sw.on { border-color: var(--ink); } .ws-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; vertical-align: middle; }
+.ws-title { font-size: 20px; font-weight: 600; border: 1px solid transparent; background: transparent; padding: 2px 4px; min-width: 320px; }
+.ws-title:hover, .ws-title:focus { border-color: var(--line); background: var(--surface); }

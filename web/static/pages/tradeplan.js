@@ -18,6 +18,7 @@
         ${sides.map((s) => ` · ${esc(s.side)}: ${num(s.shares, 0)} shares (≈${inr(s.value_rs, 0)}), risk ${inr(s.risk_rs, 0)}, reward:risk <b>${num(s.rr, 1)} : 1</b>, stop ${num(s.stop_atr, 1)}× ATR`).join("")}</div>
       <div class="tp-legs">${legs.map(fmtLeg).join("")}<span class="tp-leg tp-faint">TX ${esc(p.hold)}</span></div>
       ${p.flags.length ? note(`${p.tradeable ? "Note" : "<b>No trade</b>"}: ${p.flags.map(esc).join(" · ")}`, p.tradeable ? "info" : "warn") : `<p class="muted small" style="margin:6px 0 0">Passes the plan's checks (reward:risk ≥ 1.5, stop ≤ 2× ATR, positive Market Lab edge, risk limits).</p>`}
+      ${d.summary ? `<div class="tp-ta"><div class="row" style="justify-content:space-between"><b>TA summary</b><span><span class="muted small" id="tpxs">quick summary from the computed facts</span> <button class="btn small" id="tpx">Explain with the TA agent</button></span></div><div id="tpxo" class="small" style="white-space:pre-line;margin-top:4px">${esc(d.summary)}</div></div>` : ""}
       <p class="muted small" style="margin:6px 0 0">Levels from the ${esc(day(lv.date))} bar · ATR ${inr(lv.atr)} · pivot ${inr(lv.P)} · rules ${esc(d.version)}. Secondary to Market Lab: it never changes the verdict. Not tested on history yet (needs 5-minute bars).</p></div>`;
   }
 
@@ -52,7 +53,7 @@
       const taHtml = d.talib.ok ? `<p class="muted small">TA-Lib ${esc(d.talib.version)} installed.</p>`
         : `<p class="muted small">TA-Lib isn't installed: using MarketX's built-in patterns. <button class="btn small" id="tpi">Install TA-Lib (optional)</button></p>`;
       if (!d.ready) { b.innerHTML = note(esc(d.why), "warn") + taHtml; $("#tpi", host)?.addEventListener("click", () => startJob("talib-install")); return; }
-      b.innerHTML = card(d) + `<div class="card section"><div class="ct"><h2>Chart: last 45 sessions with the next session's plan</h2><span class="aside muted small">tags on the right · green zone = entry to target · red zone = entry to stop</span></div><div id="tpc"></div>
+      b.innerHTML = card(d) + `<div class="card section"><div class="ct"><h2>Chart: last 45 sessions with the next session's plan</h2><span class="aside muted small">tags on the right · green zone = entry to target · red zone = entry to stop <button class="btn small" id="tpsv">Save to workspace</button></span></div><div id="tpc"></div>
         <div class="legend"><span><i style="background:var(--up)"></i>entries</span><span><i style="background:var(--down)"></i>stop</span><span><i style="background:#0ea5e9"></i>targets</span><span><i style="background:var(--faint)"></i>pivot / R1 / S1 / 20-day high-low</span><span>▲▼ candle patterns</span></div></div>
         <div class="grid g2 section"><div class="card"><div class="ct"><h2>Legs</h2></div>${MX.table(d.plan.legs.map((x) => ({ ...x, pct: x.share == null ? null : 100 * x.share })), [["leg", "Leg", "tag"], ["side", "Side"], ["price", "Price", "inr"], ["pct", "Share %", "pct0"], ["shares", "Shares", "int"], ["condition", "When", (v) => `<span class="small">${esc(v)}</span>`]])}</div>
           <div class="card"><div class="ct"><h2>Candle patterns (last 5 sessions)</h2><span class="aside muted small">${esc(d.patterns_source || "")}</span></div>
@@ -63,6 +64,14 @@
       const draw = () => { if (document.body.contains(host) && $("#tpc", host)) MXCharts.priceChart($("#tpc", host), bb, chartSpec({ ...d, bars: bb })); };
       requestAnimationFrame(draw); window.addEventListener("mx-resize", draw);
       $("#tpi", host)?.addEventListener("click", () => startJob("talib-install"));
+      $("#tpsv", host)?.addEventListener("click", () => MX.saveChart({ symbol, timeframe: "daily", days: 60, source: `trade plan (${mode})`, tags: ["trade plan"] }));
+      $("#tpx", host)?.addEventListener("click", async () => { const btn = $("#tpx", host); btn.disabled = true;
+        try { const r = await MX.post("tradeplan/explain", { symbol, mode });
+          const out = await MX.pollTask(r.task, (t) => ($("#tpxs", host).textContent = t.msg || "working …"));
+          $("#tpxs", host).textContent = out.writer === "model" ? "written by the local model from the facts (numbers checked)" : "template (model off, or it added numbers that aren't in the facts)";
+          $("#tpxo", host).textContent = out.text; }
+        catch (e) { $("#tpxs", host).textContent = e.message; }
+        btn.disabled = false; });
       host._redraw = draw;
     };
     $("#tpm", host).addEventListener("click", (e) => { const x = e.target.closest("button"); if (!x) return; mode = x.dataset.v; try { sessionStorage.setItem("mx-tp-mode", mode); } catch (er) { /* ignore */ }

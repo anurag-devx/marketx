@@ -141,6 +141,15 @@
       tip.style.left = `${(x(i) / W) * r.width}px`; tip.style.top = `${(y(bars.c[i]) / H) * r.height}px`;
     });
     overlay.addEventListener("mouseleave", () => { cross.setAttribute("visibility", "hidden"); dotc.setAttribute("visibility", "hidden"); tip.hidden = true; });
+    // vertical markers (e.g. "saved here")
+    (opt.vmarks || []).forEach((m) => { if (m.i == null || m.i < 0 || m.i >= n) return; el("line", { x1: x(m.i), x2: x(m.i), y1: padT, y2: vTop + volH, stroke: acc, "stroke-dasharray": "5 4", "stroke-width": 1.4 }, svg);
+      if (m.label) { const t = el("text", { x: x(m.i) + 4, y: padT + 12, "font-size": 10.5, "font-weight": 600, style: `fill:${acc}` }, svg); t.textContent = m.label; } });
+    // scales for overlays (chart workspace drawings): data <-> screen
+    const plotW = W - padL - padR;
+    host._map = { svg, W, H, n, padL, padR, padT, priceH, lo, hi, t: bars.t, overlay, x, y,
+      i: (px) => Math.min(n - 1, Math.max(0, Math.round(((px - padL) / plotW) * n - 0.5))),
+      p: (py) => lo + (1 - (py - padT) / priceH) * (hi - lo) };
+    return host._map;
   }
 
   /* labels[], bars[] (left axis), line[] (right axis) */

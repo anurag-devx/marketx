@@ -5,7 +5,7 @@
     const { $, $$, esc, inr, num, pct, cls } = MX;
     t.innerHTML = `<div class="card"><div class="ct"><div class="seg" id="idd"><button data-v="1" class="on">1 day</button><button data-v="5">5 days</button><button data-v="20">1 month</button></div>
       <div class="seg" id="idb" style="margin-left:8px"><button data-v="5" class="on">5 min</button><button data-v="15">15 min</button><button data-v="30">30 min</button><button data-v="60">1 hour</button></div>
-      <div class="seg" id="idm" style="margin-left:8px"><button data-v="candle" class="on">Candles</button><button data-v="line">Line</button></div><span class="aside" id="ida"></span></div>
+      <div class="seg" id="idm" style="margin-left:8px"><button data-v="candle" class="on">Candles</button><button data-v="line">Line</button></div><span class="aside"><span id="ida"></span> <button class="btn small" id="iwsv">Save to workspace</button></span></div>
       <div id="idc"></div><div class="legend"><span><i style="background:#0ea5e9"></i>VWAP (volume-weighted average price, restarts each day)</span><span>volume: green up bar, red down bar</span></div><p class="muted small" id="idn"></p></div>`;
     let days = 1, bar = 5, mode = "candle", d = null;
     const load = async () => {
@@ -20,6 +20,7 @@
       $$("button", $(id, t)).forEach((x) => x.classList.toggle("on", x === b)); set(b.dataset.v); reload ? load() : draw(); });
     seg("#idd", (v) => { days = +v; if (days >= 20 && bar < 30) { bar = 30; $$("#idb button", t).forEach((x) => x.classList.toggle("on", x.dataset.v === "30")); } }, true);
     seg("#idb", (v) => (bar = +v), true); seg("#idm", (v) => (mode = v));
+    $("#iwsv", t).addEventListener("click", () => MX.saveChart({ symbol: sym, timeframe: "5min", days: Math.max(2, Math.ceil(days * 1.5)), source: "intraday chart" }));
     window.addEventListener("mx-resize", draw);
     await load();
   }
@@ -140,7 +141,7 @@
           t.innerHTML = `<div class="card"><div class="ct"><div class="seg" id="rng">${[["3M", 91], ["6M", 182], ["1Y", 365], ["3Y", 1100], ["5Y", 1830], ["All", 99999]].map(([l, n]) => `<button data-n="${n}" class="${n === 365 ? "on" : ""}">${l}</button>`).join("")}</div>
             <div class="seg" id="ivl" style="margin-left:8px"><button data-i="D" class="on" title="One candle per trading day">Daily</button><button data-i="W" title="One candle per week (Mon–Fri)">Weekly</button><button data-i="M" title="One candle per month">Monthly</button></div>
             <div class="seg" id="mode" style="margin-left:8px"><button data-m="candle" class="on">Candles</button><button data-m="line">Line</button></div>
-            <span class="aside">avg turnover ₹${num(i.avg_turnover_cr, 0)} cr/day · ${pct(i.from_hi)} from 52-week high</span></div>
+            <span class="aside">avg turnover ₹${num(i.avg_turnover_cr, 0)} cr/day · ${pct(i.from_hi)} from 52-week high <button class="btn small" id="wsv">Save to workspace</button></span></div>
             <div id="pc"></div><div class="legend"><span><i style="background:#f59e0b"></i>50-day average</span><span><i style="background:var(--faint)"></i>200-day average</span><span>volume: green up day, red down day</span></div></div>`;
           let n = 365, mode = "candle", ivl = "D";
           // weekly / monthly candles from the daily bars: open = first, high = max, low = min, close = last, volume = sum;
@@ -161,6 +162,7 @@
           const seg = (id, attr, set) => $(id, t).addEventListener("click", (e) => { const btn = e.target.closest("button"); if (!btn) return;
             MX.$$("button", $(id, t)).forEach((x) => x.classList.toggle("on", x === btn)); set(btn.dataset[attr]); draw(); });
           seg("#rng", "n", (v) => (n = +v)); seg("#mode", "m", (v) => (mode = v)); seg("#ivl", "i", (v) => (ivl = v));
+          $("#wsv", t).addEventListener("click", () => MX.saveChart({ symbol: i.symbol, timeframe: "daily", days: Math.min(n, 2000), source: "stock chart" }));
           draw(); window.addEventListener("mx-resize", draw);
         } else if (k === 1) {
           const q = d.results.quarters || [], nx = d.results.next;
