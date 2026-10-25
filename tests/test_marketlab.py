@@ -142,3 +142,25 @@ def test_confidence_uses_the_stocks_own_features_and_flags_unusual_days():
     w = L.estimate(wild)[0]
     assert (w.day_pct >= 0.99).all() and base.day_pct.between(0, 1).all()
     assert w.dist_pct.median() <= base.dist_pct.median() + 0.35     # the stock's own confidence isn't wrecked by the day
+
+
+def test_sector_move_uses_the_official_index_when_mapped():
+    px, idx, uni = synth()
+    uni = uni.assign(Industry=["Information Technology", "B", "C"] * 10)
+    days = sorted(px.date.unique())
+    ix = pd.DataFrame({"nifty_it": 100 * (1.01 ** np.arange(len(days)))}, index=pd.DatetimeIndex(days))   # +1% every day
+    a = F.build(px, idx, uni, log=lambda *_: None)
+    b = F.build(px, idx, uni, indices=ix, log=lambda *_: None)
+    it_a, it_b = a[a.sector == "Information Technology"], b[b.sector == "Information Technology"]
+    assert np.allclose((it_b.s_r1 + it_b.m_r1).dropna().iloc[5:], 0.01)               # the index's own +1%
+    assert not np.allclose(it_a.s_r1.dropna(), it_b.s_r1.dropna())
+    other = lambda x: x[x.sector == "B"].s_r1.dropna().to_numpy()
+    assert np.allclose(other(a), other(b))                                              # unmapped sectors unchanged
+
+
+def test_index_tokens_match_angel_names_loosely():
+    from core import indices as IX
+    sm = pd.DataFrame({"instrumenttype": "AMXIDX", "name": ["NIFTY IT", "Nifty Bank", "NIFTY MIDCAP150", "x"], "symbol": ["Nifty IT", "Nifty Bank", "NIFTY MIDCAP 150", "y"],
+                       "token": ["1", "2", "3", "4"]})
+    tok, miss = IX.tokens(sm)
+    assert tok["nifty_it"] == "1" and tok["nifty_bank"] == "2" and tok["nifty_mid150"] == "3" and "nifty_auto" in miss

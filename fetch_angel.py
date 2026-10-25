@@ -392,6 +392,34 @@ def main():
     info["index_last"] = str(pd.Timestamp(out.date.max()).date())
     print(f"Index data saved, last bar {info['index_last']}.", flush=True)
 
+    # sector and broad indices (core/indices.py): one long table, topped up like the stocks
+    try:
+        from core import indices as IX
+        itok, imiss = IX.tokens(nse)
+        if imiss:
+            print(f"  indices not in Angel's list (skipped): {', '.join(imiss)}", flush=True)
+        old = None if full or not IX.FILE.exists() else pd.read_parquet(IX.FILE)
+        parts = []
+        for col, t in itok.items():
+            prev = old[old["index"] == col] if old is not None else None
+            frm = START if prev is None or prev.empty else pd.Timestamp(prev.date.max()).to_pydatetime() - timedelta(days=OVERLAP_DAYS)
+            try:
+                d = candles(api, t, frm=frm)[["date", "open", "high", "low", "close"]].assign(index=col)
+            except Exception as e:
+                print(f"  {col}: {type(e).__name__} (kept what was saved)", flush=True)
+                d = None
+            if prev is not None and len(prev):
+                prev = prev.assign(date=pd.to_datetime(prev.date).dt.tz_localize(None))
+                d = prev if d is None or d.empty else pd.concat([prev[prev.date < d.date.min()], d])
+            if d is not None and len(d):
+                parts.append(d)
+        if parts:
+            allx = pd.concat(parts, ignore_index=True).drop_duplicates(["index", "date"], keep="last").sort_values(["index", "date"])
+            atomic.to_parquet(allx, IX.FILE)
+            print(f"Sector and broad indices saved: {allx['index'].nunique()} indices, last bar {pd.Timestamp(allx.date.max()).date()}.", flush=True)
+    except Exception as e:
+        print(f"Sector indices skipped: {type(e).__name__}: {str(e)[:160]}", flush=True)
+
     write_stale_report(info["nifty500"], set(uni.Symbol) - set(tok))
 
     # data quality checks on what was just saved

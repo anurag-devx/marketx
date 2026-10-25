@@ -98,12 +98,27 @@ def _market(d, idx):
     return d.merge(ix[["date", "m_r1", "m_r5", "m_vix"]], on="date", how="left").merge(up, on="date", how="left")
 
 
-def _sector(d, uni):
+def _sector(d, uni, indices=None):
+    """The sector's move vs the market: the official NSE sector index where one maps to the industry (core/indices.py),
+    otherwise the average of the industry's own stocks."""
     col = "Symbol" if "Symbol" in uni else "symbol"
     sec = dict(zip(uni[col].astype(str), uni.get("Industry", pd.Series("", index=uni.index)).astype(str)))
     d["sector"] = d.symbol.map(sec).fillna("")
     d["r5"] = d.groupby("symbol").close.pct_change(5, fill_method=None)
     s = d.groupby(["date", "sector"]).agg(s1=("r1", "mean"), s5=("r5", "mean")).reset_index()
+    if indices is not None and len(indices):
+        from core.indices import SECTOR_INDEX
+        w = indices.copy()
+        w.index = pd.to_datetime(w.index).astype(NS)
+        r1, r5 = w.pct_change(fill_method=None), w.pct_change(5, fill_method=None)
+        rows = []
+        for sector_, ix in SECTOR_INDEX.items():
+            if ix in w:
+                rows.append(pd.DataFrame({"date": w.index, "sector": sector_, "i1": r1[ix].to_numpy(), "i5": r5[ix].to_numpy()}))
+        if rows:
+            s = s.merge(pd.concat(rows, ignore_index=True), on=["date", "sector"], how="left")
+            s["s1"], s["s5"] = s.i1.fillna(s.s1), s.i5.fillna(s.s5)
+            s = s.drop(columns=["i1", "i5"])
     d = d.merge(s, on=["date", "sector"], how="left")
     d["s_r1"] = d.s1 - d.m_r1
     d["s_r5"] = d.s5 - d.m_r5
@@ -183,11 +198,11 @@ def _macro(d, macro):
     return d
 
 
-def build(px, idx, uni, news=None, ann=None, quarters=None, macro=None, log=print):
+def build(px, idx, uni, news=None, ann=None, quarters=None, macro=None, indices=None, log=print):
     log("  prices, volume, volatility ...")
     d = _prices(px)
     log("  market and sector ...")
-    d = _sector(_market(d, idx), uni)
+    d = _sector(_market(d, idx), uni, indices)
     days = np.sort(d.date.unique())
     log("  results, news and filings ...")
     d = _events(d, days, news, ann, quarters)
@@ -221,4 +236,10 @@ def load_inputs():
         macro = pd.read_parquet(C.DATA / "macro" / "series.parquet")
     except Exception:
         pass
-    return px, idx, uni, news, ann, quarters, macro
+    indices = None
+    try:
+        from core.indices import wide
+        indices = wide("close")
+    except Exception:
+        pass
+    return px, idx, uni, news, ann, quarters, macro, indices
