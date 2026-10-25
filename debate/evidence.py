@@ -35,9 +35,9 @@ MATERIAL = {"Results", "Acquisition / merger", "Legal / regulatory", "Fund raisi
             "Order / contract", "Buyback", "Dividend", "Bonus / split", "Block / bulk deal", "Block / bulk deal / stake",
             "Dividend / bonus / split / buyback"}
 UNAVAILABLE = {
-    "UA-FUNDAMENTALS": ("Balance sheet, cash flow, debt, ROE/ROIC and valuation multiples",
-                        "Quarterly results give the profit and loss numbers only (see 'Quarterly results' evidence); balance sheets "
-                        "are filed half-yearly and are not read yet, and no valuation provider is connected."),
+    "UA-FUNDAMENTALS": ("ROIC, segment results and analyst valuation targets",
+                        "Balance sheet, cash flow, ROE, debt and P/E / P/B now come from NSE filings (see 'Fundamentals' evidence); "
+                        "ROIC needs invested-capital detail the filings don't tag consistently, and no analyst data is connected."),
     "UA-ESTIMATES": ("Analyst estimates and revisions", "No licensed estimates provider. 'Broker view' headlines exist as news only."),
     "UA-DERIVATIVES": ("Implied volatility, option Greeks and intraday option flow",
                        "Only end-of-day F&O open interest, put-call ratio, futures basis and participant positions are stored (see 'F&O' evidence)."),
@@ -616,6 +616,31 @@ def holdings_evidence(ctx, symbol):
                   extra=dict(changes_pp={k: round(v, 2) for k, v in ch.items()}, detail=bool(r.get("detail", False))))]
 
 
+def fundamentals_evidence(ctx, symbol):
+    """Latest balance sheet, cash flow and valuation filed before the cut-off (research/valuation.py). Descriptive: no test yet."""
+    try:
+        from research import valuation as VL
+        from core import fundamentals as FN
+        if not hasattr(ctx, "_BS"):
+            ctx._BS = VL.balance_sheets(FN.results())
+        bs = ctx._BS
+        if bs is None or bs.empty or not (bs.symbol == symbol).any():
+            return []
+        px = ctx.panel[(ctx.panel.symbol == symbol) & (ctx.panel.date <= ctx.as_of)]
+        price = float(px.sort_values("date").close.iat[-1]) if len(px) else None
+        v = VL.valuation(symbol, price, ctx.cutoff, bs, ctx.Q)
+    except Exception:
+        return []
+    if v.get("note"):
+        return []
+    f = lambda k, d=1, pre="", post="": "n/a" if v.get(k) is None else f"{pre}{v[k]:,.{d}f}{post}"
+    fact = (f"Fundamentals at {v['balance_sheet_date']} ({v.get('basis')}): market cap {f('market_cap_cr', 0, 'Rs ', ' cr')}, P/E (TTM) {f('pe')}, "
+            f"P/B {f('pb')}, ROE (TTM) {f('roe_pct', 1, '', '%')}, debt/equity {f('debt_to_equity', 2)}, net debt {f('net_debt_cr', 0, 'Rs ', ' cr')}, "
+            f"free cash flow {f('fcf_cr', 0, 'Rs ', ' cr')} over {f('cf_months', 0)} months")
+    return [_item("FD-LATEST", "Fundamentals", fact, source="NSE results filings (XBRL)", period=f"balance sheet at {v['balance_sheet_date']}",
+                  reliability=PRIMARY, extra={k: v.get(k) for k in ("pe", "pb", "roe_pct", "debt_to_equity", "fcf_cr", "market_cap_cr")})]
+
+
 def fo_evidence(ctx, symbol):
     """F&O context. NSE publishes these files after the close, so an analysis cut off at 15:30 uses the previous session's
     file at the latest. Descriptive readings: no pre-registered test."""
@@ -660,7 +685,7 @@ def gather(ctx, symbol, news_days=30, filing_days=60):
         return [], None, dict(error="no price data for this stock on or before the analysis day")
     sector = last.sector
     items = (px_items + technical_evidence(ctx, last) + market_evidence(ctx, last) + signal_evidence(ctx, symbol)
-             + results_evidence(ctx, symbol) + holdings_evidence(ctx, symbol) + fo_evidence(ctx, symbol) + news_evidence(ctx, symbol, news_days) + filing_evidence(ctx, symbol, filing_days)
+             + results_evidence(ctx, symbol) + holdings_evidence(ctx, symbol) + fundamentals_evidence(ctx, symbol) + fo_evidence(ctx, symbol) + news_evidence(ctx, symbol, news_days) + filing_evidence(ctx, symbol, filing_days)
              + macro_evidence(ctx, symbol, sector) + unavailable())
     company = ctx.uni.loc[ctx.uni.Symbol == symbol, "Company Name"]
     info = dict(symbol=symbol, exchange="NSE", company=company.iloc[0] if len(company) else symbol, sector=sector,

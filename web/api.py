@@ -164,7 +164,7 @@ JOB_LABEL = {"strategy-research": "Strategy research", "screener-experiments": "
              "announcements": "Fetch news and filings", "fundamentals": "Update quarterly results",
              "fundamentals-backfill": "Download results history", "macro-all": "Fetch macro data + study", "market-report": "Write market report",
              "debate-batch": "Nightly forecasts", "backtest": "Run backtest + analysis", "screener": "Run screener",
-             "shareholding": "Download shareholding patterns", "fo": "Update F&O data", "fo-backfill": "Download F&O history", "kronos-install": "Install Kronos", "kronos-forecast": "Kronos forecasts", "kronos-replay": "Kronos replay", "intraday": "Download 5-minute bars", "intraday-probe": "Check Angel's intraday history", "market-lab": "Market Lab radar", "market-lab-test": "Market Lab Scorecard test", "talib-install": "Install TA-Lib (optional)"}
+             "shareholding": "Download shareholding patterns", "fo": "Update F&O data", "fo-backfill": "Download F&O history", "kronos-install": "Install Kronos", "kronos-forecast": "Kronos forecasts", "kronos-replay": "Kronos replay", "intraday": "Download 5-minute bars", "intraday-probe": "Check Angel's intraday history", "market-lab": "Market Lab radar", "market-lab-test": "Market Lab Scorecard test", "talib-install": "Install TA-Lib (optional)", "search-compact": "Compact the search database", "fundamentals-balance": "Read balance sheets and cash flow"}
 STARTABLE = set(jobs.COMMANDS)                # only the fixed commands in core/jobs.py; arguments are dates and flags only
 
 
@@ -462,7 +462,21 @@ def _stock_results(sym):
             "eps", "sue_profit", "react_rel", "drift_20", "revised"]
     cal = F.calendar()
     nxt = cal[cal.symbol == sym]
-    return dict(quarters=g[[c for c in cols if c in g]] if len(g) else [],
+    fin = None
+    try:                                   # balance sheet, cash flow and valuation (research/valuation.py), point in time
+        from research import valuation as VL
+        bs = cached("balance_sheets", (_mtime(F.RESULTS),), VL.balance_sheets)
+        px = prices()
+        last = px[px.symbol == sym].sort_values("date").tail(1) if px is not None else pd.DataFrame()
+        if len(bs) and (bs.symbol == sym).any():
+            v = VL.valuation(sym, float(last.close.iat[0]) if len(last) else None, last.date.iat[0] if len(last) else pd.Timestamp.now(), bs, qd)
+            hist = bs[bs.symbol == sym].sort_values("period_end", ascending=False).head(8)
+            hist = hist.assign(period=pd.to_datetime(hist.period_end).dt.strftime("%b %Y"))
+            fin = dict(now=v, history=hist[["period", "basis", "filed_at", "assets_cr", "equity_cr", "debt_cr", "cash_cr", "net_debt_cr", "debt_to_equity",
+                                             "current_ratio", "cfo_cr", "capex_cr", "fcf_cr", "cf_months"]])
+    except Exception:
+        fin = None
+    return dict(quarters=g[[c for c in cols if c in g]] if len(g) else [], fin=fin,
                 next=dict(date=nxt.date.iat[0], source=nxt.source.iat[0]) if len(nxt) else None)
 
 

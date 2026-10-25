@@ -172,6 +172,15 @@
             <p class="muted small">Surprise = change vs the same quarter last year, scaled by how much that change usually varies (company's own history, not analyst estimates). Blank = not comparable.</p>`;
           const h = [...q].reverse();
           MXCharts.barLine($("#rc", t), h.map((x) => x.quarter), h.map((x) => x.revenue_cr), h.map((x) => x.profit_cr));
+          const F = d.results.fin;
+          if (F) { const v = F.now, c = (x, dd = 1) => (x == null ? "—" : num(x, dd));
+            t.insertAdjacentHTML("beforeend", `<div class="grid g6 section">${kpi("Market cap", v.market_cap_cr == null ? "—" : `₹${c(v.market_cap_cr, 0)} cr`)}${kpi("P/E (TTM)", c(v.pe))}${kpi("P/B", c(v.pb))}
+              ${kpi("ROE (TTM)", v.roe_pct == null ? "—" : `${c(v.roe_pct)}%`)}${kpi("Debt / equity", c(v.debt_to_equity, 2))}${kpi("Net debt", v.net_debt_cr == null ? "—" : `₹${c(v.net_debt_cr, 0)} cr`)}</div>
+              <p class="muted small">Balance sheet of ${esc(day(v.balance_sheet_date))} (${esc(v.basis || "")}); TTM profit ${v.ttm_profit_cr == null ? "not available (needs 4 quarters)" : `₹${c(v.ttm_profit_cr, 0)} cr`}; price ${v.price == null ? "—" : inr(v.price)}. Blank = a figure isn't in the filings (never estimated).</p>
+              <div class="section card flush" id="rbs"><div class="ct" style="padding:14px 16px 0"><h2>Balance sheet and cash flow (₹ crore)</h2><span class="aside">half-year and year ends · cash flow is year to date (6 or 12 months)</span></div></div>`);
+            $("#rbs", t).appendChild(dataTable(F.history, [["period", "Period"], ["assets_cr", "Assets", "num0"], ["equity_cr", "Equity", "num0"], ["debt_cr", "Debt", "num0"], ["cash_cr", "Cash", "num0"],
+              ["net_debt_cr", "Net debt", "num0"], ["debt_to_equity", "D/E", "num2"], ["current_ratio", "Current ratio", "num2"], ["cfo_cr", "Operating CF", "num0"], ["capex_cr", "Capex", "num0"],
+              ["fcf_cr", "Free CF", "num0"], ["cf_months", "CF months", "int"], ["filed_at", "Filed", "dt"], ["basis", "Basis"]], { tools: false })); }
           $("#rt", t).appendChild(dataTable(q, [["quarter", "Quarter"], ["revenue_cr", "Revenue ₹ cr", "num0"], ["revenue_yoy", "YoY", "spct1"], ["profit_cr", "Profit ₹ cr", "num1"], ["profit_yoy", "YoY", "spct1"],
             ["margin_pct", "Net margin", "pct1"], ["sue_profit", "Surprise", "snum1"], ["react_rel", "Reaction vs Nifty", "spct1"], ["filed_at", "Filed", "dt"], ["basis", "Basis"]], { tools: false }));
         } else if (k === 2) {

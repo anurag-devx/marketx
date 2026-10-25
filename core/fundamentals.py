@@ -43,7 +43,32 @@ UA = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/53
 FILING_COLS = ["filing_id", "symbol", "company", "period_from", "period_end", "filed_at", "consolidated", "audited", "xbrl", "source"]
 RESULT_COLS = ["filing_id", "symbol", "period_end", "filed_at", "consolidated", "status", "note", "taxonomy", "context",
                "revenue", "other_income", "total_income", "expenses", "finance_costs", "depreciation", "exceptional", "pbt", "tax",
-               "profit", "profit_owners", "eps_basic", "elements", "read_at"]
+               "profit", "profit_owners", "eps_basic", "elements", "read_at",
+               # balance sheet (at the period end) and cash flow (year to date: 6 or 12 months), from half-year / annual filings
+               "bs_date", "assets", "liabilities", "equity", "equity_owners", "share_capital", "borrowings_current", "borrowings_noncurrent",
+               "cash", "bank_other", "current_assets", "current_liabilities", "inventories", "receivables",
+               "cf_months", "cfo", "cfi", "cff", "capex", "capex_intangible", "dividends_paid", "paid_up", "face_value"]
+
+# balance sheet: the context dated exactly at the period end (no dimensions)
+BS_METRICS = {
+    "assets": ["Assets"], "liabilities": ["Liabilities"], "equity": ["Equity"],
+    "equity_owners": ["EquityAttributableToOwnersOfParent"], "share_capital": ["EquityShareCapital"],
+    "borrowings_current": ["BorrowingsCurrent", "CurrentBorrowings"], "borrowings_noncurrent": ["BorrowingsNoncurrent", "NoncurrentBorrowings"],
+    "cash": ["CashAndCashEquivalents"], "bank_other": ["BankBalanceOtherThanCashAndCashEquivalents"],
+    "current_assets": ["CurrentAssets"], "current_liabilities": ["CurrentLiabilities"], "inventories": ["Inventories"],
+    "receivables": ["TradeReceivablesCurrent", "TradeReceivables"],
+}
+# cash flow: the longest year-to-date context ending at the period end (6 months for September, 12 for March)
+CF_METRICS = {
+    "cfo": ["CashFlowsFromUsedInOperatingActivities", "NetCashFlowsFromUsedInOperatingActivities"],
+    "cfi": ["CashFlowsFromUsedInInvestingActivities", "NetCashFlowsFromUsedInInvestingActivities"],
+    "cff": ["CashFlowsFromUsedInFinancingActivities", "NetCashFlowsFromUsedInFinancingActivities"],
+    "capex": ["PurchaseOfPropertyPlantAndEquipmentClassifiedAsInvestingActivities", "PurchaseOfPropertyPlantAndEquipment"],
+    "capex_intangible": ["PurchaseOfIntangibleAssetsClassifiedAsInvestingActivities"],
+    "dividends_paid": ["DividendsPaidClassifiedAsFinancingActivities"],
+}
+# share details: reported in the quarter context
+SHARE_METRICS = {"paid_up": ["PaidUpValueOfEquityShareCapital"], "face_value": ["FaceValueOfEquityShareCapital"]}
 
 # element local names, first found wins (Ind-AS company format, then bank / NBFC / older names)
 METRICS = {
@@ -220,7 +245,7 @@ def parse_xbrl(content, period_end=None):
         return dict(status="unreadable", note=f"not XBRL ({str(e)[:60]})")
     if root.tag != f"{_XBRLI}xbrl":
         return dict(status="unreadable", note="not an XBRL instance (an HTML page?)")
-    ctx = {}
+    ctx, inst = {}, {}
     for c in root.iter(f"{_XBRLI}context"):
         p = c.find(f"{_XBRLI}period")
         if p is None:
@@ -229,14 +254,28 @@ def parse_xbrl(content, period_end=None):
         has_dims = c.find(f"{_XBRLI}entity/{_XBRLI}segment") is not None or c.find(f"{_XBRLI}scenario") is not None
         if s and e and not has_dims:
             ctx[c.get("id")] = (pd.Timestamp(s.strip()), pd.Timestamp(e.strip()))
+        elif p.findtext(f"{_XBRLI}instant") and not has_dims:
+            inst[c.get("id")] = pd.Timestamp(p.findtext(f"{_XBRLI}instant").strip())
     pe = pd.Timestamp(period_end) if period_end is not None and not pd.isna(period_end) else None
     quarter = {k: v for k, v in ctx.items() if 60 <= (v[1] - v[0]).days <= 120 and (pe is None or abs((v[1] - pe).days) <= 3)}
     if not quarter:
         return dict(status="no quarter", note="no context covering just the quarter (annual or year-to-date only)")
     cid = "OneD" if "OneD" in quarter else sorted(quarter, key=lambda k: (quarter[k][1], -(quarter[k][1] - quarter[k][0]).days))[-1]
+    q_end = quarter[cid][1]
+    bs_ids = [k for k, v in inst.items() if abs((v - q_end).days) <= 3]
+    bs_cid = bs_ids[0] if bs_ids else None
+    ytd = {k: v for k, v in ctx.items() if abs((v[1] - q_end).days) <= 3 and (v[1] - v[0]).days >= 150}
+    cf_cid = max(ytd, key=lambda k: (ytd[k][1] - ytd[k][0]).days) if ytd else None
+    by_ctx = {bs_cid: {}, cf_cid: {}}
     facts, ns = {}, set()
     for el in root.iter():
-        if el.get("contextRef") != cid or el.text is None:
+        ref = el.get("contextRef")
+        if ref in by_ctx and ref is not None and el.text is not None:
+            try:
+                by_ctx[ref].setdefault(el.tag.split("}")[-1], float(el.text.strip().replace(",", "")))
+            except ValueError:
+                pass
+        if ref != cid or el.text is None:
             continue
         tag = el.tag
         if tag.startswith("{"):
@@ -257,6 +296,19 @@ def parse_xbrl(content, period_end=None):
     tax = "in-capmkt (SEBI)" if any("sebi.gov.in" in u for u in ns) else "in-bse-fin" if any("bseindia" in u for u in ns) else ", ".join(sorted(ns))[:80]
     if out["revenue"] is None and out["profit"] is None:
         return dict(status="no numbers", note=f"no revenue or profit element in the quarter context ({len(facts)} facts)", taxonomy=tax, context=cid)
+    pick = lambda src, names: next((src[n] for n in names if n in src), None)
+    bs, cf = by_ctx.get(bs_cid, {}) if bs_cid else {}, by_ctx.get(cf_cid, {}) if cf_cid else {}
+    for m, names in BS_METRICS.items():
+        out[m] = pick(bs, names)
+    for m, names in CF_METRICS.items():
+        out[m] = pick(cf, names)
+    for m, names in SHARE_METRICS.items():
+        out[m] = pick(facts, names)
+    if out["assets"] is not None:
+        out["bs_date"] = str(inst[bs_cid].date())
+    if out["cfo"] is not None:
+        a, b = ctx[cf_cid]
+        out["cf_months"] = int(round((b - a).days / 30.4))
     return dict(out, status="ok", note="", taxonomy=tax, context=cid, elements=json.dumps(used))
 
 
@@ -358,6 +410,23 @@ def read_filings(todo, fetch, log=print, workers=4, max_files=None):
                 el = time.time() - t0
                 log(f"  results files: {i}/{len(futs)} read, {el / 60:.0f} min, about {el / i * (len(futs) - i) / 60:.0f} min left", )
     _save_state(st)
+    return ok, bad
+
+
+def refresh_balance(log=print, fetch=None, workers=4, max_files=None):
+    """Re-read half-year and annual results files (period ending March or September) that were read before the balance
+    sheet and cash flow were parsed. Resumable: a file is skipped once its balance sheet (or a 'none' note) is stored."""
+    fetch = fetch or Fetcher()
+    res, fl = results(), filings()
+    if res.empty or fl.empty:
+        log("No results read yet: run the results download first.")
+        return 0, 0
+    pe = pd.to_datetime(res.period_end)
+    need = res[(res.status == "ok") & pe.dt.month.isin([3, 9]) & res.assets.isna() & res.cfo.isna()] if "assets" in res else res[(res.status == "ok") & pe.dt.month.isin([3, 9])]
+    todo = fl[fl.filing_id.isin(set(need.filing_id))].sort_values("period_end", ascending=False)
+    log(f"{len(todo)} half-year / annual results files to re-read for the balance sheet and cash flow")
+    ok, bad = read_filings(todo, fetch, log, workers, max_files)
+    log(f"Balance sheet refresh: {ok} read, {bad} failed (retried next run). {fetch.count} requests.")
     return ok, bad
 
 
@@ -564,7 +633,9 @@ if __name__ == "__main__":
     import sys
     args = dict(a.split("=", 1) for a in sys.argv[2:] if "=" in a)
     cmd = sys.argv[1] if len(sys.argv) > 1 else "update"
-    if cmd == "backfill":
+    if cmd == "balance":
+        refresh_balance(max_files=int(args["max"]) if "max" in args else None)
+    elif cmd == "backfill":
         backfill(args.get("start", "2021-01-01"), max_files=int(args["max"]) if "max" in args else None)
     else:
         update(int(args.get("days", 120)))

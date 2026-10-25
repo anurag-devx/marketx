@@ -305,6 +305,30 @@ def _history():
     except Exception:
         pass
     try:
+        from core import fundamentals as FD
+        rs = FD.results()
+        if len(rs):
+            half = rs[(rs.status == "ok") & pd.to_datetime(rs.period_end).dt.month.isin([3, 9])]
+            have = half[half.assets.notna()] if "assets" in half else half.iloc[:0]
+            rows.append(dict(label="Balance sheet & cash flow (NSE XBRL)", frac=len(have) / max(1, len(half)), job="fundamentals-balance", button="Read / continue",
+                             detail=f"{have.symbol.nunique()} stocks · {len(have):,} of {len(half):,} half-year / annual filings read"
+                                    + " · new filings are read by the daily run",
+                             help="Re-reads the half-year (Sept) and annual (March) results files already listed, for assets, equity, debt, cash and cash flow. "
+                                  "About 1.5 s per file; resumes where it stopped. For older years, run Quarterly results → Download / continue first."))
+    except Exception:
+        pass
+    try:
+        from core import library as LB
+        tdir = LB.DB / "items.lance"
+        nfiles = len(list((tdir / "data").glob("*"))) if (tdir / "data").exists() else 0
+        nvers = len(list((tdir / "_versions").glob("*"))) if (tdir / "_versions").exists() else 0
+        if nfiles:
+            rows.append(dict(label="Search database upkeep", frac=1.0 if nfiles <= 50 else max(0.02, 50 / nfiles), job="search-compact", button="Compact",
+                             detail=f"{nfiles:,} file pieces, {nvers:,} saved versions" + (" · fine" if nfiles <= 50 else " · compacting makes search and indexing faster"),
+                             help="Merges the small files left by indexing and drops old versions; backs up first if there's room. Search results don't change. ~10-30 min; don't run it while indexing."))
+    except Exception:
+        pass
+    try:
         from core import intraday as ID
         sm = ID.summary()
         n_uni = max(1, len(ID.universe()))

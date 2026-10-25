@@ -13,7 +13,7 @@ LOCK = JOBS / "current.json"
 # Lanes never share the database; files they share are protected by core/filelock.py and written atomically.
 LANES = {"news": {"news", "news-check", "announcements", "macro-fetch", "macro-all", "fundamentals", "fo"},
          "history": {"history-all", "announcements-backfill", "news-backfill", "news-articles", "search-index",
-                     "library-ingest", "news-retag", "fundamentals-backfill", "shareholding", "fo-backfill"},
+                     "library-ingest", "news-retag", "fundamentals-backfill", "shareholding", "fo-backfill", "search-compact", "fundamentals-balance"},
          "lab": {"debate", "debate-eval", "debate-batch", "debate-replay", "stock-lists", "market-lab", "market-lab-test", "talib-install"},
          "kronos": {"kronos-install", "kronos-forecast", "kronos-replay"},      # experimental, separate: see kronos_lab/README.md
          "intraday": {"intraday", "intraday-probe"}}      # 5-minute bars from Angel One: core/intraday.py
@@ -66,6 +66,8 @@ COMMANDS = {
     "fo": [[PY, "-u", "-m", "core.derivatives"]],
     "intraday": [[PY, "-u", "-m", "core.intraday"]],
     "market-lab": [[PY, "-u", "-m", "marketlab"]],
+    "search-compact": [[PY, "-u", "-m", "core.search_compact"]],
+    "fundamentals-balance": [[PY, "-u", "-m", "core.fundamentals", "balance"]],
     "talib-install": [[PY, "-m", "pip", "install", "--only-binary=:all:", "TA-Lib"]],
     "market-lab-test": [[PY, "-u", "-m", "marketlab", "test"]],
     "intraday-probe": [[PY, "-u", "-m", "core.intraday", "probe"]],
@@ -234,7 +236,7 @@ STEPS = [("fetch_angel.py", "Downloading prices", "fetch"), ("news_fetch.py", "F
          ("analysis.py", "Strategy analysis", "backtest"), ("research.events", "Running the news study", "announcements"),
          ("core.quality", "Checking data quality", "fetch"), ("pip", "Installing packages", None),
          ("kronos_lab.forecast", "Kronos forecasts", None), ("core.shareholding", "Reading shareholding patterns", "announcements"), ("core.derivatives", "Downloading F&O data", "announcements"), ("kronos_lab/setup.sh", "Installing Kronos", None),
-         ("core.intraday", "Downloading 5-minute bars", None), ("marketlab", "Market Lab: tonight's radar", "market-lab")]
+         ("core.intraday", "Downloading 5-minute bars", None), ("marketlab", "Market Lab: tonight's radar", "market-lab"), ("core.search_compact", "Compacting the search database", "search-index")]
 AGENT_STEP = {"regime": "regime", "screener": "screener", "strategy": "strategy", "technical": "technical", "risk": "risk",
               "validation": "validation", "report": "report"}
 
