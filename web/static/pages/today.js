@@ -62,7 +62,7 @@
             : `<div class="muted small">No results filed in the last 3 days.</div>`) + (o.results.upcoming && o.results.upcoming.length ? `<h3 style="margin:16px 0 6px">Coming up</h3>` +
             table(o.results.upcoming, [["date", "Date", (v) => day(v, { weekday: "short", day: "numeric", month: "short" })], ["symbol", "Stock", sym]]) : ""), `<a href="#/screener">Results tab</a>`)}
         </div>
-        ${o.backdrop.length ? `<div class="section"><div class="sh"><h3>Backdrop</h3><a class="more" href="#/macro">Macro</a></div><div class="grid g6">${o.backdrop.map((b) =>
+        ${o.backdrop.length ? `<div class="section"><div class="sh"><h3>Backdrop</h3><a class="more" href="#/market-news/macro">Macro</a></div><div class="grid g6">${o.backdrop.map((b) =>
           kpi(esc(b.label), b.change_kind === "total" ? `${inr(b.value, 0)} cr` : num(b.value, 2), b.change_kind === "total" ? (b.chg_5d != null ? `5 days ${inr(b.chg_5d, 0)} cr` : "") : (b.chg_20d != null ? `${b.chg_20d > 0 ? "+" : ""}${num(b.chg_20d, 2)}${b.change_kind === "points" ? " pts" : "%"} in a month` : ""))).join("")}</div></div>` : ""}`;
       $("#b-agents", el)?.addEventListener("click", () => startJob("pipeline"));
     },

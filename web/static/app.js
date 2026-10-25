@@ -362,13 +362,11 @@
 
   // ---------- navigation ----------
   const NAV = [
-    ["Today", [["overview", "Overview"], ["market", "Market"], ["screener", "Screener"], ["stock", "Stock"]]],
-    ["Research", [["market-lab", "Market Lab"], ["scorecard", "Forecast scorecard"], ["macro", "Macro"], ["report", "Market report"], ["news-research", "News research"]]],
-    ["Agents", [["agents", "Agents"], ["signals", "Signals"], ["strategies", "Strategies"], ["screener-research", "Screener research"], ["validation", "Validation"]]],
-    ["Portfolio", [["positions", "Positions & risk"]]],
-    ["Tools", [["search", "Search"], ["ask", "Ask"], ["documents", "Documents"], ["lab", "Strategy Lab"], ["records", "Reports & logs"]]],
-    ["Setup", [["settings", "Settings"], ["data", "Data health"]]],
-    ["Experimental", [["kronos", "Kronos"]]],
+    ["Main", [["overview", "Overview"], ["market-lab", "Market Lab"], ["stock", "Stock"], ["positions", "Positions & risk"], ["data", "Data health"]]],
+    ["Market", [["market", "Market"], ["market-news", "Market news"], ["screener", "Screener"]]],
+    ["Agents", [["agents", "Agents"], ["signals", "Signals"], ["strategies", "Strategies"], ["validation", "Validation"]]],
+    ["Tools", [["search", "Search"], ["ask", "Ask"], ["documents", "Documents"], ["records", "Reports & logs"], ["settings", "Settings"]]],
+    ["Labs", [["debate", "Debate"], ["scorecard", "Forecast scorecard"], ["kronos", "Kronos"], ["lab", "Strategy Lab"], ["screener-research", "Screener research"]]],
   ];
   const PAGES = {};
   function drawNav(cur) {
@@ -465,7 +463,7 @@
 
   window.MX = { api, qs, post, toast, startJob, esc, num, pct, cls, inr, day, dt, mmss, safeUrl, isNum, $, $$, table, dataTable, csv, download,
                 cols, kpi, card, nameOf, named, chartDrawer, head, note, loading, spinner, md, form, tabs, sections, section, newsList, drawer, editTable, openLog, fmt, debounce,
-                page: (k, def) => (PAGES[k] = def), status: () => lastStatus, refreshStatus, route, render };
+                page: (k, def) => (PAGES[k] = def), pageDef: (k) => PAGES[k], status: () => lastStatus, refreshStatus, route, render };
   document.addEventListener("DOMContentLoaded", async () => { setupTheme(); setupSearch(); refreshStatus();
     try { NAMES = await api("meta/names"); } catch (e) { /* names are a nicety */ } render(); });
 })();

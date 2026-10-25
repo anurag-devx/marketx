@@ -258,7 +258,20 @@ def _info_all(px, info):
     return pd.concat([info, add], ignore_index=True)
 
 
+def auto_on():
+    """Nightly market report on/off (Market news → Report). Off by default: written only when you click Write."""
+    import json
+    from core import config as C
+    try:
+        return bool(json.loads((C.DATA / "auto_jobs.json").read_text()).get("market_report"))
+    except (OSError, ValueError):
+        return False
+
+
 if __name__ == "__main__":
+    if "--if-auto" in sys.argv and not auto_on():
+        print("Market report: manual (turn on auto in Market news → Report). Skipped.")
+        sys.exit(0)
     from research import report_writer as W
     day = next((a for a in sys.argv[1:] if a[:2] == "20"), None)
     inp = load_inputs()

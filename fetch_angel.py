@@ -308,6 +308,37 @@ def load_universe_cached():
     return pd.read_csv(OUT / "universe.csv")
 
 
+
+SERIES_FALLBACK = (("BE", "trade-for-trade"), ("RR", "REIT"), ("IV", "InvIT"))
+
+
+def instrument_tokens(sm, symbols):
+    """Angel tokens from the public scrip master. -EQ first; a stock not listed as -EQ falls back to its -BE (trade-for-trade),
+    -RR (REIT) or -IV (InvIT) series. Returns (symbol -> token, table for data/instruments.csv incl. the fallbacks, so the
+    5-minute download finds the same tokens as the daily one)."""
+    nse = sm[sm.exch_seg == "NSE"].copy()
+    nse["series"] = nse.symbol.str.rsplit("-", n=1).str[-1]
+    nse["base"] = nse.symbol.str.rsplit("-", n=1).str[0]
+    eq = nse[nse.symbol.str.endswith("-EQ")]
+    tok = dict(zip(eq.base, eq.token))
+    rows = [eq]
+    for sym in symbols:
+        if sym in tok:
+            continue
+        for ser, what in SERIES_FALLBACK:
+            m = nse[(nse.base == sym) & (nse.series == ser)]
+            if len(m):
+                tok[sym] = m.token.iat[0]
+                rows.append(m.head(1))
+                print(f"  {sym}: not listed as -EQ in Angel's instrument list; using its -{ser} ({what}) series", flush=True)
+                break
+        else:
+            print(f"  {sym}: not in Angel One's instrument list (no -EQ, -BE, -RR or -IV series): no prices can be downloaded", flush=True)
+    inst = pd.concat(rows, ignore_index=True).drop_duplicates("base").assign(exchange="NSE")
+    inst = inst.rename(columns={"symbol": "trading_symbol"}).rename(columns={"base": "symbol"})[["symbol", "exchange", "token", "name", "trading_symbol"]]
+    return tok, inst
+
+
 def main():
     import argparse
     ap = argparse.ArgumentParser(description="Download or update daily prices from Angel One.")
@@ -323,21 +354,9 @@ def main():
     # Angel instrument tokens (public scrip master)
     sm = pd.DataFrame(requests.get(
         "https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json", timeout=60).json())
-    nse = sm[sm.exch_seg == "NSE"]
-    eq = nse[nse.symbol.str.endswith("-EQ")].assign(base=lambda x: x.symbol.str[:-3])
-    tok = dict(zip(eq.base, eq.token))
-    # A stock moved to the trade-for-trade segment is listed as SYMBOL-BE, not -EQ: same company, same daily bars.
-    be = nse[nse.symbol.str.endswith("-BE")].assign(base=lambda x: x.symbol.str[:-3])
-    be_tok = dict(zip(be.base, be.token))
-    for sym in uni.Symbol:
-        if sym not in tok and sym in be_tok:
-            tok[sym] = be_tok[sym]
-            print(f"  {sym}: not listed as -EQ in Angel's instrument list; using its -BE (trade-for-trade) series", flush=True)
-    for sym in uni.Symbol:
-        if sym not in tok:
-            print(f"  {sym}: not in Angel One's instrument list (no -EQ or -BE series): no prices can be downloaded", flush=True)
-    eq.assign(exchange="NSE").rename(columns={"base": "symbol_", "symbol": "trading_symbol"})[
-        ["symbol_", "exchange", "token", "name", "trading_symbol"]].rename(columns={"symbol_": "symbol"}).to_csv(OUT / "instruments.csv", index=False)
+    nse = sm[sm.exch_seg == "NSE"]                        # also used below for the index tokens
+    tok, inst = instrument_tokens(sm, uni.Symbol)
+    inst.to_csv(OUT / "instruments.csv", index=False)
 
     info = dict(when=str(datetime.now().replace(microsecond=0)), mode="full" if full else "update")
     info["nifty500"] = run_set(api, list(uni.Symbol), tok, OUT / "prices.parquet", full, "Nifty 500")

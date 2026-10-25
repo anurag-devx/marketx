@@ -181,6 +181,20 @@
   });
 
   // ---------------- Macro ----------------
+  /* Market news: the market report, macro & geopolitics and news research on one page (tabs) */
+  const MN = [["report", "Market report"], ["macro", "Macro & geopolitics"], ["news-research", "News research"]];
+  MX.page("market-news", {
+    title: "Market news", reloadOnJob: true,
+    async render(el, arg) {
+      const tab = MN.some(([k]) => k === arg) ? arg : (() => { try { return sessionStorage.getItem("mx-mn") || "report"; } catch (e) { return "report"; } })();
+      el.innerHTML = `<div class="tabs" id="mnt">${MN.map(([k, l]) => `<button data-t="${k}" class="${k === tab ? "on" : ""}">${l}</button>`).join("")}</div><div id="mnb"></div>`;
+      $("#mnt", el).addEventListener("click", (e) => { const x = e.target.closest("button"); if (x) location.hash = `#/market-news/${x.dataset.t}`; });
+      try { sessionStorage.setItem("mx-mn", tab); } catch (e) { /* ignore */ }
+      const def = MX.pageDef(tab);
+      if (def) await def.render($("#mnb", el));
+    },
+  });
+
   MX.page("macro", {
     title: "Macro",
     async render(el) {
@@ -231,12 +245,15 @@
     async render(el, arg) {
       const d = await api(`report?${qs({ day: arg })}`);
       el.innerHTML = head("Market report", `A written review of the day from stored prices, NSE filings and headlines. <span class="dot ${d.model_ok ? "ok" : "warn"}"></span> ${esc(d.model)}`,
-        `<button class="btn primary" id="rw">Write report</button>`) +
+        `<button class="btn" id="rauto" title="On: written every evening in Fetch + run all. Off: only when you click Write report.">Auto each evening: …</button> <button class="btn primary" id="rw">Write report</button>`) +
         `<div class="panel"><div id="rf"></div></div><div id="rb"></div>`;
       const f = form($("#rf", el), [
         ...(d.days.length ? [{ k: "pick", label: "Saved reports", type: "select", options: d.days.map((x) => [x, day(x, { weekday: "short", day: "numeric", month: "short", year: "numeric" })]), value: d.day }] : []),
         { k: "when", label: "Write for", type: "date", value: d.last }, { k: "llm", label: "Use language model", type: "toggle", value: d.model_ok }], () => {
         const v = f.values(); if (v.pick && v.pick !== d.day) location.hash = `#/report/${v.pick}`; });
+      const ab = $("#rauto", el), aset = (on) => { ab.textContent = `Auto each evening: ${on ? "on" : "off"}`; ab.classList.toggle("primary", on); ab.dataset.on = on ? "1" : ""; };
+      api("report/auto").then((r) => aset(r.on)).catch(() => {});
+      ab.addEventListener("click", async () => { try { aset((await MX.post("report/auto", { on: !ab.dataset.on }, "Saved")).on); } catch (e) { /* toast shown */ } });
       $("#rw", el).addEventListener("click", () => { const v = f.values(); startJob("market-report", [v.when || d.last, ...(v.llm ? [] : ["--no-llm"])].filter(Boolean)); });
       if (d.markdown) $(".actions", el).insertAdjacentHTML("beforeend", `<button class="btn" id="rmd">Download Markdown</button>`);
       $("#rmd", el)?.addEventListener("click", () => download(d.markdown, `market_report_${d.day}.md`, "text/markdown"));

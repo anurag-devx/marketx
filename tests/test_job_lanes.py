@@ -58,10 +58,10 @@ def test_scheduled_daily_runs_the_same_steps_as_the_dashboard(monkeypatch):
     from core import jobs
     calls = []
     monkeypatch.setattr(jobs, "current", lambda name=None: None)
-    monkeypatch.setattr(cli.subprocess, "call", lambda cmd, cwd=None: calls.append(cmd) or (1 if "debate.batch" in cmd else 0))
+    monkeypatch.setattr(cli.subprocess, "call", lambda cmd, cwd=None: calls.append(cmd) or (1 if "research.market_report" in cmd else 0))
     assert cli.daily() == 0                                  # an optional step failing doesn't fail the day
     assert calls == jobs.COMMANDS["fetch+pipeline"]
-    assert any("debate.batch" in c for c in calls) and any("debate.evaluate" in c for c in calls)
+    assert not any("debate.batch" in c or "research.macro_impact" in c for c in calls)     # Labs / on demand only
     calls.clear()
     monkeypatch.setattr(cli.subprocess, "call", lambda cmd, cwd=None: calls.append(cmd) or (1 if "fetch_angel.py" in cmd else 0))
     assert cli.daily() == 1 and len(calls) == 1             # no prices: stop
@@ -94,3 +94,13 @@ def test_activity_maps_pipeline_steps_to_agents(tmp_path, monkeypatch):
     assert a["agent"] == "technical" and a["step"] == 5 and a["steps"] == 9 and "technical (4 of 7)" in a["label"]
     log.write_text("__STEP__ 5/9 Running the agents\nloading\n")
     assert jobs.activity()["agent"] == "fetch"
+
+
+def test_market_report_runs_nightly_only_when_auto_is_on(tmp_path, monkeypatch):
+    from core import config as C
+    from research import market_report as MR
+    from web import api
+    monkeypatch.setattr(C, "DATA", tmp_path)
+    assert MR.auto_on() is False                                                     # default: on demand
+    assert api.ROUTES[("POST", "report/auto")](None, {"on": True})["on"] and MR.auto_on()
+    assert api.ROUTES[("GET", "report/auto")]({})["on"]

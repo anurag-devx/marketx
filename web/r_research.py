@@ -616,3 +616,24 @@ def news_research(_):
         secs.append(table("Does the direction of the headline predict what follows?", t, {"mean_abnormal_pct": "spct2", "t": "num1"}, tools=False,
                           note="Tone comes from explicit direction phrases in the headline. A continuing move on days 1–20 is the tradable part."))
     return dict(status=status, sections=secs)
+
+
+@route("GET", "report/auto")
+def report_auto_get(_):
+    from research.market_report import auto_on
+    return dict(on=auto_on())
+
+
+@route("POST", "report/auto")
+def report_auto_set(_, body):
+    """Nightly market report: on = written in Fetch + run all; off = only when you click Write report."""
+    import json
+    from core import config as C, atomic
+    f = C.DATA / "auto_jobs.json"
+    try:
+        cur = json.loads(f.read_text())
+    except (OSError, ValueError):
+        cur = {}
+    cur["market_report"] = bool((body or {}).get("on"))
+    atomic.write_text(f, json.dumps(cur, indent=1))
+    return dict(on=cur["market_report"])

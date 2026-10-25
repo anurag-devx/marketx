@@ -43,9 +43,10 @@ COMMANDS = {
     "screener-experiments-force": [[PY, "-u", "-m", "screener", "experiments", "--force"]],
     "pipeline": [[PY, "-u", "pipeline.py", "all"]],
     "fetch+pipeline": [[PY, "-u", "fetch_angel.py"], [PY, "-u", "news_fetch.py"], [PY, "-u", "-m", "core.announcements"],
-                       [PY, "-u", "-m", "core.fundamentals"], [PY, "-u", "-m", "research.earnings"], [PY, "-u", "-m", "core.derivatives"], [PY, "-u", "-m", "core.macro"], [PY, "-u", "pipeline.py", "all"], [PY, "-u", "-m", "research.macro_impact"],
-                       [PY, "-u", "-m", "research.market_report"], [PY, "-u", "-m", "debate.batch"], [PY, "-u", "-m", "debate.evaluate"],
+                       [PY, "-u", "-m", "core.fundamentals"], [PY, "-u", "-m", "research.earnings"], [PY, "-u", "-m", "core.derivatives"], [PY, "-u", "-m", "core.macro"], [PY, "-u", "pipeline.py", "all"],
+                       [PY, "-u", "-m", "research.market_report", "--if-auto"],     # written only when auto is on (Market news → Report)
                        [PY, "-u", "-m", "marketlab"], [PY, "-u", "-m", "core.intraday", "update"]],
+    # dropped from the nightly run (on demand only): macro impact study, Debate batch + evaluation (Labs)
     "announcements": [[PY, "-u", "news_fetch.py"], [PY, "-u", "-m", "core.announcements"]],
     "backtest": [[PY, "-u", "backtest.py"], [PY, "-u", "strategy_research.py"], [PY, "-u", "analysis.py"]],
     "analysis": [[PY, "-u", "analysis.py"]],
