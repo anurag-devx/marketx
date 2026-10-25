@@ -29,8 +29,11 @@ def tradeplan(p):
         pass
     pats = [dict(x, meaning=x.get("meaning") or PT.meaning(x.get("pattern"), x.get("direction"))) for x in e.get("patterns", [])]
     candles = PT.describe_candles(g[g.date <= pd.Timestamp(saved["day"])]) if len(g) > 6 else []
+    from tradeplan import evidence as EV
+    g260 = px[(px.symbol == sym) & (px.date <= pd.Timestamp(saved["day"]))].sort_values("date").tail(260) if px is not None else pd.DataFrame()
+    ev = EV.evidence(g260, pats, e[mode].get("levels")) if len(g260) >= 30 else None
     return dict(base, ready=True, day=saved["day"], plan=e[mode], patterns=pats, patterns_source=saved.get("patterns_source"), bars=bars, summary=summary,
-                ta=e.get("ta"), candles=candles, fund=_fund(sym, saved["day"], g, e.get("fund")))
+                ta=e.get("ta"), evidence=ev, candles=candles, pattern_test=(PT.load_stats() or {}).get("meta"), fund=_fund(sym, saved["day"], g, e.get("fund")))
 
 
 def _fund(sym, day, g, label):
@@ -72,6 +75,14 @@ def _facts(sym, mode, saved, px=None):
         r = r.iloc[0]
         verdict = dict(chance_pct=round(100 * float(r[f"ch_{m}_1.0"])), usual_pct=round(100 * float(r[f"us_{m}_1.0"])), lean=e[mode]["lean"])
     f = AG.facts(sym, mode, e[mode], e.get("patterns", []), g, verdict)
+    try:
+        from tradeplan import evidence as EV
+        g260 = px[(px.symbol == sym) & (px.date <= pd.Timestamp(saved["day"]))].sort_values("date").tail(260)
+        ev = EV.evidence(g260, e.get("patterns", []), e[mode].get("levels"))
+        f["ta_evidence"] = [dict(id=x["id"], group=x["group"], metric=x["metric"], value=x["value"], verdict=x["verdict"], reason=x["reason"]) for x in ev["checks"]]
+        f["ta_evidence_read"] = dict(direction=ev["dir"], net=ev["net"], up_checks=ev["up"], down_checks=ev["down"])
+    except Exception:
+        pass
     if e.get("ta"):
         f["second_opinion_chart"] = {k: e["ta"].get(k) for k in ("dir", "setup", "why")}
     if e.get("fund"):

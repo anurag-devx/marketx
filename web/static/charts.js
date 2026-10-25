@@ -44,7 +44,7 @@
     const lows = opt.mode === "candle" ? bars.l : bars.c, highs = opt.mode === "candle" ? bars.h : bars.c;
     let lo = Infinity, hi = -Infinity;
     for (let i = 0; i < n; i++) { lo = Math.min(lo, lows[i]); hi = Math.max(hi, highs[i]);
-      for (const s of [bars.sma50, bars.sma200, bars.vwap]) if (s && s[i] != null) { lo = Math.min(lo, s[i]); hi = Math.max(hi, s[i]); } }
+      for (const s of [bars.sma20, bars.sma50, bars.sma200, bars.vwap]) if (s && s[i] != null) { lo = Math.min(lo, s[i]); hi = Math.max(hi, s[i]); } }
     (opt.levels || []).forEach((lv) => { if (lv.fit && lv.price != null) { lo = Math.min(lo, lv.price); hi = Math.max(hi, lv.price); } });
     const pad = (hi - lo) * 0.05; lo -= pad; hi += pad;
     const x = (i) => padL + ((i + 0.5) / n) * (W - padL - padR);
@@ -101,7 +101,7 @@
       const pts = s.map((v, i) => v == null ? null : `${x(i)},${y(v)}`).filter(Boolean).join(" ");
       if (pts) el("polyline", { points: pts, fill: "none", stroke: col, "stroke-width": 1.2, "stroke-dasharray": dash || "" }, svg);
     };
-    sma(bars.sma50, "#f59e0b"); sma(bars.sma200, css("--faint"), "4 3"); if (bars.vwap) { let seg = [];                      // VWAP restarts each day: one line per day
+    sma(bars.sma20, "#3b82f6"); sma(bars.sma50, "#f59e0b"); sma(bars.sma200, css("--faint"), "4 3"); if (bars.vwap) { let seg = [];                      // VWAP restarts each day: one line per day
       const flush = () => { if (seg.length) el("polyline", { points: seg.join(" "), fill: "none", stroke: "#0ea5e9", "stroke-width": 1.4 }, svg); seg = []; };
       bars.vwap.forEach((v, i) => { if (i && bars.t[i].slice(0, 10) !== bars.t[i - 1].slice(0, 10)) flush(); if (v != null) seg.push(`${x(i)},${y(v)}`); }); flush(); }
     const pick = (c) => c === "up" ? up : c === "down" ? down : c === "faint" ? css("--faint") : c === "blue" ? "#0ea5e9" : c && c[0] === "#" ? c : acc;

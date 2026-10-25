@@ -49,7 +49,7 @@
     if (show.patterns) {
       (d.patterns || []).forEach((pt) => { const i = b.t.indexOf(pt.date); if (i < 0) return;
         const bull = pt.direction === "bullish", bear = pt.direction === "bearish";
-        marks.push({ i, price: bear ? b.h[i] : b.l[i], dir: bear ? "down" : "up", color: bull ? "up" : bear ? "down" : "faint", label: pt.label }); });
+        marks.push({ i, price: bear ? b.h[i] : b.l[i], dir: bear ? "down" : "up", color: bull ? "up" : bear ? "down" : "faint", label: pt.strength && pt.strength !== "neutral" ? `${pt.label} (${pt.strength})` : pt.label }); });
     }
     return { mode: "candle", height: 420, levels, zones, marks };
   }
@@ -60,11 +60,14 @@
   function extra(d) {
     const ta = d.ta || {}, f = d.fund || {}, v = f.val || {}, q = f.quarter, lab = f.label || {};
     const kv = (k, x) => `<dt>${k}</dt><dd>${x ?? "—"}</dd>`;
-    return `<div class="grid g3 section">
-      <div class="card"><div class="ct"><h2>Chart read</h2><span class="aside">${ar(ta.dir)}</span></div>
-        <ul class="small" style="margin:0;padding-left:18px">${(ta.why || []).map((x) => `<li>${esc(x)}</li>`).join("")}</ul>
+    const ev = d.evidence;
+    const vIcon = (v) => v > 0 ? `<b class="up">▲</b>` : v < 0 ? `<b class="down">▼</b>` : `<span class="muted">•</span>`;
+    const evHtml = ev ? `<div class="card section"><div class="ct"><h2>TA evidence: what was checked</h2><span class="aside">${ar(ev.dir)} · ${ev.up} up · ${ev.down} down · net ${ev.net >= 0 ? "+" : ""}${ev.net}</span></div>
+        <div class="row" style="gap:8px;flex-wrap:wrap;margin-bottom:8px">${Object.entries(ev.by_group).filter(([, x]) => x.n).map(([g, x]) => `<span class="tag">${esc(g)}: <span class="up">▲${x.up}</span> <span class="down">▼${x.down}</span> of ${x.n}</span>`).join("")}</div>
+        ${MX.table(ev.checks, [["id", "#"], ["group", "Group", "tag"], ["metric", "Check"], ["value", "Value"], ["verdict", "Read", (v) => vIcon(v)], ["reason", "Why", (v) => `<span class="small">${esc(v)}</span>`], ["rule", "Rule", (v) => `<span class="muted small">${esc(v)}</span>`]])}
         ${ta.setup ? `<p class="small" style="margin:6px 0 0">Setup: <b>${esc(ta.setup)}</b></p>` : ""}
-        <p class="muted small" style="margin:6px 0 0">A label, not tested yet: Market Lab → Review shows whether it helps.</p></div>
+        <p class="muted small" style="margin:6px 0 0">Read = net of all checks (≥ +3 ▲, ≤ −3 ▼). Chart below: blue 20-day, orange 50-day, grey dashed 200-day average; RSI and MACD panels under it. A label, not tested yet: Market Lab → Review shows whether it helps.</p></div>` : "";
+    return evHtml + `<div class="grid g2 section">
       <div class="card"><div class="ct"><h2>Fundamentals</h2><span class="aside">${ar(lab.dir)}</span></div>
         <dl class="kv">${kv("Market cap", cr(v.market_cap_cr))}${kv("P/E (12 months)", v.pe == null ? "—" : num(v.pe, 1))}${kv("P/B", v.pb == null ? "—" : num(v.pb, 1))}
           ${kv("ROE", v.roe_pct == null ? "—" : `${num(v.roe_pct, 1)}%`)}${kv("Debt / equity", v.debt_to_equity == null ? "—" : num(v.debt_to_equity, 2))}${kv("Net debt", cr(v.net_debt_cr))}
@@ -85,19 +88,30 @@
       const taHtml = d.talib.ok ? `<p class="muted small">TA-Lib ${esc(d.talib.version)} installed.</p>`
         : `<p class="muted small">TA-Lib isn't installed: using MarketX's built-in patterns. <button class="btn small" id="tpi">Install TA-Lib (optional)</button></p>`;
       if (!d.ready) { b.innerHTML = note(esc(d.why), "warn") + taHtml; $("#tpi", host)?.addEventListener("click", () => startJob("talib-install")); return; }
-      b.innerHTML = card(d) + `<div class="card section"><div class="ct"><h2>Chart: last 45 sessions with the next session's plan</h2><span class="aside muted small">tags on the right · green zone = entry to target · red zone = entry to stop <button class="btn small" id="tpsv">Save to workspace</button> <button class="btn small primary" id="tppt">Paper take</button></span></div><div id="tpc"></div>
+      b.innerHTML = card(d) + `<div class="card section"><div class="ct"><h2>Chart: last 45 sessions with the next session's plan</h2><span class="aside muted small">tags on the right · green zone = entry to target · red zone = entry to stop <button class="btn small" id="tpsv">Save to workspace</button> <button class="btn small primary" id="tppt">Paper take</button></span></div><div id="tpc"></div><div class="muted small" style="margin:6px 0 0">RSI(14) · 30 / 70 lines</div><div id="tprsi"></div><div class="muted small">MACD histogram</div><div id="tpmacd"></div>
         <div class="legend"><span><i style="background:var(--up)"></i>entries</span><span><i style="background:var(--down)"></i>stop</span><span><i style="background:#0ea5e9"></i>targets</span><span><i style="background:var(--faint)"></i>pivot / R1 / S1 / 20-day high-low</span><span>▲▼ candle patterns</span></div></div>
         <div class="grid g2 section"><div class="card"><div class="ct"><h2>Legs</h2></div>${MX.table(d.plan.legs.map((x) => ({ ...x, pct: x.share == null ? null : 100 * x.share })), [["leg", "Leg", "tag"], ["side", "Side"], ["price", "Price", "inr"], ["pct", "Share %", "pct0"], ["shares", "Shares", "int"], ["condition", "When", (v) => `<span class="small">${esc(v)}</span>`]])}</div>
           <div class="card"><div class="ct"><h2>Candle patterns (last 5 sessions)</h2><span class="aside muted small">${esc(d.patterns_source || "")}</span></div>
-            ${d.patterns.length ? MX.table(d.patterns, [["date", "Date", "date"], ["label", "Pattern", (v, r) => `<b class="${r.direction === "bullish" ? "up" : r.direction === "bearish" ? "down" : "muted"}">${r.direction === "bullish" ? "▲" : r.direction === "bearish" ? "▼" : "•"} ${esc(v)}</b>`],
+            ${d.patterns.length ? MX.table(d.patterns, [["date", "Date", "date"], ["label", "Pattern", (v, r) => `<b class="${r.direction === "bullish" ? "up" : r.direction === "bearish" ? "down" : "muted"}">${r.direction === "bullish" ? "▲" : r.direction === "bearish" ? "▼" : "•"} ${esc(v)}</b><div class="muted small">${esc(r.kind || "")}</div>`],
+              ["strength", "Strength", (v) => v ? `<span class="tag">${esc(v)}</span>` : "—"],
+              ["checks", "Reading rules", (v) => !v ? "—" : `<span class="small" style="white-space:nowrap">${[["trend", "trend"], ["location", "at level"], ["volume", "volume"], ["confirmed", "confirmed"]].map(([k, l]) => `${v[k] === true ? "✓" : v[k] === false ? "✗" : "…"} ${l}`).join("<br>")}</span>`],
+              ["tested", "Tested on 10 years", (t) => !t ? `<span class="muted small">not tested yet</span>` : `<span class="small">${num(100 * t.win5, 0)}% its way in 5 days vs ${num(100 * t.base5, 0)}% normal<br>n=${num(t.n, 0)} · <b class="${t.verdict === "edge" ? "up" : t.verdict === "against" ? "down" : "muted"}">${esc(t.verdict)}</b></span>`],
               ["meaning", "What it means", (v) => `<span class="small">${esc(v || "")}</span>`]]) : `<p class="muted">None in the last 5 sessions.</p>`}
+            <p class="muted small">Strength: how many reading rules hold (prior trend, at a support / resistance level, heavy volume, next candle confirms): 3–4 strong, 2 medium, 0–1 weak. "…" = the next candle isn't in yet.
+            ${d.pattern_test ? `History test: ${esc(d.pattern_test.events.toLocaleString())} patterns on ${d.pattern_test.stocks} stocks, ${esc(d.pattern_test.first)}–${esc(d.pattern_test.last)} (${esc(d.pattern_test.source)}).` : `<button class="btn small" id="tppst">Test patterns on 10 years of history (~2 min)</button>`}</p>
             <p class="muted small">Patterns are hints until tested on history (Trade plan step 3).</p>
             ${taHtml}</div></div>`;
       b.insertAdjacentHTML("beforeend", extra(d));
       const N = 45, cut = (a) => a.slice(-N), bb = { t: cut(d.bars.t), o: cut(d.bars.o), h: cut(d.bars.h), l: cut(d.bars.l), c: cut(d.bars.c), v: cut(d.bars.v), sma50: null, sma200: null };
-      const draw = () => { if (document.body.contains(host) && $("#tpc", host)) MXCharts.priceChart($("#tpc", host), bb, chartSpec({ ...d, bars: bb })); };
+      if (d.evidence) { const S = d.evidence.series, ix = new Map(S.t.map((t, i) => [t, i])), pick = (k) => bb.t.map((t) => ix.has(t) ? S[k][ix.get(t)] : null);
+        bb.sma20 = pick("sma20"); bb.sma50 = pick("sma50"); bb.sma200 = pick("sma200"); bb.rsi = pick("rsi"); bb.mh = pick("macd_hist"); }
+      const draw = () => { if (!document.body.contains(host) || !$("#tpc", host)) return;
+        MXCharts.priceChart($("#tpc", host), bb, chartSpec({ ...d, bars: bb }));
+        if (bb.rsi) { MXCharts.lineChart($("#tprsi", host), { x: bb.t, height: 110, hlines: [30, 70], series: [{ name: "RSI(14)", y: bb.rsi, color: "#8b5cf6" }] });
+          MXCharts.lineChart($("#tpmacd", host), { x: bb.t, height: 90, zero: true, hlines: [0], series: [{ name: "MACD hist", y: bb.mh, color: "#0ea5e9" }] }); } };
       requestAnimationFrame(draw); window.addEventListener("mx-resize", draw);
       $("#tpi", host)?.addEventListener("click", () => startJob("talib-install"));
+      $("#tppst", host)?.addEventListener("click", () => startJob("pattern-test"));
       const pBtn = $("#tppt", host);
       const pSet = (on) => { if (pBtn) { pBtn.textContent = on ? "✓ Paper taken (undo)" : "Paper take"; pBtn.classList.toggle("primary", !on); } };
       api("tradeplan/paper").then((r) => pSet(r.items.some((x) => x.symbol === symbol && x.mode === mode && x.day === d.day))).catch(() => {});

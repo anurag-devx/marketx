@@ -90,3 +90,20 @@ def test_paper_take_toggles_and_shows_in_review(tmp_path, monkeypatch):
     monkeypatch.setattr(RV2, "load", lambda kind, name: calls if name == "calls" else g if name == "plans_grade" else pd.DataFrame())
     r = api.ROUTES[("GET", "marketlab/review")]({"kind": "live", "move": "oc", "size": "1"})
     assert r["paper"]["done"] == 1 and r["paper"]["pnl_rs"] == 1500 and r["paper"]["avg_r"] == 1.5
+
+
+def test_evidence_lists_every_check_and_reads_a_clean_uptrend_as_up():
+    from tradeplan import evidence as EV
+    n = 260
+    c = 100 * 1.003 ** np.arange(n) * (1 + 0.004 * np.sin(np.arange(n)))           # steady uptrend with wiggles
+    g = pd.DataFrame({"date": pd.bdate_range("2025-10-01", periods=n), "open": c * 0.998, "high": c * 1.01, "low": c * 0.99, "close": c,
+                      "volume": np.where(np.diff(np.r_[c[0], c]) > 0, 2000.0, 1000.0)})
+    ev = EV.evidence(g, [dict(date=str(g.date.iat[-1].date()), label="Hammer", pattern="hammer", direction="bullish", meaning="m")])
+    ids = [x["id"] for x in ev["checks"]]
+    assert ids[:12] == [f"E{i}" for i in range(1, 13)] and ids[-1] == "E13"
+    assert ev["dir"] == "up" and ev["net"] >= EV.NET_MIN and all(set(x) >= {"metric", "value", "rule", "verdict", "reason"} for x in ev["checks"])
+    assert len(ev["series"]["rsi"]) == 120 and ev["series"]["sma200"][-1] is not None
+    down = g.assign(close=g.close[::-1].to_numpy(), open=g.open[::-1].to_numpy(), high=g.high[::-1].to_numpy(), low=g.low[::-1].to_numpy())
+    assert EV.evidence(down)["dir"] == "down"
+    t = TP.ta_view(lv(close=float(c[-1]), hi20=float(c[-1]) + 1), [], g)
+    assert t["dir"] == "up" and t["why"][0].startswith("E1 ▲")

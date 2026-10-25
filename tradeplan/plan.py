@@ -131,9 +131,18 @@ def plan_for(lv, verdict, spread, mode, account, risk_cfg, open_positions=0, sec
     return out
 
 
-def ta_view(lv, patterns):
+def ta_view(lv, patterns, g=None):
     """Second opinion from the chart (daily levels + candle patterns of the last 2 sessions). Labels only: untested until
     Market Lab → Review grades them. dir: up / down / neutral (score of 4 simple checks, |score| >= 2 counts)."""
+    if g is not None and len(g) >= 30:                     # the full evidence (tradeplan/evidence.py)
+        from . import evidence as EV
+        ev = EV.evidence(g, patterns, lv)
+        atr_ = lv["atr"] or np.nan
+        c = lv["close"]
+        setup = ("near the 20-day high" if (lv["hi20"] - c) <= 0.5 * atr_ else "near the 20-day low" if (c - lv["lo20"]) <= 0.5 * atr_
+                 else "tight 5-day range" if (lv["hi5"] - lv["lo5"]) <= 2.5 * atr_ else None)
+        return dict(dir=ev["dir"], score=ev["net"], up=ev["up"], down=ev["down"], setup=setup,
+                    why=[f"{x['id']} {'▲' if x['verdict'] > 0 else '▼' if x['verdict'] < 0 else '•'} {x['reason']}" for x in ev["checks"]])
     c, why, score = lv["close"], [], 0
     for ok, up, dn in ((c > lv["sma20"], "above the 20-day average", "below the 20-day average"),
                        (lv.get("sma50") is not None and lv["sma20"] > lv["sma50"], "20-day average above the 50-day", "20-day average below the 50-day"),
@@ -214,7 +223,7 @@ def build(day, rd, sp, px=None):
         lv = levels(g)
         pats, src = PT.recent(g.reset_index(drop=True), days=5)
         out["patterns_source"] = src
-        entry = {"patterns": pats, "ta": ta_view(lv, pats), "fund": fund_view(quarters, r.symbol, day)}
+        entry = {"patterns": pats, "ta": ta_view(lv, pats, g.tail(260)), "fund": fund_view(quarters, r.symbol, day)}
         sec_n = int((pos.get("sector", pd.Series(dtype=str)) == r.sector).sum()) if len(pos) else 0
         for mode, cfg in MODES.items():
             m, s = cfg["move"], 1.0
