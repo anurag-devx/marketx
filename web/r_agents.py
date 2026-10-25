@@ -10,10 +10,9 @@ ANALYSIS = C.RESULTS / "analysis"
 
 
 def _agents_meta():
-    """The agent descriptions (kept in ui/common.py); read without importing Streamlit."""
-    src = (C.BASE / "ui" / "common.py").read_text()
-    start = src.index("AGENTS = [") + len("AGENTS = ")
-    return eval(src[start:src.index("\n]\n", start) + 2], {"__builtins__": {}, "dict": dict})   # our own file: a list of dict(...) literals
+    """The agent descriptions (core/agents_meta.py)."""
+    from core.agents_meta import AGENTS
+    return AGENTS
 
 
 def _df_cols(d, fmt=None):

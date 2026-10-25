@@ -126,7 +126,7 @@
       const d = await api(`stock?symbol=${encodeURIComponent(symb)}`);
       const i = d.info, b = d.bars;
       el.innerHTML = head(esc(i.company), `${esc(i.symbol)} · ${esc(i.sector || "")} · last bar ${day(i.last_date, { weekday: "short", day: "numeric", month: "short" })}`,
-        `<a class="btn" href="#/debate/${encodeURIComponent(i.symbol)}">Debate this stock</a>`) +
+        `<a class="btn primary" href="#/desk/${encodeURIComponent(i.symbol)}" target="_blank" rel="noopener">Open in Stock Desk ↗</a> <a class="btn" href="#/debate/${encodeURIComponent(i.symbol)}">Debate this stock</a>`) +
         `<div class="quote"><span class="px">${inr(i.close)}</span><span class="chg ${cls(i.chg)}">${pct(i.chg, 2)}</span><span class="muted">on the day</span></div>
         <div class="card flush" style="margin-top:16px"><div class="facts">
           <div><div class="k">1 month</div><div class="v ${cls(i.r1m)}">${pct(i.r1m)}</div></div>

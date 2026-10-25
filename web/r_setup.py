@@ -329,6 +329,15 @@ def _history():
     except Exception:
         pass
     try:
+        from tradeplan import patterns as PT
+        st = PT.load_stats()
+        m = (st or {}).get("meta") or {}
+        rows.append(dict(label="Candle pattern test", frac=1.0 if st else 0.0, job="pattern-test", button="Run test" if not st else "Re-run",
+                         detail=(f"{m.get('events', 0):,} patterns on {m.get('stocks', 0)} stocks, {m.get('first', '')}–{m.get('last', '')} · {m.get('built', '')[:10]}" if st else "not run yet"),
+                         help="How often each candle pattern was followed by a move its way, on 10 years of Nifty 500 history. Shown in the TA workspace. About a minute."))
+    except Exception:
+        pass
+    try:
         from core import intraday as ID
         sm = ID.summary()
         n_uni = max(1, len(ID.universe()))

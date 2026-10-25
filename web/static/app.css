@@ -373,3 +373,42 @@ details.fold > .card, details.fold > div { border: 0; margin: 0; }
 .tp-badge.short .act { color: var(--down); }
 .tp-badge.off { opacity: .55; filter: grayscale(.6); }
 .tp-nt { font-weight: 700; color: var(--muted); }
+
+/* TA workspace */
+.taw { display: grid; grid-template-columns: 290px minmax(0, 1fr) 330px; gap: 14px; align-items: start; }
+@media (max-width: 1250px) { .taw { grid-template-columns: 1fr; } }
+.taw-left { position: sticky; top: 70px; max-height: calc(100vh - 90px); overflow: auto; }
+.ev-row { padding: 6px 8px; border-radius: 8px; cursor: pointer; font-size: 13px; border: 1px solid transparent; }
+.ev-row:hover { background: var(--surface-2, rgba(127,127,127,.08)); }
+.ev-row.on { border-color: var(--accent); background: var(--accent-soft); }
+.taw-panel { border: 2px solid transparent; border-radius: 8px; padding: 2px 4px; margin-top: 6px; }
+.taw-panel.hl { border-color: var(--accent); }
+.lchips { display: inline-flex; gap: 6px; }
+.lchip { border: 1px solid var(--line); background: var(--surface); color: var(--muted); border-radius: 999px; padding: 3px 10px; font-size: 12.5px; cursor: pointer; text-decoration: line-through; }
+.lchip.on { background: var(--accent-soft); color: var(--accent-ink); border-color: var(--accent); text-decoration: none; font-weight: 600; }
+/* running jobs: one compact button, all jobs in a dropdown */
+.jobs-wrap { position: relative; display: inline-flex; }
+.jobs-btn { cursor: pointer; gap: 8px; }
+.jobs-btn .bar { width: 70px; }
+.jobs-dd { position: absolute; right: 0; top: calc(100% + 6px); z-index: 60; background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(0,0,0,.25); padding: 8px; min-width: 520px; max-width: 80vw; display: flex; flex-direction: column; gap: 8px; }
+.jobs-dd .jobrow { display: flex; align-items: center; gap: 8px; }
+.evlink { background: none; border: 0; padding: 0; font: inherit; color: var(--accent); cursor: pointer; text-decoration: underline; }
+
+/* Stock Desk */
+.dk-wrap { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 16px; align-items: start; }
+@media (max-width: 1200px) { .dk-wrap { grid-template-columns: 1fr; } }
+.dk-side { position: sticky; top: 70px; max-height: calc(100vh - 90px); overflow: auto; }
+.dk-tb { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 6px; }
+.dk-ed { min-height: 220px; max-height: 50vh; overflow: auto; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font-size: 13.5px; line-height: 1.5; background: var(--surface); }
+.dk-ed:focus { outline: 2px solid var(--accent-soft); }
+.dk-ed .pin, .pin { background: var(--accent-soft); color: var(--accent-ink); border-radius: 6px; padding: 1px 6px; font-size: 12.5px; }
+.dk-dec { border-top: 1px solid var(--line); padding: 6px 0; }
+.dk-r { margin: 0 0 6px; }
+.dkpin { padding: 0 6px; }
+
+/* suggestions under any search box (MX.suggest) */
+.sugg-wrap { position: relative; display: inline-flex; min-width: 0; }
+.sugg-wrap > .in, .sugg-wrap > textarea { width: 100%; }
+.qres.sugg { top: calc(100% + 4px); right: auto; min-width: 100%; max-width: 560px; }
+.qres.sugg span { white-space: normal; }

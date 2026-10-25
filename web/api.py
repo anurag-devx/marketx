@@ -164,7 +164,7 @@ JOB_LABEL = {"strategy-research": "Strategy research", "screener-experiments": "
              "announcements": "Fetch news and filings", "fundamentals": "Update quarterly results",
              "fundamentals-backfill": "Download results history", "macro-all": "Fetch macro data + study", "market-report": "Write market report",
              "debate-batch": "Nightly forecasts", "backtest": "Run backtest + analysis", "screener": "Run screener",
-             "shareholding": "Download shareholding patterns", "fo": "Update F&O data", "fo-backfill": "Download F&O history", "kronos-install": "Install Kronos", "kronos-forecast": "Kronos forecasts", "kronos-replay": "Kronos replay", "intraday": "Download 5-minute bars", "intraday-probe": "Check Angel's intraday history", "market-lab": "Market Lab radar", "market-lab-test": "Market Lab Scorecard test", "market-lab-replay": "Market Lab replay (past days)", "pattern-test": "Test candle patterns on history", "talib-install": "Install TA-Lib (optional)", "search-compact": "Compact the search database", "fundamentals-balance": "Read balance sheets and cash flow"}
+             "shareholding": "Download shareholding patterns", "fo": "Update F&O data", "fo-backfill": "Download F&O history", "kronos-install": "Install Kronos", "kronos-forecast": "Kronos forecasts", "kronos-replay": "Kronos replay", "intraday": "Download 5-minute bars", "intraday-probe": "Check Angel's intraday history", "market-lab": "Market Lab radar", "market-lab-test": "Market Lab Scorecard test", "market-lab-replay": "Market Lab replay (past days)", "pattern-test": "Test candle patterns on history", "desk-analyse": "Stock Desk: analyse", "talib-install": "Install TA-Lib (optional)", "search-compact": "Compact the search database", "fundamentals-balance": "Read balance sheets and cash flow"}
 STARTABLE = set(jobs.COMMANDS)                # only the fixed commands in core/jobs.py; arguments are dates and flags only
 
 
@@ -213,6 +213,55 @@ def search(p):
     m = u[u.Symbol.str.lower().str.startswith(term) | u["Company Name"].str.lower().str.contains(term, regex=False)]
     m = m.assign(_exact=(m.Symbol.str.lower() == term)).sort_values(["_exact", "Symbol"], ascending=[False, True]).head(12)
     return [dict(symbol=r.Symbol, company=r["Company Name"], sector=r.Industry) for _, r in m.iterrows()]
+
+
+THEMES = ["PSU banks", "private banks", "NBFC", "IT services", "pharma", "auto", "EV", "cement", "steel", "metals", "FMCG", "realty", "power", "defence",
+          "railways", "capital goods", "chemicals", "telecom", "oil & gas", "crude oil", "Red Sea", "tariffs", "RBI policy", "monsoon", "FII flows",
+          "results", "order win", "buyback", "dividend", "block deal", "rating upgrade", "rupee", "inflation", "budget", "China", "US Fed"]
+
+
+@route("GET", "suggest")
+def suggest(p):
+    """Search suggestions. kinds: stocks · sectors (NSE industries, sector indices, themes) · tags (Stock Desk notes and saved charts) · desk (stocks with notes)."""
+    term = str(p.get("q", "")).strip().lower()
+    kinds = [k for k in str(p.get("kinds", "stocks")).split(",") if k]
+    out = []
+    if "stocks" in kinds and term:
+        out += [dict(value=r["symbol"], label=r["symbol"], sub=f"{r['company']} · {r['sector']}", kind="stock") for r in search({"q": term})[:8]]
+    if "sectors" in kinds:
+        u = universe()
+        names = sorted(set(u.Industry.dropna().astype(str))) + THEMES
+        try:
+            from core.indices import INDICES
+            names += [k.replace("nifty_", "Nifty ").replace("_", " ").title() for k in INDICES]
+        except Exception:
+            pass
+        out += [dict(value=n, label=n, sub="sector / theme", kind="sector") for n in dict.fromkeys(names) if term and term in n.lower()][:8]
+    if "tags" in kinds or "desk" in kinds:
+        tags, syms = set(), set()
+        try:
+            from desk.analyse import DIR
+            for f in DIR.glob("*/notes.json"):
+                n = json.loads(f.read_text())
+                tags |= set(n.get("tags", []))
+                if n.get("html") or n.get("decisions"):
+                    syms.add(f.parent.name)
+            from web.r_workspace import _load as ws_load
+            for x in ws_load():
+                tags |= set(x.get("tags", []))
+                syms.add(x.get("symbol", ""))
+        except Exception:
+            pass
+        if "tags" in kinds:
+            out += [dict(value=t, label=t, sub="tag", kind="tag") for t in sorted(tags) if not term or term in t.lower()][:8]
+        if "desk" in kinds:
+            out += [dict(value=s, label=s, sub="has notes / saved charts", kind="stock") for s in sorted(syms) if s and (not term or s.lower().startswith(term))][:8]
+    seen, res = set(), []
+    for x in out:
+        if (x["kind"], x["value"]) not in seen:
+            seen.add((x["kind"], x["value"]))
+            res.append(x)
+    return res[:14]
 
 
 # ---------------- overview ----------------
@@ -504,4 +553,4 @@ def _stock_news(sym, n=40):
 
 
 # route modules register themselves on import
-from web import r_today, r_screener, r_agents, r_research, r_tools, r_setup, r_kronos, r_help, r_marketlab, r_review, r_tradeplan, r_workspace  # noqa: E402,F401
+from web import r_today, r_screener, r_agents, r_research, r_tools, r_setup, r_kronos, r_help, r_marketlab, r_review, r_tradeplan, r_workspace, r_desk  # noqa: E402,F401

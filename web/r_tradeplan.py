@@ -18,7 +18,8 @@ def tradeplan(p):
         return dict(base, ready=False, why="No plan for this stock yet: it's built with tonight's Market Lab radar (Market Lab → Scorecard → Build tonight's radar).")
     e = saved["plans"][sym]
     px = prices()
-    g = px[px.symbol == sym].sort_values("date").tail(90) if px is not None else pd.DataFrame()
+    nb = max(30, min(250, int(p.get("bars", 90))))
+    g = px[px.symbol == sym].sort_values("date").tail(nb) if px is not None else pd.DataFrame()
     bars = dict(t=g.date.dt.strftime("%Y-%m-%d").tolist(), o=g.open.round(2).tolist(), h=g.high.round(2).tolist(), l=g.low.round(2).tolist(),
                 c=g.close.round(2).tolist(), v=g.volume.astype(float).tolist()) if len(g) else None
     from tradeplan import agent as AG
@@ -27,10 +28,13 @@ def tradeplan(p):
         summary = AG.template(_facts(sym, mode, saved, px))
     except Exception:
         pass
-    pats = [dict(x, meaning=x.get("meaning") or PT.meaning(x.get("pattern"), x.get("direction"))) for x in e.get("patterns", [])]
     candles = PT.describe_candles(g[g.date <= pd.Timestamp(saved["day"])]) if len(g) > 6 else []
     from tradeplan import evidence as EV
     g260 = px[(px.symbol == sym) & (px.date <= pd.Timestamp(saved["day"]))].sort_values("date").tail(260) if px is not None else pd.DataFrame()
+    try:                                                      # live: always graded with the current rules and the history test
+        pats, _ = PT.recent(g260.reset_index(drop=True), days=5)
+    except Exception:
+        pats = [dict(x, meaning=x.get("meaning") or PT.meaning(x.get("pattern"), x.get("direction"))) for x in e.get("patterns", [])]
     ev = EV.evidence(g260, pats, e[mode].get("levels")) if len(g260) >= 30 else None
     return dict(base, ready=True, day=saved["day"], plan=e[mode], patterns=pats, patterns_source=saved.get("patterns_source"), bars=bars, summary=summary,
                 ta=e.get("ta"), evidence=ev, candles=candles, pattern_test=(PT.load_stats() or {}).get("meta"), fund=_fund(sym, saved["day"], g, e.get("fund")))

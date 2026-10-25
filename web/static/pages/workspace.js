@@ -27,6 +27,7 @@
     const refilter = () => { const q = $("#wq", el).value.toLowerCase(), s = $("#ws", el).value;
       draw(d.items.filter((x) => (!s || x.status === s) && (!q || `${x.symbol} ${x.title} ${x.tags.join(" ")}`.toLowerCase().includes(q)))); };
     $("#wq", el).addEventListener("input", refilter); $("#ws", el).addEventListener("change", refilter);
+    MX.suggest($("#wq", el), { kinds: "desk,tags", recent: "charts", onPick: refilter });
     draw(d.items);
   }
 

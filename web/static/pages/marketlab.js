@@ -89,13 +89,14 @@
 
   async function stockTab(b) {
     if (!st.sym) { b.innerHTML = note("Pick a stock in the Move Radar, or type one:") + `<div class="row section"><input class="in" id="mls" placeholder="e.g. TCS"><button class="btn primary" id="mlgo">Open</button></div>`;
-      $("#mlgo", b).addEventListener("click", () => { st.sym = $("#mls", b).value.trim().toUpperCase(); save(); stockTab(b); }); return; }
+      $("#mlgo", b).addEventListener("click", () => { st.sym = $("#mls", b).value.trim().toUpperCase(); save(); stockTab(b); });
+      MX.suggest($("#mls", b), { kinds: "stocks", recent: "stock", onPick: (r) => { st.sym = r.value; save(); stockTab(b); } }); return; }
     b.innerHTML = spinner(`Loading ${st.sym} …`);
     let d;
     try { d = await api(`marketlab/stock?${qs({ symbol: st.sym, move: st.move, size: st.size })}`); }
     catch (e) { b.innerHTML = note(esc(e.message), "warn"); return; }
     const v = d.verdict;
-    b.innerHTML = `<div class="row" style="justify-content:space-between"><div><h2 style="margin:0">${esc(d.symbol)} <a class="small" href="#/stock/${encodeURIComponent(d.symbol)}">stock page →</a></h2>
+    b.innerHTML = `<div class="row" style="justify-content:space-between"><div><h2 style="margin:0">${esc(d.symbol)} <a class="small" href="#/stock/${encodeURIComponent(d.symbol)}">stock page →</a> <a class="small" href="#/desk/${encodeURIComponent(d.symbol)}" target="_blank" rel="noopener">Stock Desk ↗</a></h2>
         <div class="muted small">${esc(day(d.day))} → next session · ${esc(d.move_label)} · at least ${esc(d.size)}% · ${esc(d.sector || "")} · ${esc(d.status)}</div></div>
         <div class="row"><input class="in" id="mls" placeholder="Another stock" style="width:140px"><button class="btn small" id="mlgo">Open</button></div></div>
       <div class="split section" style="grid-template-columns:minmax(0,1fr) 320px"><div class="card"><div id="mlmap"></div>
@@ -112,6 +113,7 @@
     drawMap($("#mlmap", b), d, (x) => ($("#mlpanel", b).innerHTML = nodePanel(x, d)));
     MX.planView($("#mltpb", b), d.symbol);
     $("#mlgo", b).addEventListener("click", () => { const s = $("#mls", b).value.trim().toUpperCase(); if (s) { st.sym = s; save(); stockTab(b); } });
+    MX.suggest($("#mls", b), { kinds: "stocks", recent: "stock", onPick: (r) => { st.sym = r.value; save(); stockTab(b); } });
     $("#mlc", b).appendChild(dataTable(d.cases, [["rank", "#", "int"], ["symbol", "Stock", "symonly"], ["date", "Date", "date"], ["move", `Next ${d.move_label} %`, "snum2"],
       ["cc", "Close-to-close %", "snum2"], ["oc", "Open-to-close %", "snum2"], ["gp", "Gap %", "snum2"], ["distance", "Distance", "num2"]], { tools: false }));
     if (d.spread) { const s = d.spread;
@@ -243,4 +245,5 @@
       await show();
     },
   });
+  MX.mlMap = drawMap; MX.mlMini = mini; MX.mlNodePanel = nodePanel;
 })();

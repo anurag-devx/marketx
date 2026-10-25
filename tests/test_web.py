@@ -151,3 +151,22 @@ def test_lab_validate_reports_rule_errors():
     d["entry"] = "close > sma(200) and nonsense_fn(3)"
     r = api.ROUTES[("POST", "lab/validate")]({}, {"definition": d})
     assert r["errors"] and r["changed"]
+
+
+def test_agents_page_has_its_descriptions_without_the_old_ui_folder():
+    from web import r_agents
+    meta = r_agents._agents_meta()
+    assert len(meta) >= 5 and all("name" in m for m in meta)
+
+
+def test_suggest_returns_stocks_sectors_and_tags(monkeypatch):
+    from web import api
+    import pandas as pd
+    monkeypatch.setattr(api, "universe", lambda: pd.DataFrame({"Symbol": ["TCS", "TATASTEEL", "INFY"], "Company Name": ["Tata Consultancy", "Tata Steel", "Infosys"],
+                                                            "Industry": ["Information Technology", "Metals & Mining", "Information Technology"]}))
+    s = api.ROUTES[("GET", "suggest")]
+    r = s({"q": "ta", "kinds": "stocks"})
+    assert [x["value"] for x in r][:2] == ["TATASTEEL", "TCS"] or {"TCS", "TATASTEEL"} <= {x["value"] for x in r}
+    assert any(x["value"] == "Information Technology" for x in s({"q": "inform", "kinds": "sectors"}))
+    assert any(x["value"] == "PSU banks" for x in s({"q": "psu", "kinds": "sectors"}))
+    assert s({"q": "", "kinds": "stocks"}) == []

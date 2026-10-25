@@ -147,36 +147,42 @@ def _evidence(sym, day):
 @route("GET", "marketlab/stock")
 def stock(p):
     from marketlab import radar as R
-    from marketlab.features import GROUPS, LABEL
     m, s = _args(p)
     sym = str(p.get("symbol", "")).upper().strip()
     day = R.latest_day()
     if not day:
         raise UserError("No radar yet: build tonight's radar first.")
     rd = R.read("radar")
-    hit = rd[rd.symbol == sym]
-    if hit.empty:
+    if rd[rd.symbol == sym].empty:
         raise UserError(f"{sym} isn't in tonight's radar (not in the Nifty 500, or no price on {day}).")
-    r = hit.iloc[0]
+    out = stock_view(dict(radar=rd, drivers=R.read("drivers"), cases=R.read("cases"), spread=R.read("spread")), sym, m, s)
+    return dict(out, day=day, evidence=_evidence(sym, day))
+
+
+def stock_view(F, sym, m, s):
+    """Verdict, influence-map nodes, closest cases and outcome spread for one stock from Market Lab frames
+    (radar / drivers / cases / spread). Used by Market Lab → Stock analysis and the Stock Desk."""
+    from marketlab.features import GROUPS, LABEL
+    rd = F["radar"]
+    r = rd[rd.symbol == sym].iloc[0]
     skill, gs = _skill(m, s)
     v = _verdict(r, m, s, skill)
-    dv = R.read("drivers")
-    dv = dv[(dv.symbol == sym) & (dv.move == m) & (dv["size"] == s)]
+    dv = F["drivers"]
+    dv = dv[(dv.symbol == sym) & (dv.move == m) & (dv["size"] == s)] if len(dv) else dv
     nodes = []
     for x in dv.itertuples():
         g = gs.get(x.node) or {}
         nodes.append(dict(node=x.node, d_chance=float(x.d_chance), d_up=float(x.d_up), tested=bool(g.get("tested")), test=g or None,
                           text=node_text(r, x.node), values=[dict(label=LABEL[f], value=_num(r[f], 2)) for f in GROUPS[x.node]], **_node(x.d_chance, x.d_up)))
-    cs = R.read("cases")
-    cs = cs[cs.symbol == sym].sort_values("rank")
+    cs = F["cases"]
+    cs = cs[cs.symbol == sym].sort_values("rank") if len(cs) else cs
     cases = [dict(rank=int(c.rank), symbol=c.case_symbol, date=str(pd.Timestamp(c.case_date).date()), move=_num(100 * getattr(c, m), 2),
                   cc=_num(100 * c.cc, 2), oc=_num(100 * c.oc, 2), gp=_num(100 * c.gp, 2), distance=_num(c.distance, 2)) for c in cs.itertuples()]
-    sp = R.read("spread")
-    sp = sp[(sp.symbol == sym) & (sp.move == m)]
+    sp = F["spread"]
+    sp = sp[(sp.symbol == sym) & (sp.move == m)] if len(sp) else sp
     spread = sp.iloc[0].drop(["symbol", "move"]).astype(float).round(2).to_dict() if len(sp) else None
-    return dict(day=day, symbol=sym, sector=r.get("sector"), close=float(r.close), move=m, size=s, move_label=MOVE_LABEL[m], verdict=v, nodes=nodes,
-                cases=cases, spread=spread, evidence=_evidence(sym, day), skill=skill,
-                status="tested" if skill and skill.get("skill") else "no skill yet" if skill else "not tested yet")
+    return dict(symbol=sym, sector=r.get("sector"), close=float(r.close), move=m, size=s, move_label=MOVE_LABEL[m], verdict=v, nodes=nodes,
+                cases=cases, spread=spread, skill=skill, status="tested" if skill and skill.get("skill") else "no skill yet" if skill else "not tested yet")
 
 
 def _case_items(cases, news, ann, days):

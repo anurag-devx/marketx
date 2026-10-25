@@ -362,7 +362,7 @@
 
   // ---------- navigation ----------
   const NAV = [
-    ["Main", [["overview", "Overview"], ["market-lab", "Market Lab"], ["stock", "Stock"], ["positions", "Positions & risk"], ["data", "Data health"]]],
+    ["Main", [["overview", "Overview"], ["market-lab", "Market Lab"], ["stock", "Stock"], ["desk", "Stock Desk"], ["positions", "Positions & risk"], ["data", "Data health"]]],
     ["Market", [["market", "Market"], ["market-news", "Market news"], ["screener", "Screener"]]],
     ["Agents", [["agents", "Agents"], ["signals", "Signals"], ["strategies", "Strategies"], ["validation", "Validation"]]],
     ["Tools", [["search", "Search"], ["ask", "Ask"], ["documents", "Documents"], ["records", "Reports & logs"], ["settings", "Settings"]]],
@@ -396,20 +396,26 @@
     } catch (e) { $("#status").innerHTML = `<span class="chip bad">Server not reachable — is MarketX still running?</span>`; }
     statusTimer = setTimeout(refreshStatus, soon || (lastStatus && lastStatus.running.length) ? 2500 : 20000);
   }
+  let jobsOpen = false;
+  document.addEventListener("click", () => { if (jobsOpen) { jobsOpen = false; const d = document.getElementById("jobsdd"); if (d) d.hidden = true; } });
   function drawStatus(s) {
     const fresh = s.last_bar ? `<span class="chip"><span class="dot ${s.fresh ? "ok" : "bad"}"></span>Prices to ${day(s.last_bar)}</span>` : `<span class="chip bad">No prices yet</span>`;
     const stale = s.stale && s.stale.stocks && s.stale.stocks.length ? `<button class="chip warn" id="stale">${s.stale.stocks.length} stocks missing today's bar</button>` : "";
     const q = s.quality || {};
     const qual = q.quarantined && q.quarantined.length ? `<a class="chip warn" href="#/data">${q.quarantined.length} paused for data errors</a>` :
       q.status === "errors" ? `<a class="chip" href="#/data">${q.errors} data issues to review</a>` : "";
-    const jobs = s.running.map((j) => {
-      const frac = j.steps ? Math.min(0.98, (j.step - 1) / j.steps + (j.frac ?? 0.5) / j.steps) : 0.05;
-      return `<span class="jobrow"><span class="dot run"></span><span class="jt"><b>${esc(j.title)}</b> · ${esc(j.label)}${j.steps > 1 ? ` · ${j.step}/${j.steps}` : ""} · ${mmss(j.elapsed)}</span>
-        <span class="bar"><i style="width:${(frac * 100).toFixed(0)}%"></i></span>
-        <button class="btn small" data-log="${j.lane}">Log</button><button class="btn small" data-stop="${j.lane}">Stop</button></span>`;
-    }).join("");
+    const fr = (j) => j.steps ? Math.min(0.98, (j.step - 1) / j.steps + (j.frac ?? 0.5) / j.steps) : 0.05;
+    const rows = s.running.map((j) => `<div class="jobrow"><span class="dot run"></span><span class="jt"><b>${esc(j.title)}</b>${j.label && j.label !== j.title ? ` · ${esc(j.label)}` : ""}${j.steps > 1 ? ` · ${j.step}/${j.steps}` : ""} · ${mmss(j.elapsed)}</span>
+        <span class="bar"><i style="width:${(fr(j) * 100).toFixed(0)}%"></i></span>
+        <button class="btn small" data-log="${j.lane}">Log</button><button class="btn small" data-stop="${j.lane}">Stop</button></div>`).join("");
+    const j0 = s.running[0];
+    const jobs = j0 ? `<span class="jobs-wrap"><button class="chip jobs-btn" id="jobsbtn" aria-expanded="${jobsOpen}"><span class="dot run"></span>${s.running.length > 1 ? `${s.running.length} jobs running` : esc(j0.title)} · ${mmss(j0.elapsed)}
+        <span class="bar"><i style="width:${(fr(j0) * 100).toFixed(0)}%"></i></span> ▾</button><div class="jobs-dd" id="jobsdd" ${jobsOpen ? "" : "hidden"}>${rows}</div></span>` : "";
+    if (!j0) jobsOpen = false;
     const busyMain = s.running.some((j) => j.lane === "main");
     $("#status").innerHTML = `${fresh}${stale}${qual}<span class="job">${jobs}${busyMain ? "" : `<button class="btn primary small" id="runall" title="Download the latest prices, news and filings, then run every agent">Fetch + run all</button>`}</span>`;
+    $("#jobsbtn")?.addEventListener("click", (e) => { e.stopPropagation(); jobsOpen = !jobsOpen; $("#jobsdd").hidden = !jobsOpen; $("#jobsbtn").setAttribute("aria-expanded", jobsOpen); });
+    $("#jobsdd")?.addEventListener("click", (e) => e.stopPropagation());
     $("#runall")?.addEventListener("click", () => startJob("fetch+pipeline"));
     $("#stale")?.addEventListener("click", () => showStale(s.stale));
     $$("[data-stop]").forEach((b) => b.addEventListener("click", async () => { if (!confirm("Stop this job?")) return; await post("job/stop", { lane: b.dataset.stop }, "Stopped"); refreshStatus(true); }));
@@ -443,6 +449,40 @@
     document.addEventListener("click", (e) => { if (!e.target.closest(".search")) { items = []; draw(); } });
   }
 
+  // ---------- suggestions for any search box ----------
+  /* MX.suggest(input, { kinds: "stocks,sectors,tags,desk", recent: "key", examples: [..], onPick(item), keepText }) shows a dropdown like the main
+     stock search: matches from /api/suggest, plus your recent entries (and examples) for this box. Arrow keys + Enter, or click. */
+  const recentGet = (k) => { try { return JSON.parse(localStorage.getItem(`mx-recent-${k}`) || "[]"); } catch (e) { return []; } };
+  function remember(k, v) { if (!k || !v) return; try { const r = [String(v), ...recentGet(k).filter((x) => x !== String(v))].slice(0, 12); localStorage.setItem(`mx-recent-${k}`, JSON.stringify(r)); } catch (e) { /* ignore */ } }
+  function suggest(inp, o = {}) {
+    if (!inp || inp._sugg) return; inp._sugg = true;
+    const wrap = document.createElement("span"); wrap.className = "sugg-wrap"; inp.parentNode.insertBefore(wrap, inp); wrap.appendChild(inp);
+    if (inp.classList.contains("grow") || inp.style.flex) wrap.style.flex = inp.style.flex || "1";
+    const box = document.createElement("div"); box.className = "qres sugg"; box.hidden = true; wrap.appendChild(box);
+    let items = [], sel = -1, t = null;
+    const draw = () => { box.hidden = !items.length; box.innerHTML = items.map((r, i) => `<a role="option" data-i="${i}" class="${i === sel ? "sel" : ""}" style="cursor:pointer"><b>${esc(r.label)}</b><span>${esc(r.sub || "")}</span></a>`).join(""); };
+    const fetchItems = async () => {
+      const q = inp.value.trim(), ql = q.toLowerCase();
+      const rec = recentGet(o.recent || "").filter((x) => !ql || x.toLowerCase().includes(ql)).slice(0, 5).map((x) => ({ value: x, label: x, sub: "recent", kind: "recent" }));
+      const ex = (o.examples || []).filter((x) => !ql || x.toLowerCase().includes(ql)).slice(0, 4).map((x) => ({ value: x, label: x, sub: "example", kind: "example" }));
+      let srv = [];
+      if (o.kinds && (q || /tags|desk/.test(o.kinds))) srv = await api(`suggest?${qs({ q, kinds: o.kinds })}`).catch(() => []);
+      items = [...rec, ...srv, ...(srv.length ? [] : ex)].slice(0, 12); sel = -1; draw();
+    };
+    const pick = (r) => { if (!r) return; if (!o.keepText) inp.value = r.value; items = []; draw(); remember(o.recent, r.value); o.onPick && o.onPick(r); };
+    inp.addEventListener("input", () => { clearTimeout(t); t = setTimeout(fetchItems, 140); });
+    inp.addEventListener("focus", () => { if (!inp.value) fetchItems(); });
+    inp.addEventListener("keydown", (e) => {
+      if (box.hidden) { if (e.key === "Enter" && o.recent) remember(o.recent, inp.value.trim()); return; }
+      if (e.key === "ArrowDown") { sel = Math.min(items.length - 1, sel + 1); draw(); e.preventDefault(); }
+      else if (e.key === "ArrowUp") { sel = Math.max(-1, sel - 1); draw(); e.preventDefault(); }
+      else if (e.key === "Escape") { items = []; draw(); }
+      else if (e.key === "Enter") { if (sel >= 0) { e.preventDefault(); e.stopImmediatePropagation(); pick(items[sel]); } else { items = []; draw(); if (o.recent) remember(o.recent, inp.value.trim()); } }
+    }, true);
+    box.addEventListener("mousedown", (e) => { const a = e.target.closest("a"); if (a) { e.preventDefault(); pick(items[+a.dataset.i]); } });
+    inp.addEventListener("blur", () => setTimeout(() => { items = []; draw(); }, 150));
+  }
+
   // ---------- router ----------
   function route() { const [, page = "overview", ...rest] = location.hash.split("/"); return { page: page || "overview", arg: rest.length ? decodeURIComponent(rest.join("/")) : undefined }; }
   let renderSeq = 0;
@@ -463,7 +503,7 @@
 
   window.MX = { api, qs, post, toast, startJob, esc, num, pct, cls, inr, day, dt, mmss, safeUrl, isNum, $, $$, table, dataTable, csv, download,
                 cols, kpi, card, nameOf, named, chartDrawer, head, note, loading, spinner, md, form, tabs, sections, section, newsList, drawer, editTable, openLog, fmt, debounce,
-                page: (k, def) => (PAGES[k] = def), pageDef: (k) => PAGES[k], status: () => lastStatus, refreshStatus, route, render };
+                page: (k, def) => (PAGES[k] = def), pageDef: (k) => PAGES[k], suggest, remember, status: () => lastStatus, refreshStatus, route, render };
   document.addEventListener("DOMContentLoaded", async () => { setupTheme(); setupSearch(); refreshStatus();
     try { NAMES = await api("meta/names"); } catch (e) { /* names are a nicety */ } render(); });
 })();

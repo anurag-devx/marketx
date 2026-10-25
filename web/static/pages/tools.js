@@ -40,6 +40,7 @@
     };
     $("#sgo", b).addEventListener("click", () => go());
     $("#sq", b).addEventListener("keydown", (e) => { if (e.key === "Enter") go(); });
+    MX.suggest($("#sq", b), { kinds: "stocks,sectors", recent: "search", onPick: () => go() });
     if (!arg) try { $("#sq", b).value = sessionStorage.getItem("mx-search-q") || ""; } catch (e) { /* ignore */ }
     go();
   }
@@ -65,7 +66,8 @@
       catch (e) { $("#dprog", b).innerHTML = note(esc(e.message), "warn"); }
       $("#dgo", b).disabled = false;
     };
-    $("#dgo", b).addEventListener("click", async () => { const q = $("#dq", b).value.trim(); if (!q) return toast("Type a question first", true);
+    MX.suggest($("#dq", b), { recent: "deep", examples: ["How will a weak monsoon affect FMCG and tractor makers?", "Which sectors gain from a weaker rupee?", "What drives PSU bank stocks after RBI policy?"] });
+    $("#dgo", b).addEventListener("click", async () => { const q = $("#dq", b).value.trim(); if (!q) return toast("Type a question first", true); MX.remember("deep", q);
       const r = await post("deep/run", { question: q, web: $("#dweb", b).checked }); watch(r.task); });
     $("#dh", b)?.addEventListener("change", async (e) => { if (e.target.value) show(await api(`deep/brief?${qs({ file: e.target.value })}`)); });
     if (d.running) watch(d.running);
@@ -126,7 +128,8 @@
         draw();
       };
       $("#asend", el).addEventListener("click", () => send());
-      $("#aq", el).addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } });
+      $("#aq", el).addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); MX.remember("ask", $("#aq", el).value.trim()); send(); } });
+      MX.suggest($("#aq", el), { recent: "ask", examples: m.examples || [] });
       $("#aclr", el).addEventListener("click", () => { askChat = []; draw(); });
       $$("[data-q]", el).forEach((x) => x.addEventListener("click", () => send(x.dataset.q)));
       draw();
@@ -163,7 +166,8 @@
             const v = f.values(); const r = await api("documents/ask", { question: q, history: docChat.slice(0, -1).map(({ role, content }) => ({ role, content })), ...v }).catch((e) => ({ text: `Couldn't answer: ${e.message}`, hits: [] }));
             docChat.push({ role: "assistant", content: r.text, hits: r.hits }); draw(); };
           $("#dsend", b).addEventListener("click", send);
-          $("#dq", b).addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } });
+          $("#dq", b).addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); MX.remember("docs", $("#dq", b).value.trim()); send(); } });
+          MX.suggest($("#dq", b), { recent: "docs" });
           $("#dclr", b).addEventListener("click", () => { docChat = []; draw(); });
           draw();
         } else if (i === 1) {
