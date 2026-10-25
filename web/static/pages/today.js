@@ -132,9 +132,10 @@
           <div><div class="k">3 months</div><div class="v ${cls(i.r3m)}">${pct(i.r3m)}</div></div>
           <div><div class="k">1 year</div><div class="v ${cls(i.r1y)}">${pct(i.r1y)}</div></div>
           <div><div class="k">52-week range</div><div class="v">${inr(i.lo52)} – ${inr(i.hi52)}</div></div></div></div><div id="st"></div>`;
-      tabs($("#st", el), ["Chart", "Intraday", "Results", "Ownership", "F&O", "News & filings", "Agents"], (k, t) => {
+      tabs($("#st", el), ["Chart", "Intraday", "Trade plan", "Results", "Ownership", "F&O", "News & filings", "Agents"], (k, t) => {
         if (k === 1) { intradayTab(t, i.symbol); return; }
-        if (k > 1) k -= 1;
+        if (k === 2) { MX.planView(t, i.symbol); return; }
+        if (k > 2) k -= 2;
         if (k === 0) {
           t.innerHTML = `<div class="card"><div class="ct"><div class="seg" id="rng">${[["3M", 91], ["6M", 182], ["1Y", 365], ["3Y", 1100], ["5Y", 1830], ["All", 99999]].map(([l, n]) => `<button data-n="${n}" class="${n === 365 ? "on" : ""}">${l}</button>`).join("")}</div>
             <div class="seg" id="ivl" style="margin-left:8px"><button data-i="D" class="on" title="One candle per trading day">Daily</button><button data-i="W" title="One candle per week (Mon–Fri)">Weekly</button><button data-i="M" title="One candle per month">Monthly</button></div>

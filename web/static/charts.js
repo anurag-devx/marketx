@@ -34,7 +34,8 @@
   function priceChart(host, bars, opt = {}) {
     host.innerHTML = "";
     host.classList.add("chart");
-    const W = host.clientWidth || 900, H = opt.height || 380, padL = 8, padR = 58, padT = 10, volH = 64, gap = 10, axisH = 20;
+    const tagW = (opt.levels || []).some((l) => l.label) ? 52 : 0;          // room on the right for level tags (E1, SL, T1 ...)
+    const W = host.clientWidth || 900, H = opt.height || 380, padL = 8, padR = 58 + tagW, padT = 10, volH = 64, gap = 10, axisH = 20;
     const priceH = H - volH - gap - axisH - padT;
     const n = bars.t.length;
     if (!n) { host.innerHTML = '<div class="empty">No prices.</div>'; return; }
@@ -44,6 +45,7 @@
     let lo = Infinity, hi = -Infinity;
     for (let i = 0; i < n; i++) { lo = Math.min(lo, lows[i]); hi = Math.max(hi, highs[i]);
       for (const s of [bars.sma50, bars.sma200, bars.vwap]) if (s && s[i] != null) { lo = Math.min(lo, s[i]); hi = Math.max(hi, s[i]); } }
+    (opt.levels || []).forEach((lv) => { if (lv.fit && lv.price != null) { lo = Math.min(lo, lv.price); hi = Math.max(hi, lv.price); } });
     const pad = (hi - lo) * 0.05; lo -= pad; hi += pad;
     const x = (i) => padL + ((i + 0.5) / n) * (W - padL - padR);
     const y = (v) => padT + (1 - (v - lo) / (hi - lo)) * priceH;
@@ -102,9 +104,24 @@
     sma(bars.sma50, "#f59e0b"); sma(bars.sma200, css("--faint"), "4 3"); if (bars.vwap) { let seg = [];                      // VWAP restarts each day: one line per day
       const flush = () => { if (seg.length) el("polyline", { points: seg.join(" "), fill: "none", stroke: "#0ea5e9", "stroke-width": 1.4 }, svg); seg = []; };
       bars.vwap.forEach((v, i) => { if (i && bars.t[i].slice(0, 10) !== bars.t[i - 1].slice(0, 10)) flush(); if (v != null) seg.push(`${x(i)},${y(v)}`); }); flush(); }
-    (opt.levels || []).forEach((lv) => el("line", { x1: x(lv.from ?? 0), x2: x(lv.to ?? n - 1), y1: y(lv.price), y2: y(lv.price), stroke: lv.color === "up" ? up : lv.color === "down" ? down : acc, "stroke-dasharray": "4 3", "stroke-width": 1.4 }, svg));
-    (opt.marks || []).forEach((m) => { const c0 = m.color === "up" ? up : m.color === "down" ? down : acc, cx = x(m.i), cy = y(m.price), d = m.dir === "down" ? -1 : 1;
-      el("polygon", { points: `${cx},${cy + d * 2} ${cx - 6},${cy + d * 12} ${cx + 6},${cy + d * 12}`, fill: c0 }, svg); });
+    const pick = (c) => c === "up" ? up : c === "down" ? down : c === "faint" ? css("--faint") : c === "blue" ? "#0ea5e9" : c && c[0] === "#" ? c : acc;
+    // plan zones (shaded price bands over the last part of the chart)
+    (opt.zones || []).forEach((z) => { const a0 = x(z.from ?? 0), lo = Math.min(z.lo, z.hi), hi = Math.max(z.lo, z.hi);
+      if (!(hi >= lo) || hi < lo || !isFinite(lo)) return;
+      el("rect", { x: a0, y: y(hi), width: Math.max(1, x(n - 1) - a0 + 6), height: Math.max(1, y(lo) - y(hi)), fill: pick(z.color), opacity: z.opacity ?? 0.08 }, svg); });
+    // levels: dashed lines with an optional tag at the right edge; tags are nudged apart so they never overlap
+    const tagY = new Map(); { let last = -1e9; (opt.levels || []).filter((l) => l.label && l.price != null).map((l) => [l, y(l.price)]).sort((a, b) => a[1] - b[1])
+      .forEach(([l, yy]) => { const v = Math.max(yy, last + 17); tagY.set(l, v); last = v; }); }
+    (opt.levels || []).forEach((lv) => { if (lv.price == null || lv.price < lo || lv.price > hi) return; const col = pick(lv.color), yy = y(lv.price), ty = tagY.get(lv) ?? yy;
+      el("line", { x1: x(lv.from ?? 0), x2: lv.label ? W - tagW : x(lv.to ?? n - 1) + 6, y1: yy, y2: yy, stroke: col, "stroke-dasharray": lv.dash ?? "4 3", "stroke-width": lv.width ?? 1.4 }, svg);
+      if (lv.label) { const w = Math.min(tagW - 4, 7 * String(lv.label).length + 10), x0 = W - tagW + 2;
+        if (Math.abs(ty - yy) > 1) el("line", { x1: W - tagW, x2: x0, y1: yy, y2: ty, stroke: col, "stroke-width": 1 }, svg);
+        el("rect", { x: x0, y: ty - 8, width: w, height: 16, rx: 3, fill: col }, svg);
+        const t = el("text", { x: x0 + 5, y: ty + 4, style: "fill:#fff", "font-weight": 600, "font-size": 10.5 }, svg); t.textContent = lv.label; } });
+    const seen = {};
+    (opt.marks || []).forEach((m) => { const k = (seen[m.i] = (seen[m.i] || 0) + 1) - 1, c0 = pick(m.color), cx = x(m.i), d = m.dir === "down" ? -1 : 1, cy = y(m.price) + d * k * 26;
+      el("polygon", { points: `${cx},${cy + d * 2} ${cx - 6},${cy + d * 12} ${cx + 6},${cy + d * 12}`, fill: c0 }, svg);
+      if (m.label) { const t = el("text", { x: cx, y: cy + d * 22, "text-anchor": "middle", "font-size": 10, "font-weight": 600, style: `fill:${c0}`, "paint-order": "stroke", stroke: css("--surface"), "stroke-width": 3 }, svg); t.textContent = m.label; } });
     // hover
     const cross = el("line", { y1: padT, y2: vTop + volH, stroke: css("--faint"), "stroke-width": 1, "stroke-dasharray": "3 3", visibility: "hidden" }, svg);
     const dotc = el("circle", { r: 3.5, fill: acc, visibility: "hidden" }, svg);

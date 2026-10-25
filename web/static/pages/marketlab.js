@@ -58,21 +58,24 @@
   async function radarTab(b, go) {
     b.innerHTML = spinner("Loading tonight's radar …");
     const d = await api(`marketlab/radar?${qs({ when: st.when, move: st.move, size: st.size })}`);
+    const tp = await api(`tradeplan/summary?${qs({ mode: st.move === "oc" ? "intraday" : "swing" })}`).catch(() => ({ rows: {} }));
     b.innerHTML = selectors(d) + `<div id="mlr" class="section"></div>`;
     $$(".seg[data-k]", b).forEach((sg) => sg.addEventListener("click", (e) => { const x = e.target.closest("button"); if (!x) return; st[sg.dataset.k] = x.dataset.v; save(); radarTab(b, go); }));
     $("#mlsec", b)?.addEventListener("change", (e) => { st.sector = e.target.value; save(); radarTab(b, go); });
     const host = $("#mlr", b);
     if (!d.ready) { host.innerHTML = note(`⏳ ${esc(d.why)}`, "warn") + (st.when === "close" ? `<div class="row section"><button class="btn primary" id="mlb">Build tonight's radar</button></div>` : "");
       $("#mlb", b)?.addEventListener("click", () => startJob("market-lab")); return; }
-    const rows = d.rows.filter((r) => !st.sector || r.sector === st.sector).map((r) => ({ ...r, chance_pct: 100 * r.chance, usual_pct: 100 * r.usual, edge: 100 * r.lift }));
+    const rows = d.rows.filter((r) => !st.sector || r.sector === st.sector).map((r) => { const t = tp.rows[r.symbol] || {};
+      return { ...r, chance_pct: 100 * r.chance, usual_pct: 100 * r.usual, edge: 100 * r.lift, plan: t.ok == null ? null : t.ok ? `✓ ${t.n}` : "no trade", plan_why: t.why, rr: t.rr }; });
     host.innerHTML = note(`Radar for ${esc(day(d.day))} → next session · ${esc(d.moves[d.move])} · at least ${esc(d.size)}% · status: <b>${esc(d.status)}</b>.
       Sorted by edge: the chance minus the stock's usual chance. Click a row for its influence map.`, d.status === "tested" ? "info" : "warn") + `<div class="card flush section" id="mlt"></div>`;
     $("#mlt", host).appendChild(dataTable(rows, [
       ["symbol", "Stock", "sym"], ["nodes", "Map", (v) => mini(v)],
       ["chance_pct", `Chance ≥${d.size}%`, (v, r) => `<span class="mlbar"><i style="width:${Math.min(100, v)}%"></i><b style="left:${Math.min(100, r.usual_pct)}%"></b></span><b>${num(v, 0)}%</b>`],
       ["usual_pct", "Usual", "pct0"], ["edge", "Edge (pts)", "snum1"], ["lean", "Lean", (v) => leanHtml(v)], ["confidence", "Confidence", "tag"],
-      ["n_big", "Cases that big", "int"], ["why", "Biggest drivers", (v) => `<span class="small">${esc(v)}</span>`], ["sector", "Sector"]],
-      { csv: `market_lab_${d.day}_${d.move}_${d.size}`, sort: "edge", desc: true, per: 25, show: ["symbol", "nodes", "chance_pct", "usual_pct", "edge", "lean", "confidence", "n_big", "why"], onRow: (r) => { st.sym = r.symbol; save(); go("stock"); }, chart: { x: "usual_pct", y: "chance_pct" } }));
+      ["n_big", "Cases that big", "int"], ["plan", "Plan (entries / exits)", (v, r) => v == null ? "—" : `<span title="${esc(r.plan_why || "")}" class="${v.startsWith("✓") ? "up" : "muted"}" style="white-space:nowrap">${esc(v)}</span>`], ["rr", "R:R", "num1"],
+      ["why", "Biggest drivers", (v) => `<span class="small">${esc(v)}</span>`], ["sector", "Sector"]],
+      { csv: `market_lab_${d.day}_${d.move}_${d.size}`, sort: "edge", desc: true, per: 25, show: ["symbol", "nodes", "chance_pct", "usual_pct", "edge", "lean", "confidence", "plan", "rr", "why"], onRow: (r) => { st.sym = r.symbol; save(); go("stock"); }, chart: { x: "usual_pct", y: "chance_pct" } }));
     host.insertAdjacentHTML("beforeend", `<p class="muted small">Bar = chance tomorrow; black tick = the stock's usual chance on any day. Only rows where the bar clearly passes the tick are interesting. Map: green pushes up, red pushes down, grey no clear push.</p>`);
   }
 
@@ -93,11 +96,13 @@
         <div class="card" id="mlpanel"><h3 style="margin:0 0 6px">Click a node</h3><p class="muted small">Each node is one group of facts about today. Its colour and thickness come from re-running the match without it, never from the AI.</p>
           <dl class="kv"><dt>Chance</dt><dd><b>${P(v.chance)}</b> (usual ${P(v.usual)}, edge ${v.lift >= 0 ? "+" : ""}${num(100 * v.lift, 1)} pts)</dd><dt>Lean</dt><dd>${leanHtml(v.lean)} · ${num(100 * v.up_share, 0)}% of big moves were up${v.direction_tested ? "" : `<div class="muted small">Direction hasn't beaten a coin flip on past years for this combination, so no lean is shown. Node colours are hints only.</div>`}</dd>
           <dt>Confidence</dt><dd>${esc(v.confidence)}</dd><dt>Cases that big</dt><dd>${v.n_big} of 150 closest</dd></dl></div></div>
+      <details class="fold section" open id="mltp"><summary>Trade plan (secondary: entries, exits, levels, candle patterns)</summary><div id="mltpb" style="padding:0 14px 14px"></div></details>
       <details class="fold section" open><summary>Explain the past cases (AI, optional)</summary><div style="padding:0 14px 14px"><button class="btn" id="mlx">Explain with past cases</button> <span class="muted small" id="mlxs"></span><div id="mlxo"></div></div></details>
       <details class="fold section"><summary>Closest past cases (${d.cases.length})</summary><div id="mlc" style="padding:0 14px 14px"></div></details>
       <details class="fold section"><summary>Outcome range of the 150 closest cases</summary><div id="mlo" style="padding:0 14px 14px"></div></details>
       <details class="fold section"><summary>Today's evidence: ${d.evidence.news.length} headlines, ${d.evidence.filings.length} filings</summary><div id="mle" style="padding:0 14px 14px"></div></details>`;
     drawMap($("#mlmap", b), d, (x) => ($("#mlpanel", b).innerHTML = nodePanel(x, d)));
+    MX.planView($("#mltpb", b), d.symbol);
     $("#mlgo", b).addEventListener("click", () => { const s = $("#mls", b).value.trim().toUpperCase(); if (s) { st.sym = s; save(); stockTab(b); } });
     $("#mlc", b).appendChild(dataTable(d.cases, [["rank", "#", "int"], ["symbol", "Stock", "symonly"], ["date", "Date", "date"], ["move", `Next ${d.move_label} %`, "snum2"],
       ["cc", "Close-to-close %", "snum2"], ["oc", "Open-to-close %", "snum2"], ["gp", "Gap %", "snum2"], ["distance", "Distance", "num2"]], { tools: false }));

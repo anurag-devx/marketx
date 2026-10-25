@@ -346,3 +346,9 @@ details.fold > .card, details.fold > div { border: 0; margin: 0; }
 .mlbar b { position: absolute; top: -3px; width: 2px; height: 12px; background: var(--ink-2); }
 .mlmap text { fill: var(--ink); }
 .mlnode { cursor: pointer; } .mlnode:hover circle, .mlnode:focus circle { stroke-width: 3.5; } .mlnode:focus { outline: none; }
+
+/* ---- Trade plan ---- */
+.tp-sum { font-size: 13px; margin: 4px 0 8px; }
+.tp-legs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
+.tp-leg { font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 6px; color: #fff; white-space: nowrap; }
+.tp-up { background: var(--up); } .tp-down { background: var(--down); } .tp-blue { background: #0ea5e9; } .tp-faint { background: var(--line); color: var(--ink-2); }

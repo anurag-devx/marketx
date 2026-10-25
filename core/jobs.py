@@ -14,7 +14,7 @@ LOCK = JOBS / "current.json"
 LANES = {"news": {"news", "news-check", "announcements", "macro-fetch", "macro-all", "fundamentals", "fo"},
          "history": {"history-all", "announcements-backfill", "news-backfill", "news-articles", "search-index",
                      "library-ingest", "news-retag", "fundamentals-backfill", "shareholding", "fo-backfill"},
-         "lab": {"debate", "debate-eval", "debate-batch", "debate-replay", "stock-lists", "market-lab", "market-lab-test"},
+         "lab": {"debate", "debate-eval", "debate-batch", "debate-replay", "stock-lists", "market-lab", "market-lab-test", "talib-install"},
          "kronos": {"kronos-install", "kronos-forecast", "kronos-replay"},      # experimental, separate: see kronos_lab/README.md
          "intraday": {"intraday", "intraday-probe"}}      # 5-minute bars from Angel One: core/intraday.py
 SIDE = LANES["news"]                         # kept for older callers
@@ -66,6 +66,7 @@ COMMANDS = {
     "fo": [[PY, "-u", "-m", "core.derivatives"]],
     "intraday": [[PY, "-u", "-m", "core.intraday"]],
     "market-lab": [[PY, "-u", "-m", "marketlab"]],
+    "talib-install": [[PY, "-m", "pip", "install", "--only-binary=:all:", "TA-Lib"]],
     "market-lab-test": [[PY, "-u", "-m", "marketlab", "test"]],
     "intraday-probe": [[PY, "-u", "-m", "core.intraday", "probe"]],
     "fo-backfill": [[PY, "-u", "-m", "core.derivatives", "backfill"]],

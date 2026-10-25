@@ -55,6 +55,11 @@ def run(log=print, day=None):
         (DIR / name).mkdir(parents=True, exist_ok=True)
         atomic.to_parquet(frame, DIR / name / f"{tag}.parquet")
     log(f"Market Lab: radar for {len(out)} stocks saved for {day:%d %b %Y}.")
+    try:                                              # secondary layer: trade plans for the same stocks (tradeplan/)
+        from tradeplan import plan as TP
+        TP.run(tag, log)
+    except Exception as e:
+        log(f"Trade plan skipped: {type(e).__name__}: {str(e)[:160]}")
     return out
 
 
