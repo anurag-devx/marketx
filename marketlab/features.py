@@ -38,16 +38,20 @@ LABEL = {"f_ret1": "today's move (× its usual daily move)", "f_ret5": "5-day mo
 
 def decision_day(ts, days):
     """Trading day whose 21:00 IST cut-off is the first at or after ts. ts naive IST; days sorted unique."""
-    cut = pd.DatetimeIndex(days) + pd.Timedelta(hours=21)
-    i = np.searchsorted(cut.values, pd.DatetimeIndex(ts).values, side="left")
+    days = pd.DatetimeIndex(days).astype(NS)
+    cut = days + pd.Timedelta(hours=21)
+    i = np.searchsorted(cut.values, pd.DatetimeIndex(ts).astype(NS).values, side="left")
     out = pd.Series(pd.NaT, index=range(len(i)), dtype="datetime64[ns]")
     ok = i < len(days)
-    out[ok] = pd.DatetimeIndex(days)[i[ok]]
+    out[ok] = days[i[ok]]
     return out.values
 
 
+NS = "datetime64[ns]"      # one date precision everywhere (newer pandas mixes ns and us otherwise)
+
+
 def _prices(px):
-    px = px.sort_values(["symbol", "date"]).reset_index(drop=True)
+    px = px.assign(date=pd.to_datetime(px.date).astype(NS)).sort_values(["symbol", "date"]).reset_index(drop=True)
     g = px.groupby("symbol", sort=False)
     c, o, h, l, v = px.close, px.open, px.high, px.low, px.volume.astype(float)
     pc = g.close.shift(1)
@@ -86,7 +90,7 @@ def _prices(px):
 
 
 def _market(d, idx):
-    ix = idx.sort_values("date").copy()
+    ix = idx.assign(date=pd.to_datetime(idx.date).astype(NS)).sort_values("date").copy()
     ix["m_r1"] = ix.nifty.pct_change(fill_method=None)
     ix["m_r5"] = ix.nifty.pct_change(5, fill_method=None)
     ix["m_vix"] = np.log((ix.vix / ix.vix.rolling(252, min_periods=60).median()).clip(0.2, 5)) if "vix" in ix else 0.0
@@ -157,6 +161,7 @@ def _macro(d, macro):
         for c in names.values():
             d[c] = 0.0
         return d
+    macro = macro.assign(date=pd.to_datetime(macro.date).astype(NS))
     m = macro[macro.series.isin(names)].pivot_table(index="date", columns="series", values="value").sort_index()
     out = pd.DataFrame(index=m.index)
     for s, c in names.items():
@@ -168,7 +173,8 @@ def _macro(d, macro):
         out[c] = ch.reindex(m.index).ffill()
     out = out.reset_index().rename(columns={"date": "mdate"}).sort_values("mdate")
     d = d.sort_values("date")
-    d["key"] = d.date - pd.Timedelta(days=1)                      # lagged a day: known by the evening of t
+    d["key"] = (d.date - pd.Timedelta(days=1)).astype(NS)          # lagged a day: known by the evening of t
+    out["mdate"] = out.mdate.astype(NS)
     d = pd.merge_asof(d, out, left_on="key", right_on="mdate", direction="backward").drop(columns=["key", "mdate"])
     for c in names.values():
         d[c] = d[c].fillna(0.0)
