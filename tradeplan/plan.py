@@ -131,18 +131,70 @@ def plan_for(lv, verdict, spread, mode, account, risk_cfg, open_positions=0, sec
     return out
 
 
+def ta_view(lv, patterns):
+    """Second opinion from the chart (daily levels + candle patterns of the last 2 sessions). Labels only: untested until
+    Market Lab → Review grades them. dir: up / down / neutral (score of 4 simple checks, |score| >= 2 counts)."""
+    c, why, score = lv["close"], [], 0
+    for ok, up, dn in ((c > lv["sma20"], "above the 20-day average", "below the 20-day average"),
+                       (lv.get("sma50") is not None and lv["sma20"] > lv["sma50"], "20-day average above the 50-day", "20-day average below the 50-day"),
+                       (c > lv["P"], "closed above the pivot", "closed below the pivot")):
+        score += 1 if ok else -1
+        why.append(up if ok else dn)
+    recent = sorted({p["date"] for p in patterns})[-2:]
+    pat = sum(1 if p["direction"] == "bullish" else -1 if p["direction"] == "bearish" else 0 for p in patterns if p["date"] in recent)
+    if pat:
+        score += 1 if pat > 0 else -1
+        why.append("recent bullish candles" if pat > 0 else "recent bearish candles")
+    atr = lv["atr"] or np.nan
+    setup = ("near the 20-day high" if (lv["hi20"] - c) <= 0.5 * atr else "near the 20-day low" if (c - lv["lo20"]) <= 0.5 * atr
+             else "tight 5-day range" if (lv["hi5"] - lv["lo5"]) <= 2.5 * atr else None)
+    return dict(dir="up" if score >= 2 else "down" if score <= -2 else "neutral", score=int(score), setup=setup, why=why)
+
+
+def fund_view(q, sym, day):
+    """Second opinion from the latest quarterly result filed by the evening of `day` (q: fundamentals quarters table)."""
+    if q is None or q.empty:
+        return dict(dir="no data", why=["no quarterly results downloaded"])
+    r = q[(q.symbol == sym) & (pd.to_datetime(q.filed_at) <= pd.Timestamp(day) + pd.Timedelta(hours=21))]
+    if r.empty:
+        return dict(dir="no data", why=["no results filed yet"])
+    r = r.sort_values("filed_at").iloc[-1]
+    fresh = (pd.Timestamp(day) + pd.Timedelta(hours=21) - pd.Timestamp(r.filed_at)) <= pd.Timedelta(days=3)
+    py, ry = r.get("profit_yoy"), r.get("revenue_yoy")
+    why = [f"results for {pd.Timestamp(r.period_end):%b %Y} filed {pd.Timestamp(r.filed_at):%d %b}" + (" (just out)" if fresh else "")]
+    if py is None or pd.isna(py):
+        return dict(dir="no data", fresh=bool(fresh), why=why + ["no year-ago quarter to compare (download results history)"])
+    why.append(f"profit {py:+.0%} vs a year ago" + (f", revenue {ry:+.0%}" if ry is not None and pd.notna(ry) else ""))
+    return dict(dir="up" if py > 0.05 else "down" if py < -0.05 else "neutral", fresh=bool(fresh), why=why)
+
+
 def run(day=None, log=print):
     """Plans for every stock in tonight's radar, both modes. Saved to data/tradeplan/<day>.json."""
-    from marketlab import radar as R, engine as E
-    from marketlab import evaluate as V
-    from core.data import load_raw
-    from . import patterns as PT
+    from marketlab import radar as R
     day = day or R.latest_day()
     rd, sp = R.read("radar", day), R.read("spread", day)
     if rd.empty:
         log("Trade plan: no radar for that day.")
         return {}
-    px, _, _ = load_raw()
+    out = build(day, rd, sp)
+    DIR.mkdir(parents=True, exist_ok=True)
+    atomic.write_text(DIR / f"{day}.json", dumps(out))
+    log(f"Trade plan: {len(out['plans'])} stocks planned for {day} (patterns: {out['patterns_source']}).")
+    return out
+
+
+def dumps(out):
+    return json.dumps(out, default=lambda o: None if isinstance(o, float) and not np.isfinite(o) else (o.item() if hasattr(o, "item") else str(o)))
+
+
+def build(day, rd, sp, px=None):
+    """Plans for the radar rows rd (spread sp) on `day`, from daily bars up to that day only."""
+    from marketlab import engine as E
+    from marketlab import evaluate as V
+    from . import patterns as PT
+    if px is None:
+        from core.data import load_raw
+        px, _, _ = load_raw()
     px = px[px.date <= pd.Timestamp(day)]
     acct = json.loads(C.ACCOUNT_JSON.read_text()) if C.ACCOUNT_JSON.exists() else {}
     pos = pd.read_csv(C.POSITIONS_CSV) if C.POSITIONS_CSV.exists() else pd.DataFrame(columns=["symbol", "sector"])
@@ -150,6 +202,10 @@ def run(day=None, log=print):
     sk, _ = V.skill_map()
     out = {"day": day, "version": VERSION, "patterns_source": None, "plans": {}}
     groups = dict(tuple(px.sort_values("date").groupby("symbol")))
+    try:
+        quarters = pd.read_parquet(C.DATA / "fundamentals" / "quarters.parquet", columns=["symbol", "filed_at", "period_end", "profit_yoy", "revenue_yoy"])
+    except Exception:
+        quarters = None
     for r in rd.to_dict("records"):
         r = pd.Series(r)
         g = groups.get(r.symbol)
@@ -158,7 +214,7 @@ def run(day=None, log=print):
         lv = levels(g)
         pats, src = PT.recent(g.reset_index(drop=True), days=5)
         out["patterns_source"] = src
-        entry = {"patterns": pats}
+        entry = {"patterns": pats, "ta": ta_view(lv, pats), "fund": fund_view(quarters, r.symbol, day)}
         sec_n = int((pos.get("sector", pd.Series(dtype=str)) == r.sector).sum()) if len(pos) else 0
         for mode, cfg in MODES.items():
             m, s = cfg["move"], 1.0
@@ -172,9 +228,6 @@ def run(day=None, log=print):
             entry[mode] = plan_for(lv, dict(lean=lean, lift=float(ch - us), chance=float(ch), size=s), spread, mode, acct, C.RISK,
                                    open_positions=len(pos), sector_count=sec_n, sector_limit=C.RISK.get("max_per_sector"))
         out["plans"][r.symbol] = entry
-    DIR.mkdir(parents=True, exist_ok=True)
-    atomic.write_text(DIR / f"{day}.json", json.dumps(out, default=lambda o: None if isinstance(o, float) and not np.isfinite(o) else (o.item() if hasattr(o, "item") else str(o))))
-    log(f"Trade plan: {len(out['plans'])} stocks planned for {day} (patterns: {out['patterns_source']}).")
     return out
 
 

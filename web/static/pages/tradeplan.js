@@ -18,7 +18,9 @@
         ${sides.map((s) => ` · ${esc(s.side)}: ${num(s.shares, 0)} shares (≈${inr(s.value_rs, 0)}), risk ${inr(s.risk_rs, 0)}, reward:risk <b>${num(s.rr, 1)} : 1</b>, stop ${num(s.stop_atr, 1)}× ATR`).join("")}</div>
       <div class="tp-legs">${legs.map(fmtLeg).join("")}<span class="tp-leg tp-faint">TX ${esc(p.hold)}</span></div>
       ${p.flags.length ? note(`${p.tradeable ? "Note" : "<b>No trade</b>"}: ${p.flags.map(esc).join(" · ")}`, p.tradeable ? "info" : "warn") : `<p class="muted small" style="margin:6px 0 0">Passes the plan's checks (reward:risk ≥ 1.5, stop ≤ 2× ATR, positive Market Lab edge, risk limits).</p>`}
-      ${d.summary ? `<div class="tp-ta"><div class="row" style="justify-content:space-between"><b>TA summary</b><span><span class="muted small" id="tpxs">quick summary from the computed facts</span> <button class="btn small" id="tpx">Explain with the TA agent</button></span></div><div id="tpxo" class="small" style="white-space:pre-line;margin-top:4px">${esc(d.summary)}</div></div>` : ""}
+      ${d.summary ? `<div class="tp-ta"><div class="row" style="justify-content:space-between"><b>TA summary</b><span><span class="muted small" id="tpxs">quick summary from the computed facts</span> <button class="btn small" id="tpx">Explain with the TA agent</button></span></div><div id="tpxo" class="small" style="white-space:pre-line;margin-top:4px">${esc(d.summary)}</div>
+        <div class="tp-ask" style="margin-top:10px"><div id="tpch"></div><div class="row" style="gap:6px;margin-top:6px"><input class="in" id="tpq" maxlength="500" style="flex:1" placeholder="Ask the TA agent about this plan, e.g. why is the stop there? what cancels it?"><button class="btn small" id="tpqa">Ask</button><button class="btn small" id="tpqc" title="Clear this chat">Clear</button></div>
+        <span class="muted small" id="tpqs">Answers come only from the computed facts; an answer with numbers that aren't in them is withheld.</span></div></div>` : ""}
       <p class="muted small" style="margin:6px 0 0">Levels from the ${esc(day(lv.date))} bar · ATR ${inr(lv.atr)} · pivot ${inr(lv.P)} · rules ${esc(d.version)}. Secondary to Market Lab: it never changes the verdict. Not tested on history yet (needs 5-minute bars).</p></div>`;
   }
 
@@ -72,6 +74,21 @@
           $("#tpxo", host).textContent = out.text; }
         catch (e) { $("#tpxs", host).textContent = e.message; }
         btn.disabled = false; });
+      const ck = `mx-tp-chat-${symbol}-${mode}`;
+      const hist = (() => { try { return JSON.parse(sessionStorage.getItem(ck) || "[]"); } catch (e) { return []; } })();
+      const drawChat = () => { const h = $("#tpch", host); if (!h) return;
+        h.innerHTML = hist.map((x) => `<div class="small" style="margin:6px 0"><b>You:</b> ${esc(x.q)}</div><div class="small" style="white-space:pre-line;margin:0 0 8px 12px"><b>TA agent:</b> ${esc(x.a)}${x.w && x.w !== "model" ? ` <span class="muted">(${esc(x.w)})</span>` : ""}</div>`).join(""); };
+      drawChat();
+      const askNow = async () => { const qi = $("#tpq", host), q = qi.value.trim(); if (!q) return; const btn = $("#tpqa", host); btn.disabled = true;
+        try { const r = await MX.post("tradeplan/ask", { symbol, mode, question: q, history: hist.map(({ q, a }) => ({ q, a })) });
+          const out = await MX.pollTask(r.task, (t) => ($("#tpqs", host).textContent = t.msg || "thinking …"));
+          hist.push({ q, a: out.text, w: out.writer }); try { sessionStorage.setItem(ck, JSON.stringify(hist.slice(-10))); } catch (e) { /* ignore */ }
+          qi.value = ""; drawChat(); $("#tpqs", host).textContent = out.writer === "model" ? "answered from the computed facts (numbers checked)" : out.writer === "withheld" ? "answer withheld: it used numbers that aren't in the facts" : "local model is off: showing the plan summary"; }
+        catch (e) { $("#tpqs", host).textContent = e.message; }
+        btn.disabled = false; };
+      $("#tpqa", host)?.addEventListener("click", askNow);
+      $("#tpq", host)?.addEventListener("keydown", (e) => { if (e.key === "Enter") askNow(); });
+      $("#tpqc", host)?.addEventListener("click", () => { hist.length = 0; try { sessionStorage.removeItem(ck); } catch (e) { /* ignore */ } drawChat(); });
       host._redraw = draw;
     };
     $("#tpm", host).addEventListener("click", (e) => { const x = e.target.closest("button"); if (!x) return; mode = x.dataset.v; try { sessionStorage.setItem("mx-tp-mode", mode); } catch (er) { /* ignore */ }

@@ -3,7 +3,9 @@
 facts()    levels, legs, recent price action, candle patterns and the Market Lab verdict for one stock and mode
 template() a short summary built from the facts (always available, instant)
 explain()  the local model words the same facts in 3-5 lines; every number it writes must appear in the facts,
-           otherwise the template is used. Uses the 'debate' model setting (Settings → AI models)."""
+           otherwise the template is used. Uses the 'debate' model setting (Settings → AI models).
+ask()      follow-up questions about the same plan (short chat): answers only from the facts; numbers checked the same way
+           (numbers in the question itself are allowed); an answer with unknown numbers is withheld, not shown."""
 import json, re
 import numpy as np, pandas as pd
 
@@ -11,6 +13,11 @@ SYSTEM = ("You are a technical analyst explaining a pre-computed trade plan to a
           "that is not in them. Write 3-5 short lines, plain English, no headings, no advice to buy or sell:\n"
           "1) what the recent price action and candle patterns show, 2) why the entry, stop and targets sit where they do (name the levels), "
           "3) what would cancel the plan, 4) one caution (e.g. wide stop, conflicting pattern, weak market, untested rules).")
+
+
+SYSTEM_ASK = ("You are a technical analyst answering an investor's questions about a pre-computed trade plan. Use ONLY the FACTS given. "
+              "If the facts don't answer the question, say so plainly and say what would be needed. Never add a number that is not in the facts "
+              "or the question; do not estimate or project prices. No advice to buy or sell. At most 6 short lines, plain English.")
 
 
 def _r(x, d=2):
@@ -62,9 +69,9 @@ def _numbers(text):
     return set(re.findall(r"\d+(?:\.\d+)?", text.replace(",", "")))
 
 
-def check(text, f):
+def check(text, f, extra_ok=""):
     """Numbers in the model's text that aren't in the facts (commas ignored; small counts allowed)."""
-    allowed = _numbers(json.dumps(f, default=str)) | {str(i) for i in range(0, 21)}
+    allowed = _numbers(json.dumps(f, default=str)) | {str(i) for i in range(0, 21)} | _numbers(extra_ok)
     extra = set()
     for n in _numbers(text) - allowed:
         try:                                           # allow the same number written with fewer decimals (1024.6 -> 1024.60 or 1025?)
@@ -95,3 +102,28 @@ def explain(f, log=print):
     except Exception as e:                            # model off or failed: the template stands
         log(f"model not used ({type(e).__name__})")
         return tmpl, "template"
+
+
+def ask(f, question, history=(), log=print):
+    """(answer, writer): writer 'model', 'withheld' (unknown numbers) or 'off' (no model: the template instead)."""
+    question = str(question or "").strip()[:500]
+    try:
+        from core import llm
+        ok, msg = llm.status("debate")
+        if not ok:
+            return ("The TA agent needs the local model (Settings → AI models). Here is the plan from the computed facts:\n" + template(f)), "off"
+        msgs = [{"role": "user", "content": "FACTS:\n" + json.dumps(f, default=str)}, {"role": "assistant", "content": "Understood. I will answer only from these facts."}]
+        for h in list(history)[-6:]:
+            msgs += [{"role": "user", "content": str(h.get("q", ""))[:500]}, {"role": "assistant", "content": str(h.get("a", ""))[:1500]}]
+        msgs.append({"role": "user", "content": question})
+        out = llm.chat("debate", msgs, system=SYSTEM_ASK, max_tokens=400, timeout=180).strip()
+        prior = " ".join(str(h.get("q", "")) + " " + str(h.get("a", "")) for h in history)
+        bad = check(out, f, question + " " + prior)
+        if bad or not out:
+            log(f"answer withheld: numbers not in the facts ({', '.join(sorted(bad)[:5])})")
+            return ("I couldn't answer that from the computed facts without adding numbers that aren't in them, so the answer was withheld. "
+                    "Try asking about the levels, the stop, the targets, the patterns or what would cancel the plan."), "withheld"
+        return out, "model"
+    except Exception as e:
+        log(f"model not used ({type(e).__name__})")
+        return ("The TA agent couldn't reach the local model. Here is the plan from the computed facts:\n" + template(f)), "off"

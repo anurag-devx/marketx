@@ -10,9 +10,14 @@
   const ORDER = ["Results", "Volume", "Price action", "Market", "Macro", "Sector", "Volatility", "News", "Filings"];
   const sortNodes = (ns) => [...ns].sort((a, b) => ORDER.indexOf(a.node) - ORDER.indexOf(b.node));
 
+  // ▲ green (up) · ▼ red (down) · • grey (neutral) wherever these marks appear in text
+  const arr = (t) => esc(t || "").replace(/▲/g, `<span class="up">▲</span>`).replace(/▼/g, `<span class="down">▼</span>`).replace(/•/g, `<span class="muted">•</span>`);
+  const mv = (v, d = 1) => v == null ? "—" : `<span class="${v > 0.003 ? "up" : v < -0.003 ? "down" : "muted"}">${v > 0.003 ? "▲" : v < -0.003 ? "▼" : "•"} ${v > 0 ? "+" : ""}${num(100 * v, d)}%</span>`;
   function mini(nodes) {
     const ns = sortNodes(nodes || []), n = ns.length || 1;
-    return `<svg width="46" height="46" viewBox="0 0 54 54" aria-hidden="true">${ns.map((x, i) => { const a = (i / n) * 2 * Math.PI - Math.PI / 2, px = 27 + 21 * Math.cos(a), py = 27 + 21 * Math.sin(a);
+    if (!nodes || !nodes.length) return `<span class="muted">—</span>`;
+    const tip = ns.map((x) => `${x.node} ${x.dir > 0 ? "▲" : x.dir < 0 ? "▼" : "•"} ${["", "weak", "medium", "strong"][x.strength]}`).join("\n");
+    return `<svg width="46" height="46" viewBox="0 0 54 54" role="img" aria-label="${esc(tip.replace(/\n/g, ", "))}"><title>${esc(tip)}</title>${ns.map((x, i) => { const a = (i / n) * 2 * Math.PI - Math.PI / 2, px = 27 + 21 * Math.cos(a), py = 27 + 21 * Math.sin(a);
       return `<line x1="27" y1="27" x2="${px}" y2="${py}" stroke="${col(x.dir)}" stroke-width="${0.6 + x.strength * 0.9}"/><circle cx="${px}" cy="${py}" r="${2 + x.strength}" fill="${col(x.dir)}"/>`; }).join("")}
       <circle cx="27" cy="27" r="7" fill="var(--accent)"/></svg>`;
   }
@@ -66,7 +71,7 @@
     if (!d.ready) { host.innerHTML = note(`⏳ ${esc(d.why)}`, "warn") + (st.when === "close" ? `<div class="row section"><button class="btn primary" id="mlb">Build tonight's radar</button></div>` : "");
       $("#mlb", b)?.addEventListener("click", () => startJob("market-lab")); return; }
     const rows = d.rows.filter((r) => !st.sector || r.sector === st.sector).map((r) => { const t = tp.rows[r.symbol] || {};
-      return { ...r, chance_pct: 100 * r.chance, usual_pct: 100 * r.usual, edge: 100 * r.lift, plan: t.ok == null ? null : t.ok ? `✓ ${t.n}` : "no trade", plan_why: t.why, rr: t.rr }; });
+      return { ...r, chance_pct: 100 * r.chance, usual_pct: 100 * r.usual, edge: 100 * r.lift, plan: t.ok == null ? null : t.ok ? `✓ ${t.n}` : "no trade", plan_why: t.why, rr: t.rr, second: t.ta ? `${t.ta}|${t.fund || "no data"}` : null, second_why: t.second_why }; });
     host.innerHTML = note(`Radar for ${esc(day(d.day))} → next session · ${esc(d.moves[d.move])} · at least ${esc(d.size)}% · status: <b>${esc(d.status)}</b>.
       Sorted by edge: the chance minus the stock's usual chance. Click a row for its influence map.`, d.status === "tested" ? "info" : "warn") + (d.day_note ? note(esc(d.day_note), "warn") : "") + `<div class="card flush section" id="mlt"></div>`;
     $("#mlt", host).appendChild(dataTable(rows, [
@@ -74,8 +79,10 @@
       ["chance_pct", `Chance ≥${d.size}%`, (v, r) => `<span class="mlbar"><i style="width:${Math.min(100, v)}%"></i><b style="left:${Math.min(100, r.usual_pct)}%"></b></span><b>${num(v, 0)}%</b>`],
       ["usual_pct", "Usual", "pct0"], ["edge", "Edge (pts)", "snum1"], ["lean", "Lean", (v) => leanHtml(v)], ["confidence", "Confidence", "tag"],
       ["n_big", "Cases that big", "int"], ["plan", "Plan (entries / exits)", (v, r) => v == null ? "—" : `<span title="${esc(r.plan_why || "")}" class="${v.startsWith("✓") ? "up" : "muted"}" style="white-space:nowrap">${esc(v)}</span>`], ["rr", "R:R", "num1"],
-      ["why", "Biggest drivers", (v) => `<span class="small">${esc(v)}</span>`], ["sector", "Sector"]],
-      { csv: `market_lab_${d.day}_${d.move}_${d.size}`, sort: "edge", desc: true, per: 25, show: ["symbol", "nodes", "chance_pct", "usual_pct", "edge", "lean", "confidence", "plan", "rr", "why"], onRow: (r) => { st.sym = r.symbol; save(); go("stock"); }, chart: { x: "usual_pct", y: "chance_pct" } }));
+      ["second", "TA · Fund.", (v, r) => { if (!v) return "—"; const [a, f] = v.split("|"), ic = (x) => x === "up" ? `<span class="up">▲</span>` : x === "down" ? `<span class="down">▼</span>` : `<span class="muted">•</span>`;
+        return `<span title="${esc(r.second_why || "")}" style="white-space:nowrap">${ic(a)} TA · ${ic(f)} Fund.</span>`; }],
+      ["why", "Biggest drivers", (v) => `<span class="small">${arr(v)}</span>`], ["sector", "Sector"]],
+      { csv: `market_lab_${d.day}_${d.move}_${d.size}`, sort: "edge", desc: true, per: 25, show: ["symbol", "nodes", "chance_pct", "usual_pct", "edge", "lean", "confidence", "plan", "rr", "second", "why"], onRow: (r) => { st.sym = r.symbol; save(); go("stock"); }, chart: { x: "usual_pct", y: "chance_pct" } }));
     host.insertAdjacentHTML("beforeend", `<p class="muted small">Bar = chance tomorrow; black tick = the stock's usual chance on any day. Only rows where the bar clearly passes the tick are interesting. Map: green pushes up, red pushes down, grey no clear push.</p>`);
   }
 
@@ -131,18 +138,99 @@
     sections($("#mls", b), (await api("marketlab/score")).sections);
   }
 
+  /* ---------- Review: graded calls, calibration, plan results, intraday profile ---------- */
+  const rv = Object.assign({ kind: "all", days: 21 }, (() => { try { return JSON.parse(sessionStorage.getItem("mx-ml-rv") || "{}"); } catch (e) { return {}; } })());
+  const rvSave = () => { try { sessionStorage.setItem("mx-ml-rv", JSON.stringify(rv)); } catch (e) { /* ignore */ } };
+  const P1 = (x) => (x == null ? "—" : `${num(100 * x, 1)}%`);
+  const passHtml = (v) => v == null ? `<span class="muted">waiting</span>` : v ? `<span class="up">✓ pass</span>` : `<span class="down">✗ fail</span>`;
+
+  async function reviewTab(b) {
+    const seg = (key, opts, label, obj) => `<div><div class="mllab">${label}</div><div class="seg" data-k="${key}">${opts.map(([v, l]) => `<button data-v="${v}" class="${String(obj[key]) === String(v) ? "on" : ""}">${esc(l)}</button>`).join("")}</div></div>`;
+    b.innerHTML = `<div class="card"><div class="row" style="gap:18px;align-items:flex-end;flex-wrap:wrap">
+        ${seg("kind", [["all", "All"], ["live", "Live"], ["replay", "Replay"]], "Calls", rv)}
+        ${seg("move", [["cc", "Close-to-close"], ["oc", "Open-to-close"], ["gp", "Overnight gap"]], "Move", st)}
+        ${seg("size", [["0.5", "≥0.5%"], ["1", "≥1%"], ["2", "≥2%"], ["3", "≥3%"]], "Size", st)}
+        <div><div class="mllab">Replay past days</div><div class="row" style="gap:6px"><input class="in" id="rvd" type="number" min="1" max="250" value="${rv.days}" style="width:70px"> <button class="btn" id="rvgo">Replay</button></div></div></div>
+        <p class="muted small" style="margin:8px 0 0">Live = what the radar said each night (kept automatically from now on). Replay = the radar rebuilt for past days from data up to each day (about 1 min per day on this Mac).</p></div>
+      <div id="rvb">${spinner("Loading the review …")}</div>`;
+    $$(".seg", b).forEach((g) => g.addEventListener("click", (e) => { const x = e.target.closest("button"); if (!x) return; const k = g.dataset.k;
+      if (k === "kind") { rv.kind = x.dataset.v; rvSave(); } else { st[k] = x.dataset.v; save(); } reviewTab(b); }));
+    $("#rvgo", b).addEventListener("click", () => { rv.days = Math.max(1, Math.min(250, +$("#rvd", b).value || 21)); rvSave(); startJob("market-lab-replay", [`days=${rv.days}`]); });
+    const d = await api(`marketlab/review?${qs({ kind: rv.kind, move: st.move, size: st.size })}`);
+    const host = $("#rvb", b);
+    if (!d.ready) { host.innerHTML = note(esc(d.why), "info"); return; }
+    const kp = `<div class="grid g5 section">${d.kpis.map((k) => `<div class="card kpi"><div class="label">${esc(k.label)}</div><div class="value">${esc(k.value ?? "—")}</div><div class="muted small">${esc(k.note || "")}</div></div>`).join("")}</div>`;
+    const pl = d.plans ? `<div class="card section"><div class="ct"><h2>Trade plans (${esc(d.plans.mode)})</h2><span class="aside muted small">E1 entry, stop first when a bar touches both, E2 not graded yet</span></div>
+      <p>${d.plans.plans} plans · entered ${d.plans.entered} · no entry ${d.plans.no_entry}${d.plans.ambiguous ? ` · both sides in one bar ${d.plans.ambiguous}` : ""} · exits: ${Object.entries(d.plans.exits).map(([k, v]) => `${esc(k)} ${v}`).join(", ") || "—"}</p>
+      <p>All entered: average <b>${d.plans.avg_r ?? "—"} R</b>, winners ${P1(d.plans.win)} · plans that passed the checks (${d.plans.tradeable_n}): average <b>${d.plans.tradeable_avg_r ?? "—"} R</b>, winners ${P1(d.plans.tradeable_win)}</p></div>` : "";
+    host.innerHTML = (d.note ? note(esc(d.note), "warn") : "") + kp + pl +
+      `<div class="grid g2 section"><div class="card"><div class="ct"><h2>Did the chances hold?</h2><span class="aside muted small">all stocks, graded</span></div><div id="rvcal"></div>
+        <p class="muted small">"Said" = the average chance in that band; "happened" = how often the move came. Close = well calibrated.</p></div>
+        <div class="card"><div class="ct"><h2>Picks by confidence</h2></div><div id="rvconf"></div></div></div>
+       <div class="card section"><div class="ct"><h2>Second opinion: does TA or fundamentals help?</h2><span class="aside muted small">labels only until these numbers show a real difference</span></div><div id="rvsec"></div></div>
+       <div class="card section"><div class="ct"><h2>Misses by sector</h2><span class="aside muted small">picks per sector, the sector's median move and the ${st.move === "cc" ? "Nifty" : "market (median stock)"} that session</span></div><div id="rvsecs"></div></div>
+       <div class="card flush section"><div class="ct" style="padding:12px 14px 0"><h2>Day by day</h2></div><div id="rvday"></div></div>
+       <div class="card flush section"><div class="ct" style="padding:12px 14px 0"><h2>Picks: pass / fail</h2><span class="aside muted small">click a row for its intraday profile</span></div><div id="rvt"></div></div>
+       <div id="rvp"></div>`;
+    $("#rvcal", host).innerHTML = MX.table(d.calibration, [["bin", "Chance band"], ["n", "Calls", "int"], ["said", "Said", "pct1x"], ["happened", "Happened", "pct1x"]].map((c) => c[2] === "pct1x" ? [c[0], c[1], (v) => P1(v)] : c));
+    $("#rvconf", host).innerHTML = d.by_conf.length ? MX.table(d.by_conf, [["confidence", "Confidence", "tag"], ["n", "Picks", "int"], ["hit", "Moved", (v) => P1(v)], ["usual", "Their usual", (v) => P1(v)]]) : `<p class="muted">No graded picks yet.</p>`;
+    $("#rvsecs", host).innerHTML = (d.sectors || []).length ? d.sectors.map((x, i) => `<details class="fold" ${i === 0 ? "open" : ""}><summary><b>${esc(day(x.day))}</b> <span class="tag">${esc(x.kind)}</span> · ${arr(x.verdict)}
+        <span class="muted small"> · ${x.nifty != null ? "Nifty" : "market"} ${mv(x.nifty ?? x.market)}</span></summary><div style="padding:0 14px 10px">
+        ${MX.table(x.rows, [["sector", "Sector"], ["picks", "Picks", "int"], ["hits", "Moved", "int"], ["misses", "Missed", (v) => v ? `<span class="down">${v}</span>` : "0"], ["move", "Sector move", (v) => mv(v)]])}</div></details>`).join("")
+      : `<p class="muted">No graded days yet.</p>`;
+    const sec = d.second;
+    $("#rvsec", host).innerHTML = !sec ? `<p class="muted">Graded days from before the labels existed: replay them to get the labels.</p>` :
+      `<div class="grid g3"><div><h3>TA vs Market Lab's direction</h3>${MX.table(sec.ta, [["label", "TA", "tag"], ["n", "Calls", "int"], ["dir_right", "Market Lab's way", (v) => P1(v)], ["dir_right_low", "…when confidence low", (v) => P1(v)]])}</div>
+        <div><h3>Fundamentals vs direction</h3>${MX.table(sec.fund, [["label", "Fundamentals", "tag"], ["n", "Calls", "int"], ["dir_right", "Market Lab's way", (v) => P1(v)], ["dir_right_low", "…when confidence low", (v) => P1(v)]])}</div>
+        <div><h3>Chart setup vs size</h3>${MX.table(sec.setup, [["setup", "Setup"], ["n", "Stocks", "int"], ["hit", "Moved", (v) => P1(v)], ["edge", "vs usual", (v) => v == null ? "—" : `${v >= 0 ? "+" : ""}${num(100 * v, 1)} pts`]])}</div></div>
+       <p class="muted small">"Market Lab's way" = the move went the way Market Lab's past cases leaned (above or below 50%), whether or not a lean was shown. If "agrees" isn't clearly above "disagrees" over many days, the label adds nothing.</p>`;
+    $("#rvday", host).appendChild(dataTable(d.by_day, [["day", "Day", "date"], ["kind", "Calls", "tag"], ["status", "Status", "tag"], ["picks", "Picks", "int"], ["hit", "Picks moved", (v) => P1(v)],
+      ["usual", "Their usual", (v) => P1(v)], ["base", "All stocks", (v) => P1(v)], ["leans", "Lean calls", "int"], ["lean_right", "Lean right", (v) => P1(v)]], { per: 10, tools: false }));
+    const prof = st.move !== "gp";
+    $("#rvt", host).appendChild(dataTable(d.rows.map((r) => ({ ...r, chance_pct: 100 * r.chance, usual_pct: 100 * r.usual, edge: 100 * r.lift, ret_pct: r.ret == null ? null : 100 * r.ret })),
+      [["day", "Day", "date"], ["kind", "Calls", "tag"], ["symbol", "Stock"], ["nodes", "Map", (v) => mini(v)], ["chance_pct", "Chance", "pct0"], ["usual_pct", "Usual", "pct0"], ["edge", "Edge (pts)", "snum2"],
+       ["lean", "Lean", (v) => leanHtml(v)], ["confidence", "Confidence", "tag"], ["ret_pct", "Actual", (v) => mv(v == null ? null : v / 100, 2)], ["hit", "Result", (v) => passHtml(v)], ["lean_right", "Lean right", (v) => v == null ? "—" : v ? "✓" : "✗"],
+       ...(prof ? [["n_cross", "Crossings", "int"], ["minutes_beyond", "Minutes beyond", "int"], ["first_cross", "First cross"], ["held_to_close", "Held to close", (v) => v == null ? "—" : v ? "yes" : "no"]] : []),
+       ["plan_exit", "Plan exit"], ["plan_r", "Plan R", "snum2"], ["why", "Biggest drivers", (v) => v ? `<span class="small">${arr(v)}</span>` : "—"], ["sector", "Sector"]],
+      { per: 25, csv: `market_lab_review_${d.move}_${d.size}`, show: ["day", "symbol", "nodes", "chance_pct", "edge", "lean", "confidence", "ret_pct", "hit", ...(prof ? ["n_cross", "minutes_beyond", "first_cross"] : []), "plan_exit", "plan_r", "why"],
+        onRow: (r) => prof && profileView($("#rvp", host), r.symbol, r.day) }));
+  }
+
+  async function profileView(host, symbol, dayStr, thr, band) {
+    thr = thr ?? +st.size; band = band ?? Math.round(80 * thr) / 100;
+    host.innerHTML = `<div class="card section">${spinner("Loading the session …")}</div>`;
+    host.scrollIntoView({ behavior: "smooth", block: "start" });
+    const d = await api(`marketlab/profile?${qs({ symbol, day: dayStr, move: st.move, thr, band })}`);
+    if (!d.ready) { host.innerHTML = `<div class="card section">${note(esc(d.why), "warn")}</div>`; return; }
+    const p = d.profile, ref = p.ref;
+    host.innerHTML = `<div class="card section"><div class="ct"><h2>${esc(symbol)} · ${esc(day(d.session))} · intraday profile (${st.move === "cc" ? "from yesterday's close" : "from today's open"})</h2>
+        <span class="aside row" style="gap:6px">Threshold <input class="in" id="pft" type="number" step="0.1" min="0.1" value="${thr}" style="width:70px">%
+        Re-cross band <input class="in" id="pfb" type="number" step="0.1" min="0" value="${band}" style="width:70px">% <button class="btn small" id="pfu">Update</button></span></div>
+      <p><b>${p.n_cross}</b> crossing${p.n_cross === 1 ? "" : "s"} (▲ ${p.n_up} · ▼ ${p.n_down}) · <b>${p.minutes_beyond}</b> minutes beyond ±${num(thr, 1)}% · first cross ${p.first_cross ? `${esc(p.first_cross)} (${p.first_dir === "up" ? "▲" : "▼"})` : "—"} ·
+        ${p.held_to_close ? `held to the close (${p.held_dir === "up" ? "▲" : "▼"})` : "did not hold to the close"} · best ${pct(p.best_pct / 100, 2)}, worst ${pct(p.worst_pct / 100, 2)}, close ${pct(p.close_pct / 100, 2)}</p>
+      <div id="pfc"></div>
+      ${p.spells.length ? MX.table(p.spells, [["dir", "Direction", (v) => v === "up" ? `<span class="up">▲ up</span>` : `<span class="down">▼ down</span>`], ["start", "From"], ["end", "To"], ["minutes", "Minutes", "int"]]) : `<p class="muted">Never reached ±${num(thr, 1)}%.</p>`}
+      <p class="muted small">A crossing starts when a 5-minute bar reaches the threshold and ends when a bar closes back inside the re-cross band, so wobbles around the level count once.</p></div>`;
+    const lv = [{ price: ref, color: "faint", label: "ref", dash: "2 4" }, { price: ref * (1 + thr / 100), color: "up", label: `+${thr}%` }, { price: ref * (1 - thr / 100), color: "down", label: `−${thr}%` },
+      { price: ref * (1 + band / 100), color: "faint", dash: "3 5", width: 1 }, { price: ref * (1 - band / 100), color: "faint", dash: "3 5", width: 1 }];
+    const vm = p.spells.map((x) => ({ i: d.bars.t.findIndex((t) => t.slice(11, 16) === x.start), label: `${x.dir === "up" ? "▲" : "▼"} ${x.minutes}m` }));
+    requestAnimationFrame(() => MXCharts.priceChart($("#pfc", host), { ...d.bars, sma50: null, sma200: null }, { mode: "candle", height: 360, levels: lv.map((l) => ({ ...l, fit: true })), vmarks: vm }));
+    $("#pfu", host).addEventListener("click", () => profileView(host, symbol, dayStr, +$("#pft", host).value, +$("#pfb", host).value));
+  }
+
   MX.page("market-lab", {
     title: "Market Lab", reloadOnJob: true,
     async render(el, arg) {
       if (arg) { st.sym = arg.toUpperCase(); st.tab = "stock"; save(); }
       el.innerHTML = head("Market Lab", "Which stocks are likely to move at least 1% next session, which way, and what's driving it. Built from the closest past situations; numbers never come from the AI.") +
-        `<div class="tabs" id="mltabs">${[["radar", "Move Radar"], ["stock", "Stock analysis"], ["score", "Scorecard"], ["debate", "Debate (classic)"]].map(([k, l]) => `<button data-t="${k}" class="${st.tab === k ? "on" : ""}">${l}</button>`).join("")}</div><div id="mlb2"></div>`;
+        `<div class="tabs" id="mltabs">${[["radar", "Move Radar"], ["stock", "Stock analysis"], ["review", "Review"], ["score", "Scorecard"], ["debate", "Debate (classic)"]].map(([k, l]) => `<button data-t="${k}" class="${st.tab === k ? "on" : ""}">${l}</button>`).join("")}</div><div id="mlb2"></div>`;
       const go = (t) => { st.tab = t; save(); $$("#mltabs button", el).forEach((x) => x.classList.toggle("on", x.dataset.t === t)); show(); };
       const show = async () => { const b = $("#mlb2", el);
         try {
           if (st.tab === "radar") await radarTab(b, go);
           else if (st.tab === "stock") await stockTab(b);
           else if (st.tab === "score") await scoreTab(b);
+          else if (st.tab === "review") await reviewTab(b);
           else b.innerHTML = note("The original bull-and-bear debate, with statistical tests on every claim. It opens on its own page.") + `<div class="row section"><a class="btn primary" href="#/debate">Open the debate</a></div>`;
         } catch (e) { b.innerHTML = note(esc(e.message), "warn"); } };
       $("#mltabs", el).addEventListener("click", (e) => { const x = e.target.closest("button"); if (x) go(x.dataset.t); });

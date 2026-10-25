@@ -95,7 +95,9 @@ def test_routes_read_the_saved_radar(tmp_path, monkeypatch):
     from web import api
     px, idx, uni = synth()
     d = F.build(px, idx, uni, log=lambda *_: None)
+    from tradeplan import plan as TP
     monkeypatch.setattr(R, "DIR", tmp_path)
+    monkeypatch.setattr(TP, "DIR", tmp_path / "tradeplan")             # never write into the real data folder
     monkeypatch.setattr(R, "panel", lambda log=print, save=True: d)
     R.run(log=lambda *_: None)
     r = api.ROUTES[("GET", "marketlab/radar")]({"move": "cc", "size": "1"})

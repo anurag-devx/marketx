@@ -4,7 +4,8 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
-FILES = [p for p in ROOT.rglob("*.py") if not any(x in p.parts for x in (".venv", "venv", "__pycache__", "backups"))]
+SKIP = ("venv", "__pycache__", "backups", "logs", "data")
+FILES = [p for p in ROOT.rglob("*.py") if not any(x.startswith(".venv") or x in SKIP for x in p.relative_to(ROOT).parts)]   # .venv, .venv-kronos ...
 
 
 @pytest.mark.parametrize("path", FILES, ids=lambda p: str(p.relative_to(ROOT)))
