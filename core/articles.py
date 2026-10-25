@@ -76,8 +76,53 @@ def _interleave(rows):
     return out
 
 
-def fetch(max_articles=300, days=None, linked_first=True, log=print, polite=None):
+def scope(store=None, days=90, linked=True):
+    """Headlines in the backfill scope: the last `days` days, naming a stock (linked) when `linked`. Returns (all, not tried)."""
+    from . import news
+    store = news.load_store() if store is None else store
+    d = store[store.link.fillna("").str.startswith("http")]
+    d = d[pd.to_datetime(d.published) >= pd.Timestamp.now() - pd.Timedelta(days=days)]
+    if linked:
+        d = d[d.symbols.fillna("").ne("")]
+    st = load_state()
+    return d, d[~d.id.isin(set(st.id))]
+
+
+LOCK = DATA / "news" / "articles.lock"
+
+
+def _take_lock():
+    """One article reader at a time (the 90-day backfill and the nightly top-up share the state file). Stale locks are taken over."""
+    import os
+    LOCK.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        pid = int(LOCK.read_text().strip() or 0)
+        if pid and pid != os.getpid():
+            try:
+                os.kill(pid, 0)
+                return False                                   # alive
+            except PermissionError:
+                return False                                   # alive, owned by another user
+            except OSError:
+                pass                                           # gone: stale lock
+    except (OSError, ValueError):
+        pass
+    LOCK.write_text(str(os.getpid()))
+    return True
+
+
+def fetch(max_articles=300, days=None, linked_first=True, log=print, polite=None, linked_only=False):
     """Reads article text for headlines not tried yet. Returns a status count."""
+    if not _take_lock():
+        log("Articles: another article run is going (the 90-day backfill?); skipped.")
+        return {}
+    try:
+        return _fetch(max_articles, days, linked_first, log, polite, linked_only)
+    finally:
+        LOCK.unlink(missing_ok=True)
+
+
+def _fetch(max_articles, days, linked_first, log, polite, linked_only):
     from . import news, library
     from .news_sources import Polite
     store = news.load_store()
@@ -89,6 +134,8 @@ def fetch(max_articles=300, days=None, linked_first=True, log=print, polite=None
     d = store[~store.id.isin(tried) & store.link.fillna("").str.startswith("http")].copy()
     if days:
         d = d[d.published >= pd.Timestamp.now() - pd.Timedelta(days=days)]
+    if linked_only:                                         # only headlines that name a stock (the 90-day backfill and the nightly top-up)
+        d = d[d.symbols.fillna("").ne("")]
     if linked_first:
         d["_l"] = d.symbols.fillna("").ne("")
         d = d.sort_values(["_l", "published"], ascending=[False, False])
@@ -160,4 +207,4 @@ def summary():
 if __name__ == "__main__":
     import sys
     a = dict(x.split("=", 1) for x in sys.argv[1:] if "=" in x)
-    fetch(max_articles=int(a.get("max", 300)), days=int(a["days"]) if "days" in a else None)
+    fetch(max_articles=int(a.get("max", 300)), days=int(a["days"]) if "days" in a else None, linked_only=a.get("linked") == "1")

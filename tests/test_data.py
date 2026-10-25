@@ -177,7 +177,7 @@ def test_secrets_are_redacted_from_errors():
 def test_optional_job_steps_do_not_block():
     from core import jobs
     chain = " && ".join(jobs._cmd(c) for c in jobs.COMMANDS["fetch+pipeline"])
-    assert '|| echo "(optional step failed: continuing)"' in chain and chain.count("||") == 9        # every step except prices and the agents is optional
+    assert '|| echo "(optional step failed: continuing)"' in chain and chain.count("||") == 10        # every step except prices and the agents is optional
     assert chain.index("fetch_angel.py") < chain.index("pipeline.py")
 
 
@@ -199,3 +199,19 @@ def test_instrument_tokens_fall_back_to_be_reit_invit_series_and_save_them():
     t = dict(zip(inst.symbol, inst.token))
     assert t["STLTECH"] == "2" and t["EMBASSY"] == "3" and t["BBB"] == "6" and "GONE" not in t
     assert list(inst.columns) == ["symbol", "exchange", "token", "name", "trading_symbol"]
+
+
+def test_article_scope_and_single_reader(tmp_path, monkeypatch):
+    from core import articles as AR
+    monkeypatch.setattr(AR, "STATE", tmp_path / "st.parquet")
+    monkeypatch.setattr(AR, "LOCK", tmp_path / "articles.lock")
+    now = pd.Timestamp.now()
+    store = pd.DataFrame({"id": ["a", "b", "c", "d"], "link": ["https://x/1", "https://x/2", "https://x/3", ""],
+                          "published": [now, now - pd.Timedelta(days=200), now, now], "symbols": ["TCS", "INFY", "", "TCS"]})
+    allx, todo = AR.scope(store, days=90, linked=True)
+    assert list(allx.id) == ["a"] and list(todo.id) == ["a"]
+    assert AR._take_lock() and AR._take_lock()                 # the same process may re-take its own lock
+    (tmp_path / "articles.lock").write_text("1")                 # pid 1 is alive: someone else is reading
+    assert AR.fetch(log=lambda *_: None) == {}
+    (tmp_path / "articles.lock").write_text("999999")            # dead pid: stale lock is taken over
+    assert AR._take_lock()

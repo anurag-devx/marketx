@@ -278,8 +278,15 @@ def _history():
                      help=f"Publishers' dated sitemaps; {len(nb.get('done', []))} archive files read so far"))
     st_ = AR.load_state()
     ok = int((st_.status == "ok").sum()) if len(st_) else 0
-    rows.append(dict(label="Article text", frac=len(st_) / max(len(nw), 1), job="news-articles", button="Read 300 more", args=["max=300"],
-                     detail=f"{len(st_):,} of {len(nw):,} headlines tried · {ok:,} with full text", help="Where the site allows; paywalls never bypassed (~30–60 min per 300)"))
+    try:
+        allx, todo = AR.scope(nw, days=90, linked=True)
+        n_all, n_todo = len(allx), len(todo)
+    except Exception:
+        n_all = n_todo = 0
+    rows.append(dict(label="Articles, last 90 days (stock news)", frac=(n_all - n_todo) / max(n_all, 1), job="articles-90d", button="Read / continue",
+                     detail=f"{n_all - n_todo:,} of {n_all:,} tried · {ok:,} full texts in total · {len(st_):,} of {len(nw):,} headlines tried overall",
+                     help="Full text of headlines naming a stock, last 90 days. One request per site every 12 s: about 15 a minute, so a full run takes hours "
+                          "(run it overnight; it resumes). Paywalls are never bypassed. New ones are read every evening in Fetch + run all."))
     try:
         from core import fundamentals as F
         cov = F.coverage()

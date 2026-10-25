@@ -13,7 +13,7 @@ LOCK = JOBS / "current.json"
 # Lanes never share the database; files they share are protected by core/filelock.py and written atomically.
 LANES = {"news": {"news", "news-check", "announcements", "macro-fetch", "macro-all", "fundamentals", "fo"},
          "history": {"history-all", "announcements-backfill", "news-backfill", "news-articles", "search-index",
-                     "library-ingest", "news-retag", "fundamentals-backfill", "shareholding", "fo-backfill", "search-compact", "fundamentals-balance"},
+                     "library-ingest", "news-retag", "articles-90d", "fundamentals-backfill", "shareholding", "fo-backfill", "search-compact", "fundamentals-balance"},
          "lab": {"debate", "debate-eval", "debate-batch", "debate-replay", "stock-lists", "market-lab", "market-lab-test", "market-lab-replay", "pattern-test", "desk-analyse", "talib-install"},
          "kronos": {"kronos-install", "kronos-forecast", "kronos-replay"},      # experimental, separate: see kronos_lab/README.md
          "intraday": {"intraday", "intraday-probe"}}      # 5-minute bars from Angel One: core/intraday.py
@@ -45,7 +45,8 @@ COMMANDS = {
     "fetch+pipeline": [[PY, "-u", "fetch_angel.py"], [PY, "-u", "news_fetch.py"], [PY, "-u", "-m", "core.announcements"],
                        [PY, "-u", "-m", "core.fundamentals"], [PY, "-u", "-m", "research.earnings"], [PY, "-u", "-m", "core.derivatives"], [PY, "-u", "-m", "core.macro"], [PY, "-u", "pipeline.py", "all"],
                        [PY, "-u", "-m", "research.market_report", "--if-auto"],     # written only when auto is on (Market news → Report)
-                       [PY, "-u", "-m", "marketlab"], [PY, "-u", "-m", "core.intraday", "update"]],
+                       [PY, "-u", "-m", "marketlab"], [PY, "-u", "-m", "core.intraday", "update"],
+                       [PY, "-u", "-m", "core.articles", "days=3", "linked=1", "max=300"]],      # new stock-news articles (a few minutes)
     # dropped from the nightly run (on demand only): macro impact study, Debate batch + evaluation (Labs)
     "announcements": [[PY, "-u", "news_fetch.py"], [PY, "-u", "-m", "core.announcements"]],
     "backtest": [[PY, "-u", "backtest.py"], [PY, "-u", "strategy_research.py"], [PY, "-u", "analysis.py"]],
@@ -81,6 +82,7 @@ COMMANDS = {
                     [PY, "-u", "-m", "core.search_index"]],
     "library-ingest": [[PY, "-u", "-m", "core.library", "ingest"]],
     "news-articles": [[PY, "-u", "-m", "core.articles"]],
+    "articles-90d": [[PY, "-u", "-m", "core.articles", "days=90", "linked=1", "max=20000"]],
     "install-ai": [[PY, "-m", "pip", "install", "-q", "-r", "requirements-ai.txt"]],
     "debate": [[PY, "-u", "-m", "debate.engine"]],
     "debate-eval": [[PY, "-u", "-m", "debate.evaluate"]],
@@ -101,7 +103,7 @@ COMMANDS = {
 
 
 KEEP_GOING = {"history-all"}
-OPTIONAL = ("marketlab", "core.intraday", "news_fetch.py", "core.announcements", "core.fundamentals", "core.derivatives", "research.earnings", "research.market_report", "core.macro", "research.macro_impact", "debate.batch", "debate.evaluate")   # a failure here is reported but never stops the agents
+OPTIONAL = ("marketlab", "core.intraday", "core.articles", "news_fetch.py", "core.announcements", "core.fundamentals", "core.derivatives", "research.earnings", "research.market_report", "core.macro", "research.macro_impact", "debate.batch", "debate.evaluate")   # a failure here is reported but never stops the agents
 
 
 def _cmd(cmd):
