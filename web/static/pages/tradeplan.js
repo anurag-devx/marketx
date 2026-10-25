@@ -49,14 +49,16 @@
     const load = async () => {
       const d = await api(`tradeplan?${MX.qs({ symbol, mode })}`);
       const b = $("#tpb", host);
-      if (!d.ready) { b.innerHTML = note(esc(d.why), "warn"); return; }
+      const taHtml = d.talib.ok ? `<p class="muted small">TA-Lib ${esc(d.talib.version)} installed.</p>`
+        : `<p class="muted small">TA-Lib isn't installed: using MarketX's built-in patterns. <button class="btn small" id="tpi">Install TA-Lib (optional)</button></p>`;
+      if (!d.ready) { b.innerHTML = note(esc(d.why), "warn") + taHtml; $("#tpi", host)?.addEventListener("click", () => startJob("talib-install")); return; }
       b.innerHTML = card(d) + `<div class="card section"><div class="ct"><h2>Chart: last 45 sessions with the next session's plan</h2><span class="aside muted small">tags on the right · green zone = entry to target · red zone = entry to stop</span></div><div id="tpc"></div>
         <div class="legend"><span><i style="background:var(--up)"></i>entries</span><span><i style="background:var(--down)"></i>stop</span><span><i style="background:#0ea5e9"></i>targets</span><span><i style="background:var(--faint)"></i>pivot / R1 / S1 / 20-day high-low</span><span>▲▼ candle patterns</span></div></div>
         <div class="grid g2 section"><div class="card"><div class="ct"><h2>Legs</h2></div>${MX.table(d.plan.legs.map((x) => ({ ...x, pct: x.share == null ? null : 100 * x.share })), [["leg", "Leg", "tag"], ["side", "Side"], ["price", "Price", "inr"], ["pct", "Share %", "pct0"], ["shares", "Shares", "int"], ["condition", "When", (v) => `<span class="small">${esc(v)}</span>`]])}</div>
           <div class="card"><div class="ct"><h2>Candle patterns (last 5 sessions)</h2><span class="aside muted small">${esc(d.patterns_source || "")}</span></div>
             ${d.patterns.length ? MX.table(d.patterns, [["date", "Date", "date"], ["label", "Pattern"], ["direction", "Direction", "tag"]]) : `<p class="muted">None in the last 5 sessions.</p>`}
             <p class="muted small">Patterns are hints until tested on history (Trade plan step 3).</p>
-            ${d.talib.ok ? `<p class="muted small">TA-Lib ${esc(d.talib.version)} installed.</p>` : `<p class="muted small">TA-Lib isn't installed: using MarketX's built-in patterns. <button class="btn small" id="tpi">Install TA-Lib (optional)</button></p>`}</div></div>`;
+            ${taHtml}</div></div>`;
       const N = 45, cut = (a) => a.slice(-N), bb = { t: cut(d.bars.t), o: cut(d.bars.o), h: cut(d.bars.h), l: cut(d.bars.l), c: cut(d.bars.c), v: cut(d.bars.v), sma50: null, sma200: null };
       const draw = () => { if (document.body.contains(host) && $("#tpc", host)) MXCharts.priceChart($("#tpc", host), bb, chartSpec({ ...d, bars: bb })); };
       requestAnimationFrame(draw); window.addEventListener("mx-resize", draw);
