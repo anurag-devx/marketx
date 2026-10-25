@@ -142,7 +142,26 @@ def review(p):
         setup = [dict(setup=k, n=int(g.hit.notna().sum()), hit=_f(g.hit.mean()), usual=_f(g.usual.mean()), edge=_f(g.hit.mean() - g.usual.mean()))
                  for k, g in st_.groupby("setup")]
         second = dict(ta=agree("ta_agree"), fund=agree("fund_agree"), setup=setup)
-    return dict(base, ready=True, kpis=kpis, by_day=by_day, calibration=cal.to_dict("records"), by_conf=by_conf, rows=out_rows, plans=psum, second=second, sectors=sectors[:15],
+    paper = None
+    try:
+        from web.r_tradeplan import paper_list
+        pt = pd.DataFrame(paper_list())
+        if len(pt):
+            g = RV.load("live", "plans_grade")
+            if len(g):
+                pt = pt.merge(g[["symbol", "day", "mode", "status", "side", "exit", "r", "entry_time"]], on=["symbol", "day", "mode"], how="left")
+            for c_ in ("status", "side", "exit", "r", "entry_time"):
+                if c_ not in pt:
+                    pt[c_] = None
+            pt["pnl_rs"] = pd.to_numeric(pt.r, errors="coerce") * pd.to_numeric(pt.risk_rs, errors="coerce")
+            done = pt[pt.status == "done"]
+            allp = g[g.status == "done"] if len(g) else pd.DataFrame(columns=["r", "mode"])
+            paper = dict(rows=[{k: (None if isinstance(v, float) and not np.isfinite(v) else v) for k, v in r.items()} for r in pt.sort_values("day", ascending=False).to_dict("records")],
+                         n=int(len(pt)), done=int(len(done)), avg_r=_f(done.r.mean(), 2) if len(done) else None, win=_f((done.r > 0).mean(), 3) if len(done) else None,
+                         pnl_rs=_f(done.pnl_rs.sum(), 0) if len(done) else None, all_avg_r=_f(allp.r.mean(), 2) if len(allp) else None)
+    except Exception:
+        paper = None
+    return dict(base, ready=True, paper=paper, kpis=kpis, by_day=by_day, calibration=cal.to_dict("records"), by_conf=by_conf, rows=out_rows, plans=psum, second=second, sectors=sectors[:15],
                 note=("Replayed days use news and filings as stored now, and today's Scorecard to decide which leans to show: "
                       "they can look slightly better than live calls. Compare live and replay separately." if kind != "live" else None))
 

@@ -27,7 +27,34 @@ def tradeplan(p):
         summary = AG.template(_facts(sym, mode, saved, px))
     except Exception:
         pass
-    return dict(base, ready=True, day=saved["day"], plan=e[mode], patterns=e.get("patterns", []), patterns_source=saved.get("patterns_source"), bars=bars, summary=summary)
+    pats = [dict(x, meaning=x.get("meaning") or PT.meaning(x.get("pattern"), x.get("direction"))) for x in e.get("patterns", [])]
+    candles = PT.describe_candles(g[g.date <= pd.Timestamp(saved["day"])]) if len(g) > 6 else []
+    return dict(base, ready=True, day=saved["day"], plan=e[mode], patterns=pats, patterns_source=saved.get("patterns_source"), bars=bars, summary=summary,
+                ta=e.get("ta"), candles=candles, fund=_fund(sym, saved["day"], g, e.get("fund")))
+
+
+def _fund(sym, day, g, label):
+    """Fundamentals for the TA tab: point-in-time valuation and the latest quarter. Blank where data is missing."""
+    out = dict(label=label, val=None, quarter=None)
+    try:
+        from research import valuation as VA
+        price = float(g[g.date <= pd.Timestamp(day)].close.iat[-1])
+        v = VA.valuation(sym, price, day)
+        out["val"] = {k: v.get(k) for k in ("market_cap_cr", "pe", "pb", "roe_pct", "debt_to_equity", "net_debt_cr", "fcf_cr", "cf_months", "balance_sheet_date", "ttm_profit_cr", "note")}
+    except Exception:
+        pass
+    try:
+        from research.earnings import quarters
+        q = quarters()
+        q = q[(q.symbol == sym) & (pd.to_datetime(q.filed_at) <= pd.Timestamp(day) + pd.Timedelta(hours=21))].sort_values("period_end")
+        if len(q):
+            r = q.iloc[-1]
+            f = lambda k: None if k not in r or pd.isna(r[k]) else float(r[k])
+            out["quarter"] = dict(period=str(pd.Timestamp(r.period_end).date()), filed=str(r.filed_at)[:16], revenue_cr=f("revenue_cr"), profit_cr=f("profit_cr"),
+                                  margin_pct=f("margin_pct"), revenue_yoy=f("revenue_yoy"), profit_yoy=f("profit_yoy"))
+    except Exception:
+        pass
+    return out
 
 
 def _facts(sym, mode, saved, px=None):
@@ -84,7 +111,7 @@ def summary(p):
     out = {}
     for sym, e in (saved.get("plans") or {}).items():
         x = e.get(mode) or {}
-        out[sym] = dict(ok=bool(x.get("tradeable")), rr=max((s_.get("rr") or 0) for s_ in x.get("sides", [{}])) if x.get("sides") else None,
+        out[sym] = dict(ok=bool(x.get("tradeable")), act={"up": "BUY", "down": "SHORT"}.get(x.get("lean"), "BUY / SHORT"), rr=max((s_.get("rr") or 0) for s_ in x.get("sides", [{}])) if x.get("sides") else None,
                         n=f"{x.get('n_entries', 0)} / {x.get('n_exits', 0)}", why=(x.get("flags") or [""])[0],
                         ta=(e.get("ta") or {}).get("dir"), fund=(e.get("fund") or {}).get("dir"),
                         second_why="TA: " + "; ".join((e.get("ta") or {}).get("why", [])) + ((" · setup: " + e["ta"]["setup"]) if (e.get("ta") or {}).get("setup") else "")
@@ -118,3 +145,49 @@ def ask(_, body):
         return dict(task=tasks.start("ta-agent", job))
     except RuntimeError as ex:
         raise UserError(str(ex))
+
+
+# ---------- paper takes: plans you chose to (paper) take; graded in Market Lab → Review against all plans ----------
+def _paper_file():
+    from core import config as C
+    return C.DATA / "paper" / "takes.json"
+
+
+def paper_list():
+    import json
+    try:
+        return json.loads(_paper_file().read_text())
+    except (OSError, ValueError):
+        return []
+
+
+@route("GET", "tradeplan/paper")
+def paper_get(p):
+    return dict(items=paper_list())
+
+
+@route("POST", "tradeplan/paper")
+def paper_take(_, body):
+    """Record a paper take of tonight's plan for one stock and mode (frozen as it is now). Taking it again removes it."""
+    import json
+    from tradeplan import plan as TP
+    from core import atomic
+    b = body or {}
+    sym, mode = str(b.get("symbol", "")).upper().strip(), b.get("mode", "intraday")
+    saved = TP.load()
+    if mode not in TP.MODES or not saved or sym not in saved.get("plans", {}):
+        raise UserError("no plan for that stock yet")
+    items = paper_list()
+    key = (sym, saved["day"], mode)
+    keep = [x for x in items if (x["symbol"], x["day"], x["mode"]) != key]
+    if len(keep) < len(items):
+        out = dict(taken=False)
+    else:
+        pl = saved["plans"][sym][mode]
+        keep.append(dict(symbol=sym, day=saved["day"], mode=mode, lean=pl.get("lean"), tradeable=pl.get("tradeable"),
+                         risk_rs=max([x.get("risk_rs") or 0 for x in pl.get("sides", [])] or [0]), taken_at=str(pd.Timestamp.now().floor("s"))))
+        out = dict(taken=True)
+    f = _paper_file()
+    f.parent.mkdir(parents=True, exist_ok=True)
+    atomic.write_text(f, json.dumps(keep, indent=1))
+    return out

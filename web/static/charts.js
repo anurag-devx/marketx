@@ -120,8 +120,8 @@
         const t = el("text", { x: x0 + 5, y: ty + 4, style: "fill:#fff", "font-weight": 600, "font-size": 10.5 }, svg); t.textContent = lv.label; } });
     const seen = {};
     (opt.marks || []).forEach((m) => { const k = (seen[m.i] = (seen[m.i] || 0) + 1) - 1, c0 = pick(m.color), cx = x(m.i), d = m.dir === "down" ? -1 : 1, cy = y(m.price) + d * k * 26;
-      el("polygon", { points: `${cx},${cy + d * 2} ${cx - 6},${cy + d * 12} ${cx + 6},${cy + d * 12}`, fill: c0 }, svg);
-      if (m.label) { const t = el("text", { x: cx, y: cy + d * 22, "text-anchor": "middle", "font-size": 10, "font-weight": 600, style: `fill:${c0}`, "paint-order": "stroke", stroke: css("--surface"), "stroke-width": 3 }, svg); t.textContent = m.label; } });
+      el("polygon", { points: `${cx},${cy + d * 2} ${cx - 8},${cy + d * 15} ${cx + 8},${cy + d * 15}`, fill: c0 }, svg);
+      if (m.label) { const t = el("text", { x: cx, y: cy + d * 26, "text-anchor": "middle", "font-size": 11.5, "font-weight": 600, style: `fill:${c0}`, "paint-order": "stroke", stroke: css("--surface"), "stroke-width": 3 }, svg); t.textContent = m.label; } });
     // hover
     const cross = el("line", { y1: padT, y2: vTop + volH, stroke: css("--faint"), "stroke-width": 1, "stroke-dasharray": "3 3", visibility: "hidden" }, svg);
     const dotc = el("circle", { r: 3.5, fill: acc, visibility: "hidden" }, svg);

@@ -71,14 +71,15 @@
     if (!d.ready) { host.innerHTML = note(`⏳ ${esc(d.why)}`, "warn") + (st.when === "close" ? `<div class="row section"><button class="btn primary" id="mlb">Build tonight's radar</button></div>` : "");
       $("#mlb", b)?.addEventListener("click", () => startJob("market-lab")); return; }
     const rows = d.rows.filter((r) => !st.sector || r.sector === st.sector).map((r) => { const t = tp.rows[r.symbol] || {};
-      return { ...r, chance_pct: 100 * r.chance, usual_pct: 100 * r.usual, edge: 100 * r.lift, plan: t.ok == null ? null : t.ok ? `✓ ${t.n}` : "no trade", plan_why: t.why, rr: t.rr, second: t.ta ? `${t.ta}|${t.fund || "no data"}` : null, second_why: t.second_why }; });
+      return { ...r, chance_pct: 100 * r.chance, usual_pct: 100 * r.usual, edge: 100 * r.lift, plan: t.ok == null ? null : t.ok ? t.act : "no trade", plan_why: t.why, rr: t.rr, second: t.ta ? `${t.ta}|${t.fund || "no data"}` : null, second_why: t.second_why }; });
     host.innerHTML = note(`Radar for ${esc(day(d.day))} → next session · ${esc(d.moves[d.move])} · at least ${esc(d.size)}% · status: <b>${esc(d.status)}</b>.
       Sorted by edge: the chance minus the stock's usual chance. Click a row for its influence map.`, d.status === "tested" ? "info" : "warn") + (d.day_note ? note(esc(d.day_note), "warn") : "") + `<div class="card flush section" id="mlt"></div>`;
     $("#mlt", host).appendChild(dataTable(rows, [
       ["symbol", "Stock", "sym"], ["nodes", "Map", (v) => mini(v)],
       ["chance_pct", `Chance ≥${d.size}%`, (v, r) => `<span class="mlbar"><i style="width:${Math.min(100, v)}%"></i><b style="left:${Math.min(100, r.usual_pct)}%"></b></span><b>${num(v, 0)}%</b>`],
       ["usual_pct", "Usual", "pct0"], ["edge", "Edge (pts)", "snum1"], ["lean", "Lean", (v) => leanHtml(v)], ["confidence", "Confidence", "tag"],
-      ["n_big", "Cases that big", "int"], ["plan", "Plan (entries / exits)", (v, r) => v == null ? "—" : `<span title="${esc(r.plan_why || "")}" class="${v.startsWith("✓") ? "up" : "muted"}" style="white-space:nowrap">${esc(v)}</span>`], ["rr", "R:R", "num1"],
+      ["n_big", "Cases that big", "int"], ["plan", "Plan", (v, r) => v == null ? "—" : v === "no trade" ? `<span title="${esc(r.plan_why || "")}" class="muted">no trade</span>`
+        : `<b style="white-space:nowrap">${v.split(" / ").map((x) => x === "BUY" ? `<span class="up">▲ BUY</span>` : `<span class="down">▼ SHORT</span>`).join(" / ")}</b>`], ["rr", "R:R", "num1"],
       ["second", "TA · Fund.", (v, r) => { if (!v) return "—"; const [a, f] = v.split("|"), ic = (x) => x === "up" ? `<span class="up">▲</span>` : x === "down" ? `<span class="down">▼</span>` : `<span class="muted">•</span>`;
         return `<span title="${esc(r.second_why || "")}" style="white-space:nowrap">${ic(a)} TA · ${ic(f)} Fund.</span>`; }],
       ["why", "Biggest drivers", (v) => `<span class="small">${arr(v)}</span>`], ["sector", "Sector"]],
@@ -103,7 +104,7 @@
         <div class="card" id="mlpanel"><h3 style="margin:0 0 6px">Click a node</h3><p class="muted small">Each node is one group of facts about today. Its colour and thickness come from re-running the match without it, never from the AI.</p>
           <dl class="kv"><dt>Chance</dt><dd><b>${P(v.chance)}</b> (usual ${P(v.usual)}, edge ${v.lift >= 0 ? "+" : ""}${num(100 * v.lift, 1)} pts)</dd><dt>Lean</dt><dd>${leanHtml(v.lean)} · ${num(100 * v.up_share, 0)}% of big moves were up${v.direction_tested ? "" : `<div class="muted small">Direction hasn't beaten a coin flip on past years for this combination, so no lean is shown. Node colours are hints only.</div>`}</dd>
           <dt>Confidence</dt><dd>${esc(v.confidence)}</dd><dt>Cases that big</dt><dd>${v.n_big} of 150 closest</dd></dl></div></div>
-      <details class="fold section" open id="mltp"><summary>Trade plan (secondary: entries, exits, levels, candle patterns)</summary><div id="mltpb" style="padding:0 14px 14px"></div></details>
+      <details class="fold section" open id="mltp"><summary>Technical analysis (secondary: buy / short plan, levels, candles, fundamentals)</summary><div id="mltpb" style="padding:0 14px 14px"></div></details>
       <details class="fold section" open><summary>Explain the past cases (AI, optional)</summary><div style="padding:0 14px 14px"><button class="btn" id="mlx">Explain with past cases</button> <span class="muted small" id="mlxs"></span><div id="mlxo"></div></div></details>
       <details class="fold section"><summary>Closest past cases (${d.cases.length})</summary><div id="mlc" style="padding:0 14px 14px"></div></details>
       <details class="fold section"><summary>Outcome range of the 150 closest cases</summary><div id="mlo" style="padding:0 14px 14px"></div></details>
@@ -163,7 +164,12 @@
     const pl = d.plans ? `<div class="card section"><div class="ct"><h2>Trade plans (${esc(d.plans.mode)})</h2><span class="aside muted small">E1 entry, stop first when a bar touches both, E2 not graded yet</span></div>
       <p>${d.plans.plans} plans · entered ${d.plans.entered} · no entry ${d.plans.no_entry}${d.plans.ambiguous ? ` · both sides in one bar ${d.plans.ambiguous}` : ""} · exits: ${Object.entries(d.plans.exits).map(([k, v]) => `${esc(k)} ${v}`).join(", ") || "—"}</p>
       <p>All entered: average <b>${d.plans.avg_r ?? "—"} R</b>, winners ${P1(d.plans.win)} · plans that passed the checks (${d.plans.tradeable_n}): average <b>${d.plans.tradeable_avg_r ?? "—"} R</b>, winners ${P1(d.plans.tradeable_win)}</p></div>` : "";
-    host.innerHTML = (d.note ? note(esc(d.note), "warn") : "") + kp + pl +
+    const pp = d.paper;
+    const ppHtml = pp ? `<div class="card section"><div class="ct"><h2>Your paper takes</h2><span class="aside muted small">graded on the same rules as every plan (live days)</span></div>
+      <p>${pp.n} taken · ${pp.done} finished · average <b>${pp.avg_r ?? "—"} R</b>, winners ${P1(pp.win)}, P&L <b>${pp.pnl_rs == null ? "—" : `₹${num(pp.pnl_rs, 0)}`}</b> · all plans: ${pp.all_avg_r ?? "—"} R</p>
+      ${MX.table(pp.rows, [["day", "Day", "date"], ["symbol", "Stock"], ["mode", "Mode", "tag"], ["lean", "Lean", (v) => leanHtml(v)], ["status", "Status", (v) => esc(v || "waiting")],
+        ["side", "Side", (v) => v === "long" ? `<span class="up">▲ BUY</span>` : v === "short" ? `<span class="down">▼ SHORT</span>` : "—"], ["exit", "Exit"], ["r", "R", "snum2"], ["pnl_rs", "P&L ₹", "snum2"]])}</div>` : "";
+    host.innerHTML = (d.note ? note(esc(d.note), "warn") : "") + kp + ppHtml + pl +
       `<div class="grid g2 section"><div class="card"><div class="ct"><h2>Did the chances hold?</h2><span class="aside muted small">all stocks, graded</span></div><div id="rvcal"></div>
         <p class="muted small">"Said" = the average chance in that band; "happened" = how often the move came. Close = well calibrated.</p></div>
         <div class="card"><div class="ct"><h2>Picks by confidence</h2></div><div id="rvconf"></div></div></div>

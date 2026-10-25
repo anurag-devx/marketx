@@ -361,3 +361,15 @@ details.fold > .card, details.fold > div { border: 0; margin: 0; }
 .sw.on { border-color: var(--ink); } .ws-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; vertical-align: middle; }
 .ws-title { font-size: 20px; font-weight: 600; border: 1px solid transparent; background: transparent; padding: 2px 4px; min-width: 320px; }
 .ws-title:hover, .ws-title:focus { border-color: var(--line); background: var(--surface); }
+
+/* Trade plan: BUY / SHORT badges */
+.tp-badges { display: flex; flex-wrap: wrap; gap: 10px; margin: 6px 0 10px; }
+.tp-badge { border-radius: 10px; padding: 10px 14px; border: 2px solid; min-width: 260px; }
+.tp-badge .act { font-size: 20px; font-weight: 800; letter-spacing: .02em; }
+.tp-badge .lv { font-size: 13px; margin-top: 2px; }
+.tp-badge.buy { border-color: var(--up); background: color-mix(in srgb, var(--up) 12%, transparent); }
+.tp-badge.buy .act { color: var(--up); }
+.tp-badge.short { border-color: var(--down); background: color-mix(in srgb, var(--down) 12%, transparent); }
+.tp-badge.short .act { color: var(--down); }
+.tp-badge.off { opacity: .55; filter: grayscale(.6); }
+.tp-nt { font-weight: 700; color: var(--muted); }

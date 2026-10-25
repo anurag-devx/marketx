@@ -59,3 +59,34 @@ def test_ask_without_a_model_falls_back_to_the_facts(monkeypatch):
     monkeypatch.setattr(AG, "template", lambda f: "summary")
     a, w = AG.ask(FACTS, "anything")
     assert w == "off" and a.endswith("summary")
+
+
+def test_candles_in_words_and_pattern_meanings():
+    from tradeplan import patterns as PT
+    g = pd.DataFrame({"date": pd.bdate_range("2026-09-01", periods=30), "open": 100.0, "high": 101.0, "low": 99.0, "close": 100.0, "volume": 1000.0})
+    g.loc[29, ["open", "high", "low", "close", "volume"]] = [101.0, 103.1, 100.9, 103.0, 2500.0]
+    c = PT.describe_candles(g)
+    assert len(c) == 5 and c[-1]["color"] == "green" and c[-1]["change_pct"] == 3.0 and c[-1]["volume_x"] == 2.5
+    assert "strong body" in c[-1]["words"] and "gapped up 1.0%" in c[-1]["words"]
+    assert "buyers took over" in PT.meaning("engulfing", "bullish") and "sellers took over" in PT.meaning("engulfing", "bearish")
+    assert all(PT.meaning(p, "bullish") for p in PT.PATTERNS)
+
+
+def test_paper_take_toggles_and_shows_in_review(tmp_path, monkeypatch):
+    from web import api, r_tradeplan as RT
+    from marketlab import review as RV2
+    monkeypatch.setattr(RT, "_paper_file", lambda: tmp_path / "paper" / "takes.json")
+    plans = {"day": "2026-10-23", "plans": {"AAA": {"intraday": {"lean": "up", "tradeable": True, "sides": [{"risk_rs": 1000}], "legs": []}}}}
+    monkeypatch.setattr(TP, "load", lambda day=None: plans)
+    take = api.ROUTES[("POST", "tradeplan/paper")]
+    assert take(None, {"symbol": "AAA", "mode": "intraday"})["taken"]
+    assert api.ROUTES[("GET", "tradeplan/paper")]({})["items"][0]["risk_rs"] == 1000
+    assert not take(None, {"symbol": "AAA", "mode": "intraday"})["taken"] and RT.paper_list() == []
+    take(None, {"symbol": "AAA", "mode": "intraday"})
+    calls = pd.DataFrame({"symbol": ["AAA"], "move": "oc", "size": 1.0, "ret": 0.02, "pick": True, "hit": 1.0, "usual": 0.5, "lean": "unclear",
+                          "lean_right": np.nan, "confidence": "low", "chance": 0.6, "lift": 0.1, "rank": 1, "sector": "X", "kind": "live", "day": "2026-10-23"})
+    g = pd.DataFrame({"symbol": ["AAA"], "day": "2026-10-23", "mode": "intraday", "status": "done", "side": "long", "exit": "T2", "r": 1.5, "entry_time": "09:35",
+                      "kind": "live", "tradeable": True})
+    monkeypatch.setattr(RV2, "load", lambda kind, name: calls if name == "calls" else g if name == "plans_grade" else pd.DataFrame())
+    r = api.ROUTES[("GET", "marketlab/review")]({"kind": "live", "move": "oc", "size": "1"})
+    assert r["paper"]["done"] == 1 and r["paper"]["pnl_rs"] == 1500 and r["paper"]["avg_r"] == 1.5

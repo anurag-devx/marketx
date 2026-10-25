@@ -26,6 +26,48 @@ LABEL = {"doji": "Doji", "hammer": "Hammer", "hanging_man": "Hanging man", "inve
          "engulfing": "Engulfing", "harami": "Harami", "morning_star": "Morning star", "evening_star": "Evening star",
          "three_soldiers": "Three white soldiers", "three_crows": "Three black crows", "inside_bar": "Inside bar"}
 
+MEANING = {"doji": "open and close almost equal: buyers and sellers balanced → indecision; the next bar decides",
+           "hammer": "long lower wick after a fall: sellers pushed it down, buyers pushed it back → possible bounce",
+           "hanging_man": "hammer shape after a rise: selling showed up during the day → possible top",
+           "inverted_hammer": "long upper wick after a fall: buyers tried to lift it → possible bounce if the next bar confirms",
+           "shooting_star": "long upper wick after a rise: buyers pushed up, sellers pushed it back → possible top",
+           "engulfing+": "today's green body swallowed yesterday's red one → buyers took over",
+           "engulfing-": "today's red body swallowed yesterday's green one → sellers took over",
+           "harami": "a small body inside yesterday's big one → the move is losing steam",
+           "morning_star": "a fall, a small pause, then a strong up bar → possible bottom",
+           "evening_star": "a rise, a small pause, then a strong down bar → possible top",
+           "three_soldiers": "three strong up bars in a row → steady buying",
+           "three_crows": "three strong down bars in a row → steady selling",
+           "inside_bar": "the whole range inside yesterday's → compression; a break out of it often follows"}
+
+
+def meaning(pattern, direction):
+    if pattern == "engulfing":
+        return MEANING["engulfing+" if direction == "bullish" else "engulfing-"]
+    return MEANING.get(pattern, "")
+
+
+def describe_candles(g, n=5):
+    """The last n daily candles in words: colour, body vs range, wicks, change, gap, volume vs its 20-day average."""
+    g = g.reset_index(drop=True)
+    vol20 = g.volume.astype(float).rolling(20, min_periods=5).mean().shift(1)
+    out = []
+    for i in range(max(1, len(g) - n), len(g)):
+        o, h, l, c = (float(g.loc[i, k]) for k in ("open", "high", "low", "close"))
+        pc = float(g.loc[i - 1, "close"])
+        rng = max(h - l, 1e-9)
+        body, up_w, lo_w = abs(c - o) / rng, (h - max(o, c)) / rng, (min(o, c) - l) / rng
+        kind = "doji-like (tiny body)" if body < 0.1 else "strong body" if body > 0.7 else "medium body"
+        wick = ("long upper wick" if up_w > 0.4 else "") + (" and " if up_w > 0.4 and lo_w > 0.4 else "") + ("long lower wick" if lo_w > 0.4 else "")
+        gap = 100 * (o / pc - 1)
+        vx = float(g.loc[i, "volume"]) / vol20.iat[i] if pd.notna(vol20.iat[i]) and vol20.iat[i] > 0 else None
+        out.append(dict(date=str(pd.Timestamp(g.loc[i, "date"]).date()), color="green" if c >= o else "red", change_pct=round(100 * (c / pc - 1), 2),
+                        gap_pct=round(gap, 2), volume_x=round(vx, 1) if vx else None,
+                        words=", ".join(x for x in [("green" if c >= o else "red") + f", {kind}", wick,
+                                                     f"gapped {'up' if gap > 0 else 'down'} {abs(gap):.1f}%" if abs(gap) >= 0.5 else "",
+                                                     f"volume {vx:.1f}× normal" if vx else ""] if x)))
+    return out
+
 
 def talib_status():
     try:
@@ -108,6 +150,6 @@ def recent(g, days=5, prefer_talib=True):
     for idx, row in sig.iterrows():
         for p, v in row.items():
             if v:
-                out.append(dict(date=str(pd.Timestamp(g.loc[idx, "date"]).date()), pattern=p, label=LABEL[p],
-                                direction="bullish" if v == 1 else "bearish" if v == -1 else "neutral"))
+                dr = "bullish" if v == 1 else "bearish" if v == -1 else "neutral"
+                out.append(dict(date=str(pd.Timestamp(g.loc[idx, "date"]).date()), pattern=p, label=LABEL[p], direction=dr, meaning=meaning(p, dr)))
     return out, src

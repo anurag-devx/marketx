@@ -188,3 +188,14 @@ def test_key_file_parsing_tolerates_quotes(tmp_path, monkeypatch):
     monkeypatch.setattr(secrets, "ENV", f)
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     assert secrets.get("ANTHROPIC_API_KEY") == "sk-test" and secrets.get("TELEGRAM_CHAT_ID") == "123"
+
+
+def test_instrument_tokens_fall_back_to_be_reit_invit_series_and_save_them():
+    import fetch_angel as FA
+    sm = pd.DataFrame({"exch_seg": "NSE", "symbol": ["AAA-EQ", "STLTECH-BE", "EMBASSY-RR", "PGINVIT-IV", "BBB-BE", "BBB-EQ", "NIFTY"],
+                       "token": ["1", "2", "3", "4", "5", "6", "7"], "name": ["A", "S", "E", "P", "B", "B", "N"]})
+    tok, inst = FA.instrument_tokens(sm, ["AAA", "STLTECH", "EMBASSY", "PGINVIT", "BBB", "GONE"])
+    assert tok == {"AAA": "1", "BBB": "6", "STLTECH": "2", "EMBASSY": "3", "PGINVIT": "4"}       # -EQ wins over -BE
+    t = dict(zip(inst.symbol, inst.token))
+    assert t["STLTECH"] == "2" and t["EMBASSY"] == "3" and t["BBB"] == "6" and "GONE" not in t
+    assert list(inst.columns) == ["symbol", "exchange", "token", "name", "trading_symbol"]

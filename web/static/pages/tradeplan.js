@@ -13,7 +13,16 @@
     const leanTxt = p.lean === "up" ? `<span class="up">▲ up-lean · long plan</span>` : p.lean === "down" ? `<span class="down">▼ down-lean · short plan</span>` : `<span class="muted">— no tested lean · plan both ways (first break wins)</span>`;
     const legs = p.legs.filter((x) => x.price != null);
     const fmtLeg = (x) => `<span class="tp-leg tp-${(x.side === "short" ? SHORT : COLS)[x.leg] || "faint"}">${x.leg}${p.lean === "unclear" ? (x.side === "short" ? "↓" : "↑") : ""} ${inr(x.price)}</span>`;
-    return `<div class="card tp-card"><div class="ct"><h2>${esc(d.symbol)} · Trade plan (${esc(p.mode)})</h2><span class="aside">${leanTxt}</span></div>
+    const leg = (k, sd) => (p.legs.find((x) => x.leg === k && x.side === sd) || {}).price;
+    const badge = (sd) => { const buy = sd === "long";
+      return `<div class="tp-badge ${buy ? "buy" : "short"} ${p.tradeable ? "" : "off"}"><div class="act">${buy ? "▲ BUY" : "▼ SHORT"} ${buy ? "above" : "below"} ${inr(leg("E1", sd))}</div>
+        <div class="lv">stop <b>${inr(leg("SL", sd))}</b> · targets <b>${inr(leg("T1", sd))}</b> / <b>${inr(leg("T2", sd))}</b>${leg("E2", sd) != null ? ` · add at ${inr(leg("E2", sd))}` : ""}</div>
+        ${!buy && p.mode === "swing" ? `<div class="lv muted">overnight short needs F&O (stock futures)</div>` : ""}</div>`; };
+    const sideList = p.lean === "up" ? ["long"] : p.lean === "down" ? ["short"] : ["long", "short"];
+    const badges = `<div class="tp-badges">${sideList.map(badge).join("")}</div>
+      ${p.lean === "unclear" ? `<div class="small muted" style="margin:-4px 0 8px">No tested direction: whichever level breaks first; the other is cancelled.</div>` : ""}
+      ${p.tradeable ? "" : `<div class="tp-nt" style="margin:-2px 0 8px">NO TRADE: ${esc(p.flags[0] || "the plan's checks failed")}</div>`}`;
+    return `<div class="card tp-card"><div class="ct"><h2>${esc(d.symbol)} · Trade plan (${esc(p.mode)})</h2><span class="aside">${leanTxt}</span></div>${badges}
       <div class="tp-sum"><b>${p.n_entries} entr${p.n_entries === 1 ? "y" : "ies"} · ${p.n_exits} exits</b>
         ${sides.map((s) => ` · ${esc(s.side)}: ${num(s.shares, 0)} shares (≈${inr(s.value_rs, 0)}), risk ${inr(s.risk_rs, 0)}, reward:risk <b>${num(s.rr, 1)} : 1</b>, stop ${num(s.stop_atr, 1)}× ATR`).join("")}</div>
       <div class="tp-legs">${legs.map(fmtLeg).join("")}<span class="tp-leg tp-faint">TX ${esc(p.hold)}</span></div>
@@ -45,6 +54,27 @@
     return { mode: "candle", height: 420, levels, zones, marks };
   }
 
+  const ar = (x) => x === "up" ? `<span class="up">▲ up</span>` : x === "down" ? `<span class="down">▼ down</span>` : `<span class="muted">• ${esc(x || "no data")}</span>`;
+  const cr = (v) => v == null ? "—" : `₹${num(v, 0)} cr`;
+  const yo = (v) => v == null ? "—" : `<span class="${v > 0 ? "up" : v < 0 ? "down" : ""}">${v > 0 ? "▲" : v < 0 ? "▼" : "•"} ${num(100 * v, 1)}%</span>`;
+  function extra(d) {
+    const ta = d.ta || {}, f = d.fund || {}, v = f.val || {}, q = f.quarter, lab = f.label || {};
+    const kv = (k, x) => `<dt>${k}</dt><dd>${x ?? "—"}</dd>`;
+    return `<div class="grid g3 section">
+      <div class="card"><div class="ct"><h2>Chart read</h2><span class="aside">${ar(ta.dir)}</span></div>
+        <ul class="small" style="margin:0;padding-left:18px">${(ta.why || []).map((x) => `<li>${esc(x)}</li>`).join("")}</ul>
+        ${ta.setup ? `<p class="small" style="margin:6px 0 0">Setup: <b>${esc(ta.setup)}</b></p>` : ""}
+        <p class="muted small" style="margin:6px 0 0">A label, not tested yet: Market Lab → Review shows whether it helps.</p></div>
+      <div class="card"><div class="ct"><h2>Fundamentals</h2><span class="aside">${ar(lab.dir)}</span></div>
+        <dl class="kv">${kv("Market cap", cr(v.market_cap_cr))}${kv("P/E (12 months)", v.pe == null ? "—" : num(v.pe, 1))}${kv("P/B", v.pb == null ? "—" : num(v.pb, 1))}
+          ${kv("ROE", v.roe_pct == null ? "—" : `${num(v.roe_pct, 1)}%`)}${kv("Debt / equity", v.debt_to_equity == null ? "—" : num(v.debt_to_equity, 2))}${kv("Net debt", cr(v.net_debt_cr))}
+          ${kv(`Free cash flow${v.cf_months ? ` (${v.cf_months} mo)` : ""}`, cr(v.fcf_cr))}</dl>
+        ${q ? `<p class="small" style="margin:6px 0 0">Quarter to ${esc(day(q.period))}: revenue ${cr(q.revenue_cr)} (${yo(q.revenue_yoy)} y/y), profit ${cr(q.profit_cr)} (${yo(q.profit_yoy)} y/y)</p>` : `<p class="muted small">No quarterly result yet.</p>`}
+        <p class="muted small" style="margin:6px 0 0">${esc((lab.why || []).join(" · "))}${v.note ? ` · ${esc(v.note)}` : ""}. Blank = not filed or not downloaded yet; nothing is estimated.</p></div>
+      <div class="card"><div class="ct"><h2>Last 5 candles</h2></div>
+        ${(d.candles || []).slice().reverse().map((c) => `<div class="small" style="margin:0 0 6px"><b>${esc(day(c.date))}</b> <span class="${c.change_pct >= 0 ? "up" : "down"}">${c.change_pct >= 0 ? "▲" : "▼"} ${c.change_pct >= 0 ? "+" : ""}${num(c.change_pct, 2)}%</span> · ${esc(c.words)}</div>`).join("") || `<p class="muted">—</p>`}</div></div>`;
+  }
+
   async function planView(host, symbol) {
     host.innerHTML = `<div class="row" style="justify-content:space-between;margin-bottom:10px">
         <div class="seg" id="tpm"><button data-v="intraday" class="${mode === "intraday" ? "on" : ""}">Intraday</button><button data-v="swing" class="${mode === "swing" ? "on" : ""}">Swing (days)</button></div>
@@ -55,17 +85,23 @@
       const taHtml = d.talib.ok ? `<p class="muted small">TA-Lib ${esc(d.talib.version)} installed.</p>`
         : `<p class="muted small">TA-Lib isn't installed: using MarketX's built-in patterns. <button class="btn small" id="tpi">Install TA-Lib (optional)</button></p>`;
       if (!d.ready) { b.innerHTML = note(esc(d.why), "warn") + taHtml; $("#tpi", host)?.addEventListener("click", () => startJob("talib-install")); return; }
-      b.innerHTML = card(d) + `<div class="card section"><div class="ct"><h2>Chart: last 45 sessions with the next session's plan</h2><span class="aside muted small">tags on the right · green zone = entry to target · red zone = entry to stop <button class="btn small" id="tpsv">Save to workspace</button></span></div><div id="tpc"></div>
+      b.innerHTML = card(d) + `<div class="card section"><div class="ct"><h2>Chart: last 45 sessions with the next session's plan</h2><span class="aside muted small">tags on the right · green zone = entry to target · red zone = entry to stop <button class="btn small" id="tpsv">Save to workspace</button> <button class="btn small primary" id="tppt">Paper take</button></span></div><div id="tpc"></div>
         <div class="legend"><span><i style="background:var(--up)"></i>entries</span><span><i style="background:var(--down)"></i>stop</span><span><i style="background:#0ea5e9"></i>targets</span><span><i style="background:var(--faint)"></i>pivot / R1 / S1 / 20-day high-low</span><span>▲▼ candle patterns</span></div></div>
         <div class="grid g2 section"><div class="card"><div class="ct"><h2>Legs</h2></div>${MX.table(d.plan.legs.map((x) => ({ ...x, pct: x.share == null ? null : 100 * x.share })), [["leg", "Leg", "tag"], ["side", "Side"], ["price", "Price", "inr"], ["pct", "Share %", "pct0"], ["shares", "Shares", "int"], ["condition", "When", (v) => `<span class="small">${esc(v)}</span>`]])}</div>
           <div class="card"><div class="ct"><h2>Candle patterns (last 5 sessions)</h2><span class="aside muted small">${esc(d.patterns_source || "")}</span></div>
-            ${d.patterns.length ? MX.table(d.patterns, [["date", "Date", "date"], ["label", "Pattern"], ["direction", "Direction", "tag"]]) : `<p class="muted">None in the last 5 sessions.</p>`}
+            ${d.patterns.length ? MX.table(d.patterns, [["date", "Date", "date"], ["label", "Pattern", (v, r) => `<b class="${r.direction === "bullish" ? "up" : r.direction === "bearish" ? "down" : "muted"}">${r.direction === "bullish" ? "▲" : r.direction === "bearish" ? "▼" : "•"} ${esc(v)}</b>`],
+              ["meaning", "What it means", (v) => `<span class="small">${esc(v || "")}</span>`]]) : `<p class="muted">None in the last 5 sessions.</p>`}
             <p class="muted small">Patterns are hints until tested on history (Trade plan step 3).</p>
             ${taHtml}</div></div>`;
+      b.insertAdjacentHTML("beforeend", extra(d));
       const N = 45, cut = (a) => a.slice(-N), bb = { t: cut(d.bars.t), o: cut(d.bars.o), h: cut(d.bars.h), l: cut(d.bars.l), c: cut(d.bars.c), v: cut(d.bars.v), sma50: null, sma200: null };
       const draw = () => { if (document.body.contains(host) && $("#tpc", host)) MXCharts.priceChart($("#tpc", host), bb, chartSpec({ ...d, bars: bb })); };
       requestAnimationFrame(draw); window.addEventListener("mx-resize", draw);
       $("#tpi", host)?.addEventListener("click", () => startJob("talib-install"));
+      const pBtn = $("#tppt", host);
+      const pSet = (on) => { if (pBtn) { pBtn.textContent = on ? "✓ Paper taken (undo)" : "Paper take"; pBtn.classList.toggle("primary", !on); } };
+      api("tradeplan/paper").then((r) => pSet(r.items.some((x) => x.symbol === symbol && x.mode === mode && x.day === d.day))).catch(() => {});
+      pBtn?.addEventListener("click", async () => { try { const r = await MX.post("tradeplan/paper", { symbol, mode }, ""); pSet(r.taken); MX.toast && MX.toast(r.taken ? "Paper take saved: graded in Market Lab → Review after the session" : "Paper take removed"); } catch (e) { /* toast shown */ } });
       $("#tpsv", host)?.addEventListener("click", () => MX.saveChart({ symbol, timeframe: "daily", days: 60, source: `trade plan (${mode})`, tags: ["trade plan"] }));
       $("#tpx", host)?.addEventListener("click", async () => { const btn = $("#tpx", host); btn.disabled = true;
         try { const r = await MX.post("tradeplan/explain", { symbol, mode });
