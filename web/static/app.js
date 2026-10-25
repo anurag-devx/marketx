@@ -405,15 +405,16 @@
     const qual = q.quarantined && q.quarantined.length ? `<a class="chip warn" href="#/data">${q.quarantined.length} paused for data errors</a>` :
       q.status === "errors" ? `<a class="chip" href="#/data">${q.errors} data issues to review</a>` : "";
     const fr = (j) => j.steps ? Math.min(0.98, (j.step - 1) / j.steps + (j.frac ?? 0.5) / j.steps) : 0.05;
-    const rows = s.running.map((j) => `<div class="jobrow"><span class="dot run"></span><span class="jt"><b>${esc(j.title)}</b>${j.label && j.label !== j.title ? ` · ${esc(j.label)}` : ""}${j.steps > 1 ? ` · ${j.step}/${j.steps}` : ""} · ${mmss(j.elapsed)}</span>
-        <span class="bar"><i style="width:${(fr(j) * 100).toFixed(0)}%"></i></span>
+    const pc = (j) => `${Math.round(fr(j) * 100)}%`;
+    const rows = s.running.map((j) => `<div class="jobrow"><span class="dot run"></span><span class="jt"><b>${esc(j.title)}</b>${j.label && j.label !== j.title ? ` · ${esc(j.label)}` : ""}${j.steps > 1 ? ` · step ${j.step}/${j.steps}` : ""} · ${mmss(j.elapsed)} · <b>${pc(j)}</b></span>
         <button class="btn small" data-log="${j.lane}">Log</button><button class="btn small" data-stop="${j.lane}">Stop</button></div>`).join("");
     const j0 = s.running[0];
-    const jobs = j0 ? `<span class="jobs-wrap"><button class="chip jobs-btn" id="jobsbtn" aria-expanded="${jobsOpen}"><span class="dot run"></span>${s.running.length > 1 ? `${s.running.length} jobs running` : esc(j0.title)} · ${mmss(j0.elapsed)}
-        ${jobsOpen ? "" : `<span class="bar"><i style="width:${(fr(j0) * 100).toFixed(0)}%"></i></span>`} ▾</button><div class="jobs-dd" id="jobsdd" ${jobsOpen ? "" : "hidden"}>${rows}</div></span>` : "";
+    const jobs = j0 ? `<span class="jobs-wrap"><button class="chip jobs-btn" id="jobsbtn" aria-expanded="${jobsOpen}"><span class="dot run"></span>${s.running.length > 1 ? `${s.running.length} jobs running` : esc(j0.title)} · ${pc(j0)} · ${mmss(j0.elapsed)} ▾</button>
+        <div class="jobs-dd" id="jobsdd" ${jobsOpen ? "" : "hidden"}>${rows}</div></span>` : "";
     if (!j0) jobsOpen = false;
     const busyMain = s.running.some((j) => j.lane === "main");
-    $("#status").innerHTML = `${fresh}${stale}${qual}<span class="job">${jobs}${busyMain ? "" : `<button class="btn primary small" id="runall" title="Download the latest prices, news and filings, then run every agent">Fetch + run all</button>`}</span>`;
+    const line = j0 ? `<div class="status-progress" title="${esc(j0.title)} · ${Math.round(fr(j0) * 100)}%"><i style="width:${(fr(j0) * 100).toFixed(1)}%"></i></div>` : "";
+    $("#status").innerHTML = `${line}${fresh}${stale}${qual}<span class="job">${jobs}${busyMain ? "" : `<button class="btn primary small" id="runall" title="Download the latest prices, news and filings, then run every agent">Fetch + run all</button>`}</span>`;
     $("#jobsbtn")?.addEventListener("click", (e) => { e.stopPropagation(); jobsOpen = !jobsOpen; drawStatus(lastStatus); });
     $("#jobsdd")?.addEventListener("click", (e) => e.stopPropagation());
     $("#runall")?.addEventListener("click", () => startJob("fetch+pipeline"));

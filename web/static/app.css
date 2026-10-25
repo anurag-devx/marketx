@@ -389,7 +389,7 @@ details.fold > .card, details.fold > div { border: 0; margin: 0; }
 /* running jobs: one compact button, all jobs in a dropdown */
 .jobs-wrap { position: relative; display: inline-flex; }
 .jobs-btn { cursor: pointer; gap: 8px; }
-.jobs-btn .bar { width: 70px; }
+.jobs-dd[hidden] { display: none; }
 .jobs-dd { position: absolute; right: 0; top: calc(100% + 6px); z-index: 60; background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
   box-shadow: 0 10px 30px rgba(0,0,0,.25); padding: 8px; min-width: 520px; max-width: 80vw; display: flex; flex-direction: column; gap: 8px; }
 .jobs-dd .jobrow { display: flex; align-items: center; gap: 8px; }
@@ -417,3 +417,7 @@ details.fold > .card, details.fold > div { border: 0; margin: 0; }
 ::selection { background: rgba(79, 70, 229, .32); color: inherit; }
 :root[data-theme="dark"] ::selection { background: rgba(129, 140, 248, .45); color: #fff; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) ::selection { background: rgba(129, 140, 248, .45); color: #fff; } }
+
+/* one progress line along the bottom edge of the top bar (the first running job) */
+.status-progress { position: absolute; left: 0; right: 0; bottom: -1px; height: 3px; background: transparent; pointer-events: none; }
+.status-progress i { display: block; height: 100%; background: var(--accent); transition: width .6s ease; border-radius: 0 2px 2px 0; }
