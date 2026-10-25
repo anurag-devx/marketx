@@ -1,7 +1,5 @@
 """Command line for the swing framework.
-    python3 cli.py dashboard            open the control centre in your browser
-    python3 cli.py web                  the new MarketX app (plain HTML/JS, built-in server) on http://127.0.0.1:8504
-    python3 cli.py lab                  open the Strategy Lab (separate workspace for your strategies)
+    python3 cli.py web                  open MarketX (built-in server) on http://127.0.0.1:8504; Strategy Lab is inside it (Labs)
     python3 cli.py fetch [--full|--broad]  update prices (Angel One); --full re-downloads, --broad adds all NSE stocks
     python3 cli.py quality              run the data quality checks
     python3 cli.py backup               back up the database, settings, positions and the Lab
@@ -10,8 +8,8 @@
     python3 cli.py test                 run the automated tests
     python3 cli.py run [agent|all]      run one agent (regime, strategy, technical, risk, validation, report) or all
     python3 cli.py schedule-refresh     point the after-close schedule at the Python running this command (after setup.sh)
-    python3 cli.py daily                same as the dashboard's 'Fetch data + run all agents' (prices, news, filings, macro,
-                                        all agents, macro study, market report, the lab's nightly batch and scoring)
+    python3 cli.py daily                same as the app's 'Fetch + run all' (prices, news, filings, results, F&O, macro,
+                                        all agents, Market Lab radar + plans + review, 5-minute bars; market report if auto)
     python3 cli.py announcements        fetch NSE announcements only
     python3 cli.py news                 fetch news headlines (feeds + sitemaps)
     python3 cli.py news-check           try every news source once, list what works
@@ -44,38 +42,11 @@ def pip_user():
     return [] if in_venv() else ["--user"]
 
 
-def ensure_packages():
-    need = []
-    for mod in ("streamlit", "plotly", "duckdb", "pyarrow", "tabulate"):
-        try:
-            __import__(mod)
-        except ImportError:
-            need.append(mod)
-    if need:
-        print(f"First run: installing {', '.join(need)} (1-2 minutes)...", flush=True)
-        subprocess.check_call([PY, "-m", "pip", "install", *pip_user(), "-q", *need])
-    cred = Path.home() / ".streamlit" / "credentials.toml"
-    if not cred.exists():
-        cred.parent.mkdir(exist_ok=True)
-        cred.write_text('[general]\nemail = ""\n')
-
-
-def streamlit(app, port, open_browser=True):
-    url = f"http://localhost:{port}"
-    print(f"Starting at {url} ... (close this window or press Ctrl+C to stop)", flush=True)
-    if open_browser:
-        import threading, webbrowser
-        threading.Timer(4, lambda: webbrowser.open(url)).start()
-    return subprocess.call([PY, "-m", "streamlit", "run", app, "--server.port", str(port),
-                            "--server.headless", "true", "--server.address", "localhost",
-                            "--browser.gatherUsageStats", "false", "--logger.level", "error"], cwd=BASE)
-
-
 def main(argv):
     cmd = argv[0] if argv else "help"
-    if cmd == "lab":
-        ensure_packages()
-        return streamlit("lab_app.py", argv[1] if len(argv) > 1 else "8502")
+    if cmd in ("lab", "dashboard"):                    # the old Streamlit apps were removed: everything is in MarketX now
+        print("Removed: the old dashboard and Strategy Lab apps are now part of MarketX. Run:  python3 cli.py web  (Strategy Lab: Labs → Strategy Lab)")
+        return 0
     if cmd == "screen":
         return sh("-m", "screener", "screen", *argv[1:])
     if cmd == "experiments":
@@ -107,9 +78,6 @@ def main(argv):
         from web import server, api
         api.warm()
         return server.serve(int(argv[1]) if len(argv) > 1 else 8504)
-    if cmd == "dashboard":
-        ensure_packages()
-        return streamlit("dashboard.py", argv[1] if len(argv) > 1 else "8503")
     if cmd == "fetch":
         return sh("fetch_angel.py", *argv[1:])
     if cmd == "run":

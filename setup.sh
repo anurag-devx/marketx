@@ -37,4 +37,4 @@ echo "Running the tests ..."
 echo "Exact versions saved to requirements.lock"
 .venv/bin/python cli.py schedule-refresh || true
 echo
-echo "Done. Start the dashboard with:  .venv/bin/python cli.py dashboard 8503   (or double-click Start Dashboard.command)"
+echo "Done. Start MarketX with:  .venv/bin/python cli.py web   (or double-click Start MarketX.command)"
