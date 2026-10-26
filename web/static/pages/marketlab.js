@@ -236,7 +236,7 @@
       api("marketlab/asof").then((a) => { const x = $("#mlasof", el); if (!x) return;
         const f = (v) => v ? day(v, { weekday: "short", day: "numeric", month: "short", year: "numeric" }) : "—";
         x.innerHTML = !a.day ? `<span class="tag warn">No radar built yet</span>` : `<span class="ml-asof-k">Radar built from</span> <b>${f(a.day)}</b> close <span class="muted">→</span> <span class="ml-asof-k">for</span> <b>${f(a.for_day)}</b> <span class="muted small">(next weekday; holidays not counted)</span>` +
-          (a.stale ? ` <span class="tag warn" title="Prices are newer than the radar">prices up to ${f(a.prices_last)}: radar out of date, build tonight's radar</span>` : ` <span class="tag">up to date with prices</span>`); }).catch(() => {});
+          (a.stale ? ` <span class="tag warn" title="Prices are newer than the radar">prices up to ${f(a.prices_last)}: radar out of date, build tonight's radar</span>` : ` <span class="tag">up to date with prices</span>`) + ` <a class="btn small" href="#/tally" target="_blank" rel="noopener">Tally: projected vs actual ↗</a>`; }).catch(() => {});
       const go = (t) => { st.tab = t; save(); $$("#mltabs button", el).forEach((x) => x.classList.toggle("on", x.dataset.t === t)); show(); };
       const show = async () => { const b = document.createElement("div"); $("#mlb2", el).replaceChildren(b);   // a slow tab left behind writes into its own detached box
         try {

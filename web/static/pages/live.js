@@ -53,7 +53,7 @@
         <span class="lv-rep"><input class="in" type="date" id="lvday" title="session to replay (blank = last saved)"><select class="in" id="lvspd" title="replay speed">
           <option value="1">1 bar/s</option><option value="4" selected>4 bars/s</option><option value="20">20 bars/s</option></select><button class="btn" id="lvrep">Replay</button></span>
         <button class="btn" id="lvstop">Stop</button><button class="btn" id="lvsnd" title="sound on alerts"></button>
-        <a class="btn" href="#/live" target="_blank" rel="noopener" title="open in a new browser tab">↗</a></div>
+        <a class="btn" href="#/tally" target="_blank" rel="noopener" title="projected vs what happened">Tally ↗</a><a class="btn" href="#/live" target="_blank" rel="noopener" title="open in a new browser tab">↗</a></div>
       <div class="lv-strip" id="lvstrip"></div><div class="lv-breadth" id="lvbr"></div>
       <div class="lv-grid">
         <div class="card lv-watch"><div class="ct"><h2>Watch</h2><span class="aside"><input class="in" id="lvadd" placeholder="add stock" style="width:120px"></span></div><div id="lvw"></div></div>

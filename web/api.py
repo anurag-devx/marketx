@@ -553,4 +553,4 @@ def _stock_news(sym, n=40):
 
 
 # route modules register themselves on import
-from web import r_today, r_screener, r_agents, r_research, r_tools, r_setup, r_kronos, r_help, r_marketlab, r_review, r_tradeplan, r_workspace, r_desk, r_live  # noqa: E402,F401
+from web import r_today, r_screener, r_agents, r_research, r_tools, r_setup, r_kronos, r_help, r_marketlab, r_review, r_tradeplan, r_workspace, r_desk, r_live, r_tally  # noqa: E402,F401

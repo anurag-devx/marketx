@@ -1,0 +1,45 @@
+"""Tally: projected vs happened for one session, from a small ledger."""
+import json
+import pandas as pd
+from marketlab import tally as T, review as RV
+
+
+def _ledger(tmp_path, monkeypatch, graded=True):
+    monkeypatch.setattr(RV, "ledger", lambda: tmp_path / "ledger")
+    dd = tmp_path / "ledger" / "live" / "2026-10-22"
+    dd.mkdir(parents=True)
+    pd.DataFrame(dict(symbol=["AAA"], date=[pd.Timestamp("2026-10-22")])).to_parquet(dd / "radar.parquet")
+    calls = pd.DataFrame(dict(symbol=["AAA", "BBB"], sector=["X", "Y"], date=pd.Timestamp("2026-10-22"), move="cc", size=1.0, chance=[0.7, 0.3],
+                              usual=[0.4, 0.3], lift=[0.3, 0.0], up_share=[0.7, 0.5], lean=["up", "unclear"], confidence="low",
+                              ret=[0.021 if graded else None, -0.004 if graded else None], rank=[1, 2], pick=[True, False]))
+    calls.to_parquet(dd / "calls.parquet")
+    plans = {"AAA": {"ta": {"dir": "down"}, "fund": {"dir": "up"}, "intraday": {"lean": "up", "tradeable": True,
+             "legs": [dict(leg="E1", side="long", price=101), dict(leg="SL", side="long", price=99), dict(leg="TX", side="both", price=None)]}},
+             "BBB": {"intraday": {"lean": "unclear", "legs": []}}}
+    (dd / "plans.json").write_text(json.dumps(dict(day="2026-10-22", plans=plans)))
+    pd.DataFrame(dict(symbol=["AAA"], day=["2026-10-22"], mode=["intraday"], lean=["up"], status=["done"], tradeable=[True], side=["long"],
+                      entry=[101.0], entry_time=["09:35"], first=["T1"], exit=["T2"], exit_price=[104.0], exit_time=["11:00"], r=[1.5])).to_parquet(dd / "plans_grade.parquet")
+    monkeypatch.setattr(T.C, "DATA", tmp_path)
+    (tmp_path / "paper").mkdir()
+    (tmp_path / "paper" / "takes.json").write_text(json.dumps([dict(symbol="AAA", day="2026-10-22", mode="intraday", lean="up", risk_rs=2000)]))
+    pd.DataFrame(dict(date=pd.to_datetime(["2026-10-22", "2026-10-23"]))).to_parquet(tmp_path / "prices.parquet")
+
+
+def test_build_rows_and_kpis(tmp_path, monkeypatch):
+    _ledger(tmp_path, monkeypatch)
+    o = T.build("2026-10-22")
+    assert o["ready"] and o["graded"] and o["for_day"] == "2026-10-23" and o["for_known"]
+    a = {r["symbol"]: r for r in o["rows"]}["AAA"]
+    assert a["pick"] and a["hit"] and a["lean_right"] is True and a["ta_right"] is False and a["fund_right"] is True
+    assert a["r"] == 1.5 and a["paper"] and a["pnl_rs"] == 3000 and a["legs"] == {"E1↑": 101, "SL↑": 99}
+    k = o["kpis"]
+    assert (k["picks_hit"], k["picks_done"], k["said"], k["happened"]) == (1, 1, 0.7, 1.0)
+    assert k["plans_r"] == 1.5 and k["target_first"] == 1 and k["paper_rs"] == 3000
+    assert T.days() == [dict(day="2026-10-22", kind="live", graded=True)]
+
+
+def test_not_graded_shows_projections_only(tmp_path, monkeypatch):
+    _ledger(tmp_path, monkeypatch, graded=False)
+    o = T.build("2026-10-22")
+    a = {r["symbol"]: r for r in o["rows"]}["AAA"]
+    assert not o["graded"] and a["ret"] is None and a["hit"] is None and o["kpis"]["picks_done"] == 0
