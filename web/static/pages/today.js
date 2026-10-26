@@ -117,13 +117,31 @@
     },
   });
 
+  function stockPicker(el, bad, why) {      // shown when a stock can't load (e.g. an old or test symbol remembered from before)
+    let rec = []; try { rec = JSON.parse(localStorage.getItem("mx-recent-stock") || "[]"); } catch (e) { /* ignore */ }
+    rec = rec.filter((x) => x !== bad);
+    el.innerHTML = head("Stock", "Pick a stock.") + (bad ? note(`Couldn't load ${esc(bad)}: ${esc(why || "")}`, "warn") : "") +
+      `<div class="card section"><div class="row" style="gap:8px;flex-wrap:wrap"><input class="in" id="stq" placeholder="Search a stock, e.g. TCS" style="width:260px"><button class="btn primary" id="stgo">Open</button>
+        <span style="flex:1"></span><button class="btn" id="stclr">Clear recent stocks</button></div>
+        <div class="row section" id="strec" style="gap:6px;flex-wrap:wrap">${rec.length ? rec.map((s) => `<a class="tag" href="#/stock/${encodeURIComponent(s)}">${esc(s)}</a>`).join("") : `<span class="muted small">No recent stocks.</span>`}</div></div>`;
+    try { localStorage.removeItem("mx-stock"); localStorage.setItem("mx-recent-stock", JSON.stringify(rec)); } catch (e) { /* ignore */ }
+    const go = () => { const s = $("#stq", el).value.trim().toUpperCase(); if (s) location.hash = `#/stock/${encodeURIComponent(s)}`; };
+    $("#stgo", el).addEventListener("click", go); $("#stq", el).addEventListener("keydown", (e) => { if (e.key === "Enter") go(); });
+    MX.suggest($("#stq", el), { kinds: "stocks", recent: "stock", onPick: () => go() });
+    $("#stclr", el).addEventListener("click", () => { try { localStorage.removeItem("mx-recent-stock"); localStorage.removeItem("mx-stock"); } catch (e) { /* ignore */ }
+      $("#strec", el).innerHTML = `<span class="muted small">Cleared.</span>`; });
+    $("#stq", el).focus();
+  }
+
   MX.page("stock", {
     title: "Stock",
     async render(el, arg) {
       let symb = arg; try { symb = symb || localStorage.getItem("mx-stock"); } catch (e) { /* ignore */ }
       symb = (symb || "RELIANCE").toUpperCase();
       try { localStorage.setItem("mx-stock", symb); } catch (e) { /* ignore */ }
-      const d = await api(`stock?symbol=${encodeURIComponent(symb)}`);
+      let d;
+      try { d = await api(`stock?symbol=${encodeURIComponent(symb)}`); }
+      catch (e) { return stockPicker(el, symb, e.message); }
       const i = d.info, b = d.bars;
       el.innerHTML = head(esc(i.company), `${esc(i.symbol)} · ${esc(i.sector || "")} · last bar ${day(i.last_date, { weekday: "short", day: "numeric", month: "short" })}`,
         `<a class="btn primary" href="#/desk/${encodeURIComponent(i.symbol)}" target="_blank" rel="noopener">Open in Stock Desk ↗</a> <a class="btn" href="#/debate/${encodeURIComponent(i.symbol)}">Debate this stock</a>`) +

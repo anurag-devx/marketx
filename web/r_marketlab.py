@@ -316,3 +316,20 @@ def score(_):
                          note="Solid lines on the influence map = nodes marked 'tested: helps' here. Dashed = not shown to help yet."))
     secs.append(dict(kind="note", text=f"Tested {r['built']}. Before open and During the day are Phase 2 and 3."))
     return dict(sections=secs)
+
+
+@route("GET", "marketlab/asof")
+def asof(_):
+    """Which day the radar was built from, the session it is for, and whether newer prices exist (radar out of date)."""
+    from marketlab import radar as R
+    from web.api import prices
+    day = R.latest_day()
+    px = prices()
+    last = None if px is None else str(pd.Timestamp(px.date.max()).date())
+    nxt = None
+    if day:
+        n = pd.Timestamp(day) + pd.Timedelta(days=1)
+        while n.weekday() >= 5:
+            n += pd.Timedelta(days=1)
+        nxt = str(n.date())
+    return dict(day=day, for_day=nxt, prices_last=last, stale=bool(day and last and last > day))

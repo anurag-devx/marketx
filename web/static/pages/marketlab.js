@@ -232,15 +232,20 @@
       if (arg) { st.sym = arg.toUpperCase(); st.tab = "stock"; save(); }
       el.innerHTML = head("Market Lab", "Which stocks are likely to move at least 1% next session, which way, and what's driving it. Built from the closest past situations; numbers never come from the AI.") +
         `<div class="tabs" id="mltabs">${[["radar", "Move Radar"], ["stock", "Stock analysis"], ["review", "Review"], ["score", "Scorecard"], ["debate", "Debate (classic)"]].map(([k, l]) => `<button data-t="${k}" class="${st.tab === k ? "on" : ""}">${l}</button>`).join("")}</div><div id="mlb2"></div>`;
+      $("#mltabs", el).insertAdjacentHTML("beforebegin", `<div id="mlasof" class="ml-asof"></div>`);
+      api("marketlab/asof").then((a) => { const x = $("#mlasof", el); if (!x) return;
+        const f = (v) => v ? day(v, { weekday: "short", day: "numeric", month: "short", year: "numeric" }) : "—";
+        x.innerHTML = !a.day ? `<span class="tag warn">No radar built yet</span>` : `<span class="ml-asof-k">Radar built from</span> <b>${f(a.day)}</b> close <span class="muted">→</span> <span class="ml-asof-k">for</span> <b>${f(a.for_day)}</b> <span class="muted small">(next weekday; holidays not counted)</span>` +
+          (a.stale ? ` <span class="tag warn" title="Prices are newer than the radar">prices up to ${f(a.prices_last)}: radar out of date, build tonight's radar</span>` : ` <span class="tag">up to date with prices</span>`); }).catch(() => {});
       const go = (t) => { st.tab = t; save(); $$("#mltabs button", el).forEach((x) => x.classList.toggle("on", x.dataset.t === t)); show(); };
-      const show = async () => { const b = $("#mlb2", el);
+      const show = async () => { const b = document.createElement("div"); $("#mlb2", el).replaceChildren(b);   // a slow tab left behind writes into its own detached box
         try {
           if (st.tab === "radar") await radarTab(b, go);
           else if (st.tab === "stock") await stockTab(b);
           else if (st.tab === "score") await scoreTab(b);
           else if (st.tab === "review") await reviewTab(b);
           else b.innerHTML = note("The original bull-and-bear debate, with statistical tests on every claim. It opens on its own page.") + `<div class="row section"><a class="btn primary" href="#/debate">Open the debate</a></div>`;
-        } catch (e) { b.innerHTML = note(esc(e.message), "warn"); } };
+        } catch (e) { if (b.isConnected) b.innerHTML = note(esc(e.message), "warn"); } };
       $("#mltabs", el).addEventListener("click", (e) => { const x = e.target.closest("button"); if (x) go(x.dataset.t); });
       await show();
     },
