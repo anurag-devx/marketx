@@ -53,3 +53,18 @@ def chart(p):
         return dict(bars=c["bars"], for_day=c["bars"]["t"][0][:10] if c["bars"]["t"] else None, live=True)
     for_day, _ = T.next_session(day)
     return dict(bars=T.bars(sym, for_day), for_day=for_day, live=False)
+
+
+@route("POST", "marketlab/assistant")
+def assistant(_, body):
+    """Grades assistant: question -> fixed query (model or keywords) -> computed table + 2-4 lines (numbers checked)."""
+    from marketlab import assistant as A
+    b = body or {}
+    day = b.get("day") if DAY.match(str(b.get("day") or "")) else None
+    move = b.get("move") if b.get("move") in ("cc", "oc", "gp") else "cc"
+    mode = b.get("mode") if b.get("mode") in ("intraday", "swing") else "intraday"
+    try:
+        size = float(b.get("size") or 1.0)
+    except ValueError:
+        size = 1.0
+    return A.answer(str(b.get("question") or ""), day=day, move=move, size=size, mode=mode)

@@ -155,7 +155,8 @@
         ${seg("size", [["0.5", "≥0.5%"], ["1", "≥1%"], ["2", "≥2%"], ["3", "≥3%"]], "Size", st)}
         <div><div class="mllab">Replay past days</div><div class="row" style="gap:6px"><input class="in" id="rvd" type="number" min="1" max="250" value="${rv.days}" style="width:70px"> <button class="btn" id="rvgo">Replay</button></div></div></div>
         <p class="muted small" style="margin:8px 0 0">Live = what the radar said each night (kept automatically from now on). Replay = the radar rebuilt for past days from data up to each day (about 1 min per day on this Mac).</p></div>
-      <div id="rvb">${spinner("Loading the review …")}</div>`;
+      <div id="rvchat" class="section"></div><div id="rvb">${spinner("Loading the review …")}</div>`;
+    MX.gradesChat && MX.gradesChat($("#rvchat", b), () => ({ move: st.move, size: st.size }));
     $$(".seg", b).forEach((g) => g.addEventListener("click", (e) => { const x = e.target.closest("button"); if (!x) return; const k = g.dataset.k;
       if (k === "kind") { rv.kind = x.dataset.v; rvSave(); } else { st[k] = x.dataset.v; save(); } reviewTab(b); }));
     $("#rvgo", b).addEventListener("click", () => { rv.days = Math.max(1, Math.min(250, +$("#rvd", b).value || 21)); rvSave(); startJob("market-lab-replay", [`days=${rv.days}`]); });

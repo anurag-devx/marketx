@@ -43,3 +43,41 @@ def test_not_graded_shows_projections_only(tmp_path, monkeypatch):
     o = T.build("2026-10-22")
     a = {r["symbol"]: r for r in o["rows"]}["AAA"]
     assert not o["graded"] and a["ret"] is None and a["hit"] is None and o["kpis"]["picks_done"] == 0
+
+
+def test_assistant_keywords_route():
+    from marketlab import assistant as A
+    k = lambda q: A.keywords(q, ["RELIANCE", "TCS"])
+    assert k("Which stocks matched with real?")["intent"] == "matched"
+    assert k("which stocks did not match")["intent"] == "missed"
+    assert k("hit rate by sector last 5 days") == dict(intent="hit_rate", by="sector", days=5)
+    assert k("worst plans yesterday")["order"] == "worst" and k("worst plans yesterday")["intent"] == "plans"
+    assert k("RELIANCE history") == dict(intent="stock", symbol="RELIANCE")
+    assert k("banking misses")["sector"] == "Financial Services"
+    assert "sector" not in k("is it getting better") and k("is it getting better")["intent"] == "trend"
+
+
+def test_assistant_answers_from_the_ledger_without_a_model(tmp_path, monkeypatch):
+    from marketlab import assistant as A
+    _ledger(tmp_path, monkeypatch)
+    A._cache.clear()
+    o = A.answer("Which stocks matched with real?", use_model=False)
+    assert o["intent"] == "matched" and [r["symbol"] for r in o["rows"]] == ["AAA"] and o["writer"] == "template"
+    assert "1 of 1" in o["title"] and o["rows"][0]["ret"] == 0.021
+    o = A.answer("which did not match", use_model=False)
+    assert o["rows"] == []
+    o = A.answer("best plans", use_model=False)
+    assert o["rows"][0]["r"] == 1.5 and o["days"] == ["2026-10-22"]
+    o = A.answer("matched on 2026-10-23", use_model=False)              # a date = the session that happened that day
+    assert o["days"] == ["2026-10-22"]
+
+
+def test_assistant_withholds_model_numbers_not_in_the_facts(monkeypatch):
+    from marketlab import assistant as A
+    from core import llm
+    monkeypatch.setattr(llm, "status", lambda f: (True, ""))
+    monkeypatch.setattr(llm, "chat", lambda *a, **k: "11 of 20 matched; best was TTML at 99.9%.")
+    text, w = A.write("q", "Matched", dict(count=11, graded=20))
+    assert w == "template" and "count: 11" in text
+    monkeypatch.setattr(llm, "chat", lambda *a, **k: "11 of the 20 picks matched.")
+    assert A.write("q", "Matched", dict(count=11, graded=20)) == ("11 of the 20 picks matched.", "model")

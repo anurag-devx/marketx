@@ -3,7 +3,7 @@
 (function () {
   const { api, esc, num, day, $, $$, note, spinner, qs } = MX;
   const S = (() => { try { return JSON.parse(sessionStorage.getItem("mx-tally") || "{}"); } catch (e) { return {}; } })();
-  const st = Object.assign({ move: "cc", size: "1", mode: "intraday", show: "picks", miss: false }, S);
+  const st = Object.assign({ move: "cc", size: "1", mode: "intraday", show: "picks", result: "all" }, S);
   const save = () => { try { sessionStorage.setItem("mx-tally", JSON.stringify(st)); } catch (e) { /* ignore */ } };
   const P = (x, d = 0) => x == null ? "—" : `${num(100 * x, d)}%`;
   const RET = (x, sf) => x == null ? `<span class="muted">waiting</span>` : `<span class="${x > 0 ? "up" : x < 0 ? "down" : "muted"}">${x > 0 ? "▲ +" : x < 0 ? "▼ " : ""}${num(100 * x, 2)}%</span>${sf ? ` <span class="muted small">so far</span>` : ""}`;
@@ -44,26 +44,32 @@
          <div><div class="mllab">Size</div>${seg("size", [["0.5", "≥0.5%"], ["1", "≥1%"], ["2", "≥2%"], ["3", "≥3%"]])}</div>
          <div><div class="mllab">Plan</div>${seg("mode", [["intraday", "Intraday"], ["swing", "Swing"]])}</div>
          <div><div class="mllab">Show</div>${seg("show", [["picks", "Picks"], ["entered", "Plans entered"], ["paper", "Paper"], ["all", "All stocks"]])}</div>
-         <label class="small"><input type="checkbox" id="tymiss" ${st.miss ? "checked" : ""}> misses only</label></div></div>
+         <div><div class="mllab">Result</div><select class="in" id="tyres">${[["all", "All"], ["matched", "Matched with real"], ["not", "Not matched"], ["lost", "Plan lost (R < 0)"]]
+           .map(([v, l]) => `<option value="${v}" ${st.result === v ? "selected" : ""}>${l}</option>`).join("")}</select></div></div>
+       <p class="muted small" style="margin:6px 0 0">Matched = moved at least ${esc(d.size)}% (${esc((MOVES.find((m) => m[0] === d.move) || [])[1] || d.move)}) and, when a lean was shown, the way it leaned.</p></div>
       <div class="grid g5 section">
         ${kp("Picks moved", `${k.picks_hit}/${k.picks_done || k.picks}`, `said ${P(k.said)} · happened ${P(k.happened)} · usual ${P(k.usual)}`)}
         ${kp("Lean right", k.lean_n ? `${k.lean_right}/${k.lean_n}` : "—", "picks with a shown lean")}
         ${kp("TA / Fund. direction", `${k.ta[1] ? `${k.ta[0]}/${k.ta[1]}` : "—"} · ${k.fund[1] ? `${k.fund[0]}/${k.fund[1]}` : "—"}`, "labels up/down that matched the move")}
         ${kp(`Plans (${esc(d.mode)})`, k.plans_entered ? `${k.plans_r > 0 ? "+" : ""}${num(k.plans_r, 1)} R` : "—", k.plans_entered ? `${k.plans_entered} entered · avg ${num(k.plans_avg_r, 2)} R · target first ${k.target_first}, stop first ${k.stop_first} · passed checks ${k.tradeable_n}: ${num(k.tradeable_r, 1)} R` : "no entries graded")}
         ${kp("Paper", k.paper ? (k.paper_rs != null ? `₹${num(k.paper_rs, 0)}` : "open") : "—", k.paper ? `${k.paper} taken · ${k.paper_done} graded` : "no paper takes that day")}
-      </div><div class="card flush section" id="tyt"></div><div id="tyc" class="section"></div>`;
+      </div><div class="card flush section" id="tyt"></div><div id="tyc" class="section"></div><div id="tychat" class="section"></div>`;
+    MX.gradesChat($("#tychat", el), () => ({ day: d.day, move: d.move, size: d.size, mode: d.mode }));
 
     const reload = (dayArg) => { save(); const h = `#/tally/${dayArg || d.day}`; if (location.hash === h) page(el, dayArg || d.day); else location.hash = h; };
     $$(".seg", el).forEach((g) => g.addEventListener("click", (e) => { const x = e.target.closest("button"); if (!x) return; st[g.dataset.k] = x.dataset.v;
       if (g.dataset.k === "show") { save(); $$("button", g).forEach((b) => b.classList.toggle("on", b === x)); draw(); } else reload(); }));
-    $("#tymiss", el).addEventListener("change", (e) => { st.miss = e.target.checked; save(); draw(); });
+    $("#tyres", el).addEventListener("change", (e) => { st.result = e.target.value; save(); draw(); });
     $("#tyday", el).addEventListener("change", (e) => reload(e.target.value));
     $("#typrev", el).addEventListener("click", () => prev && reload(prev.day));
     $("#tynext", el).addEventListener("click", () => next && reload(next.day));
 
     function draw() {
       let rows = d.rows.filter((r) => st.show === "all" || (st.show === "picks" && (r.pick || r.paper)) || (st.show === "entered" && r.entry != null) || (st.show === "paper" && r.paper));
-      if (st.miss) rows = rows.filter((r) => r.hit === false || r.lean_right === false || (r.r != null && r.r < 0));
+      const matched = (r) => r.hit === true && r.lean_right !== false;
+      if (st.result === "matched") rows = rows.filter(matched).sort((a, b) => Math.abs(b.ret) - Math.abs(a.ret));
+      else if (st.result === "not") rows = rows.filter((r) => r.hit != null && !matched(r));
+      else if (st.result === "lost") rows = rows.filter((r) => r.r != null && r.r < 0);
       rows.forEach((r) => { r.chance_pct = r.chance == null ? null : 100 * r.chance; r.ret_abs = r.ret == null ? null : Math.abs(r.ret); });
       const host = $("#tyt", el); host.innerHTML = "";
       if (!rows.length) { host.innerHTML = `<p class="muted" style="padding:12px">Nothing to show with these filters.</p>`; return; }
@@ -75,7 +81,7 @@
         ["hit", `≥${esc(d.size)}%?`, (v) => OK(v)], ["lean_right", "Lean right?", (v) => OK(v)], ["ta_right", "TA right?", (v) => OK(v)],
         ["status", "Plan result", (v, r) => planCell(r)], ["r", "R", (v) => v == null ? "—" : `<b class="${v > 0 ? "up" : v < 0 ? "down" : ""}">${v > 0 ? "+" : ""}${num(v, 2)}</b>`],
         ["pnl_rs", "Paper ₹", (v) => v == null ? "—" : `<b class="${v > 0 ? "up" : "down"}">${num(v, 0)}</b>`]],
-        { csv: `tally_${d.day}_${d.move}_${d.size}_${d.mode}`, sort: st.show === "all" ? "ret_abs" : "chance_pct", desc: true, per: 50, onRow: (r) => chart(r) }));
+        { csv: `tally_${d.day}_${d.move}_${d.size}_${d.mode}`, sort: st.result === "matched" ? "ret_abs" : st.show === "all" ? "ret_abs" : "chance_pct", desc: true, per: 50, onRow: (r) => chart(r) }));
     }
 
     async function chart(r) {
