@@ -421,3 +421,38 @@ details.fold > .card, details.fold > div { border: 0; margin: 0; }
 /* one progress line along the bottom edge of the top bar (the first running job) */
 .status-progress { position: absolute; left: 0; right: 0; bottom: -1px; height: 3px; background: transparent; pointer-events: none; }
 .status-progress i { display: block; height: 100%; background: var(--accent); transition: width .6s ease; border-radius: 0 2px 2px 0; }
+
+/* ---- Live terminal ---- */
+.lv-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+.lv-rep { display: inline-flex; gap: 4px; }
+.lv-pill { font-size: 12px; font-weight: 600; padding: 3px 9px; border-radius: 99px; background: var(--surface-2); color: var(--muted); }
+.lv-pill.live { background: var(--up-soft); color: var(--up); }
+.lv-pill.replay { background: var(--accent-soft); color: var(--accent-ink); }
+.lv-pill.reconnecting, .lv-pill.starting { background: var(--warn-soft); color: var(--warn); }
+.lv-pill.error { background: var(--down-soft); color: var(--down); }
+.lv-strip { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+.lv-ix { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 6px 12px; min-width: 120px; }
+.lv-breadth { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
+.lv-bar { display: flex; width: 220px; height: 8px; border-radius: 4px; overflow: hidden; background: var(--surface-2); }
+.lv-bar .up { background: var(--up); } .lv-bar .down { background: var(--down); }
+.lv-grid { display: grid; grid-template-columns: minmax(340px, 1.3fr) minmax(420px, 2.2fr) minmax(240px, 0.9fr); gap: 12px; align-items: start; }
+@media (max-width: 1200px) { .lv-grid { grid-template-columns: 1fr; } }
+.lv-watch { max-height: 640px; overflow: auto; }
+.lv-tbl td, .lv-tbl th { padding: 5px 6px; }
+.lv-row { cursor: pointer; } .lv-row:hover { background: var(--surface-2); } .lv-row.sel { background: var(--accent-soft); }
+.lv-row .fl-up { animation: lvup 0.9s ease-out; } .lv-row .fl-down { animation: lvdn 0.9s ease-out; }
+@keyframes lvup { from { background: var(--up-soft); } to { background: transparent; } }
+@keyframes lvdn { from { background: var(--down-soft); } to { background: transparent; } }
+.lv-feed { max-height: 600px; overflow: auto; display: flex; flex-direction: column; gap: 4px; }
+.lv-al { font-size: 13px; padding: 5px 8px; border-left: 3px solid var(--line-2); border-radius: 3px; background: var(--surface-2); }
+.lv-al.up { border-color: var(--up); } .lv-al.down { border-color: var(--down); } .lv-al.accent { border-color: var(--accent); }
+.lv-al.new { animation: lvnew 1.6s ease-out; }
+@keyframes lvnew { from { background: var(--warn-soft); } to { background: var(--surface-2); } }
+.lv-sym { background: none; border: 0; padding: 0; color: var(--accent); font-weight: 600; cursor: pointer; font: inherit; }
+.tag.up { color: var(--up); } .tag.down { color: var(--down); }
+.lv-chips { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 3px; }
+.lv-chip { font-size: 11px; padding: 1px 6px; border-radius: 4px; background: var(--surface-2); color: var(--ink-2); white-space: nowrap; }
+.lv-chip.up { color: var(--up); background: var(--up-soft); } .lv-chip.down { color: var(--down); background: var(--down-soft); } .lv-chip.hit { color: var(--accent-ink); background: var(--accent-soft); }
+.lv-call { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px 16px; padding: 8px 0 4px; border-bottom: 1px solid var(--line); }
+.lv-why { margin: 2px 0 0 16px; padding: 0; font-size: 12px; color: var(--ink-2); }
+.lv-tbl td { vertical-align: top; }

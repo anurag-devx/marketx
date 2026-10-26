@@ -362,7 +362,7 @@
 
   // ---------- navigation ----------
   const NAV = [
-    ["Main", [["overview", "Overview"], ["market-lab", "Market Lab"], ["stock", "Stock"], ["desk", "Stock Desk"], ["positions", "Positions & risk"], ["data", "Data health"]]],
+    ["Main", [["overview", "Overview"], ["market-lab", "Market Lab"], ["stock", "Stock"], ["desk", "Stock Desk"], ["live", "Live terminal"], ["positions", "Positions & risk"], ["data", "Data health"]]],
     ["Market", [["market", "Market"], ["market-news", "Market news"], ["screener", "Screener"]]],
     ["Agents", [["agents", "Agents"], ["signals", "Signals"], ["strategies", "Strategies"], ["validation", "Validation"]]],
     ["Tools", [["search", "Search"], ["ask", "Ask"], ["documents", "Documents"], ["records", "Reports & logs"], ["settings", "Settings"]]],
