@@ -151,3 +151,25 @@ def test_added_stocks_persist(tmp_path, monkeypatch):
     monkeypatch.setattr(L, "ADDED", tmp_path / "added.json")
     L.save_added("TVSMOTOR"); L.save_added("TVSMOTOR")
     assert L.added() == ["TVSMOTOR"]
+
+
+def test_sector_table_and_index_rows():
+    b = L.Book(TOK, {"99926000": "nifty", "99926037": "nifty_fin"}, watch={"AAA"}, plans={"AAA": plan()},
+               sectors={"AAA": "Financial Services", "BBB": "Financial Services"})
+    for t in [tk("101", "09:20", 102.0), tk("102", "09:20", 99.0), tk("99926037", "09:20", 20100, prev=20000, o=20050)]:
+        b.tick(t)
+    v = b.view()
+    sec = v["sectors"][0]
+    assert sec["sector"] == "Financial Services" and (sec["n"], sec["adv"], sec["dec"]) == (2, 1, 1) and sec["median"] == 0.5
+    assert sec["best"]["symbol"] == "AAA" and sec["index"]["key"] == "nifty_fin" and sec["index"]["chg"] == 0.5
+    ix = {x["key"]: x for x in v["indices"]}
+    assert ix["nifty_fin"]["label"] == "Fin Nifty" and ix["nifty_fin"]["vs_open"] == round(100 * (20100 / 20050 - 1), 2)
+    assert [r["symbol"] for r in b.sector_rows("Financial Services")] == ["AAA", "BBB"]
+    c = b.chart("nifty_fin")
+    assert c["index"] and c["offset"] == 1 and c["slots"] == 75
+
+
+def test_fill_gaps_keeps_the_axis():
+    k = lambda m: dt.datetime(2026, 10, 27, 9, m)
+    g = L.fill_gaps({k(15): [1, 2, 0.5, 1.5, 10], k(30): [1.5, 2, 1, 1.8, 5]})
+    assert sorted(g) == [k(15), k(20), k(25), k(30)] and g[k(20)] == [1.5, 1.5, 1.5, 1.5, 0]

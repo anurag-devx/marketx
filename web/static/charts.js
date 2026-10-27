@@ -47,7 +47,8 @@
       for (const s of [bars.sma20, bars.sma50, bars.sma200, bars.vwap]) if (s && s[i] != null) { lo = Math.min(lo, s[i]); hi = Math.max(hi, s[i]); } }
     (opt.levels || []).forEach((lv) => { if (lv.fit && lv.price != null) { lo = Math.min(lo, lv.price); hi = Math.max(hi, lv.price); } });
     const pad = (hi - lo) * 0.05; lo -= pad; hi += pad;
-    const x = (i) => padL + ((i + 0.5) / n) * (W - padL - padR);
+    const off = opt.offset || 0, N = Math.max(n + off, opt.slots || 0);   // opt.slots: a fixed axis (a full session); opt.offset: slot of the first bar
+    const x = (i) => padL + ((i + off + 0.5) / N) * (W - padL - padR);
     const y = (v) => padT + (1 - (v - lo) / (hi - lo)) * priceH;
     const vmax = Math.max(...bars.v) || 1, vTop = padT + priceH + gap;
     const vy = (v) => vTop + volH - (v / vmax) * volH;
@@ -69,10 +70,11 @@
       const mon = (t) => new Date(t.slice(0, 10) + "T00:00:00").toLocaleDateString("en-IN", { day: "numeric", month: "short" });
       if (days.length > 1) days.forEach((i, k) => { if (i) el("line", { x1: x(i) - 0.5 * (W - padL - padR) / n, x2: x(i) - 0.5 * (W - padL - padR) / n, y1: padT, y2: vTop + volH, stroke: line, "stroke-dasharray": "2 3" }, svg);
         if (days.length <= 12 || k % Math.ceil(days.length / 10) === 0) { const tx = el("text", { x: x(i), y: H - 5, "text-anchor": "start" }, svg); tx.textContent = mon(bars.t[i]); } });
+      else if (opt.slotLabel) for (let i = 0; i < N; i += Math.max(1, Math.floor(N / 8))) { const tx = el("text", { x: x(i - off), y: H - 5, "text-anchor": "middle" }, svg); tx.textContent = opt.slotLabel(i); }
       else for (let i = 0; i < n; i += Math.max(1, Math.floor(n / 7))) { const tx = el("text", { x: x(i), y: H - 5, "text-anchor": "middle" }, svg); tx.textContent = bars.t[i].slice(11, 16); }
     }
     // volume
-    const bw = Math.max(1, ((W - padL - padR) / n) * 0.7);
+    const bw = Math.max(1, ((W - padL - padR) / N) * 0.7);
     for (let i = 0; i < n; i++) {
       const isUp = bars.c[i] >= bars.o[i];
       el("rect", { x: x(i) - bw / 2, y: vy(bars.v[i]), width: bw, height: Math.max(0.5, vTop + volH - vy(bars.v[i])),
@@ -129,7 +131,7 @@
     const overlay = el("rect", { x: padL, y: 0, width: W - padL - padR, height: H, fill: "transparent" }, svg);
     overlay.addEventListener("mousemove", (ev) => {
       const r = svg.getBoundingClientRect(), px = ((ev.clientX - r.left) / r.width) * W;
-      const i = Math.min(n - 1, Math.max(0, Math.round(((px - padL) / (W - padL - padR)) * n - 0.5)));
+      const i = Math.min(n - 1, Math.max(0, Math.round(((px - padL) / (W - padL - padR)) * N - 0.5) - off));
       cross.setAttribute("x1", x(i)); cross.setAttribute("x2", x(i)); cross.setAttribute("visibility", "visible");
       dotc.setAttribute("cx", x(i)); dotc.setAttribute("cy", y(bars.c[i])); dotc.setAttribute("visibility", "visible");
       const prev = i > 0 ? bars.c[i - 1] : bars.c[i], ch = 100 * (bars.c[i] / prev - 1);
@@ -147,7 +149,7 @@
     // scales for overlays (chart workspace drawings): data <-> screen
     const plotW = W - padL - padR;
     host._map = { svg, W, H, n, padL, padR, padT, priceH, lo, hi, t: bars.t, overlay, x, y,
-      i: (px) => Math.min(n - 1, Math.max(0, Math.round(((px - padL) / plotW) * n - 0.5))),
+      i: (px) => Math.min(n - 1, Math.max(0, Math.round(((px - padL) / plotW) * N - 0.5) - off)),
       p: (py) => lo + (1 - (py - padT) / priceH) * (hi - lo) };
     return host._map;
   }

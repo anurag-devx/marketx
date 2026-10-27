@@ -485,3 +485,19 @@ body.side-min .side.peek { transform: none; box-shadow: var(--shadow); }
 body.side-min .side.peek > * { opacity: 1; }
 body.side-min .side.peek::after { content: none; }
 @media (max-width: 760px) { body.side-min .main { margin-left: 0; } }
+
+/* ---- Live terminal v2: chart + alerts on top ---- */
+.lv-r1 { display: grid; grid-template-columns: minmax(0, 3fr) minmax(260px, 1fr); gap: 12px; align-items: start; }
+@media (max-width: 1100px) { .lv-r1 { grid-template-columns: 1fr; } }
+.lv-ch { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 4px; }
+.lv-ch h2 { margin: 0; min-width: 90px; }
+.lv-callline { padding: 4px 0; color: var(--ink-2); }
+.lv-det summary { cursor: pointer; font-size: 12px; color: var(--muted); }
+.lv-feed { max-height: 600px; }
+button.lv-ix { text-align: left; cursor: pointer; font: inherit; color: inherit; }
+button.lv-ix:hover { border-color: var(--accent); }
+.lv-bar.sm { width: 70px; height: 6px; display: inline-flex; vertical-align: middle; margin-right: 6px; }
+.lv-secgrid { display: flex; flex-wrap: wrap; gap: 6px; padding: 6px 0; }
+.lv-secst { background: var(--surface-2); border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; cursor: pointer; font: inherit; color: inherit; font-size: 12.5px; }
+.lv-secst:hover { border-color: var(--accent); }
+.lv-focus .lv-r1 { grid-template-columns: minmax(0, 4fr) minmax(260px, 1fr); }

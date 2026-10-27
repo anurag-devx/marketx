@@ -56,10 +56,24 @@ def stop(_, body):
 
 @route("GET", "live/chart")
 def chart(p):
-    f, sym = _feed(), _sym(p.get("symbol"))
+    f = _feed()
     if not f.book:
         raise UserError("start the feed first")
+    ix = str(p.get("index") or "")
+    if ix:
+        if not re.fullmatch(r"[a-z0-9_]{2,30}", ix) or ix not in set(f.book.indices.values()):
+            raise UserError("unknown index")
+        return f.book.chart(ix)
+    sym = _sym(p.get("symbol"))
     return f.book.chart(sym, extra=f.backfill(sym))
+
+
+@route("GET", "live/sector")
+def sector(p):
+    f = _feed()
+    if not f.book:
+        raise UserError("start the feed first")
+    return dict(items=f.book.sector_rows(str(p.get("name") or "")[:80]))
 
 
 @route("POST", "live/watch")

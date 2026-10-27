@@ -28,6 +28,19 @@ STRIP = [("nifty", "Nifty 50"), ("nifty_bank", "Bank Nifty"), ("nifty_fin", "Fin
 START_T, OPEN_T, ENTRY_T, EXIT_T, CLOSE_T, STOP_T = (dt.time(9, 0), dt.time(9, 15), dt.time(9, 30), dt.time(15, 15),
                                                     dt.time(15, 30), dt.time(15, 35))
 BAR_MIN = 5
+SLOTS = 75                                   # 5-min bars 09:15-15:30
+
+
+def index_label(col):
+    lab = dict(STRIP).get(col)
+    if lab:
+        return lab
+    try:
+        from core import indices as IX
+        n = (IX.INDICES.get(col) or [col])[0]
+        return n.title().replace("Nifty", "Nifty").replace("Fin Service", "Financial Services")
+    except Exception:
+        return col
 CROSS = (1.0, 2.0)
 PICK_SIZE = 1.0
 QUOTE_MODE, NSE_CM = 2, 1
@@ -150,18 +163,19 @@ class Take:
 
 # ---------------------------------------------------------------- the book: all live state, fed by ticks
 class Book:
-    def __init__(self, stocks, indices, watch=(), plans=None, takes=(), picks=(), prev_close=None, sources=None):
+    def __init__(self, stocks, indices, watch=(), plans=None, takes=(), picks=(), prev_close=None, sources=None, sectors=None):
         """stocks / indices: {token: symbol-or-column}. watch: symbols that get bars and alerts."""
         self.lock = threading.RLock()
         self.stocks, self.indices = dict(stocks), dict(indices)
         self.sym_tok = {v: k for k, v in self.stocks.items()}
         self.watch = set(watch)
         self.sources = sources or {}
+        self.sector_of = dict(sectors or {})
         self.plans = plans or {}
         self.q = {}                                   # name -> quote
         self.bars, self._cumv = {}, {}                 # name -> {bar start: [o, h, l, c, v]}
         self.base = {}                                 # name -> bars from Angel's candle API (before the feed started)
-        self.fill = dict(done=0, failed=0, error=None)  # backfill progress
+        self.fill = dict(done=0, failed=0, error=None, waiting=None)  # backfill progress
         self.alerts, self.seq, self.fired = deque(maxlen=3000), 0, set()
         self.armed = {}                                # (sym, side) -> entry price, for plan alerts
         self.beyond = {}                               # sym -> seconds beyond +/-1%, last ts
@@ -169,6 +183,7 @@ class Book:
         self.picks = list(picks)
         self.prev = dict(prev_close or {})
         self.ticks, self.last_ts, self.day = 0, None, None
+        self.raw, self.zero, self.raw_ts = 0, 0, None              # every packet / packets with no price (pre-open shows here)
 
     def add_watch(self, sym, src="desk"):
         with self.lock:
@@ -199,6 +214,10 @@ class Book:
 
     def tick(self, t):
         """t: one parsed SmartWebSocketV2 message (prices in paise) or the same shape from replay."""
+        self.raw += 1
+        self.raw_ts = now()
+        if not t.get("last_traded_price"):
+            self.zero += 1
         tok = str(t.get("token"))
         name = self.stocks.get(tok) or self.indices.get(tok)
         if not name:
@@ -306,7 +325,8 @@ class Book:
                 v = self._qv(s)
                 fired = sorted(f"{k[1]} {k[2]}" for k in self.fired if k[0] == s and k[1] in ("long", "short"))
                 cross = [f"{'+' if k[2] > 0 else '-'}{k[3]:g}%" for k in self.fired if k[0] == s and k[1] == "x"]
-                rows.append(dict(symbol=s, src=sorted(self.sources.get(s, [])), fired=fired, crossed=sorted(cross), **self.signals(s), **v))
+                rows.append(dict(symbol=s, src=sorted(self.sources.get(s, [])), fired=fired, crossed=sorted(cross), sector=self.sector_of.get(s),
+                                 **self.signals(s), **v))
             picks = []
             for p in self.picks:
                 v = self._qv(p["symbol"])
@@ -319,15 +339,50 @@ class Book:
                                   moved=None if mv is None else abs(mv) >= p["size"], beyond_min=round(bt.get("s", 0) / 60, 1), first=bt.get("first"),
                                   lean_right=None if mv is None or p["lean"] not in ("up", "down") or abs(mv) < 0.1 else (mv > 0) == (p["lean"] == "up")))
             new = [a for a in self.alerts if a["id"] > since]
+            sectors = self._sectors()
+            idx = [dict(key=k, label=index_label(k), **self._qv(k)) for k in sorted(set(self.indices.values())) if k in self.q]
+            for x in idx:
+                x["vs_open"] = None if not (x["ltp"] and x["open"]) else round(100 * (x["ltp"] / x["open"] - 1), 2)
             return dict(strip=strip, breadth=breadth, watch=rows, picks=picks, takes=[t.view() for t in self.takes], fill=dict(self.fill),
-                        alerts=new[-200:], seq=self.seq, ticks=self.ticks, last=str(self.last_ts)[:19] if self.last_ts else None)
+                        sectors=sectors, indices=idx,
+                        alerts=new[-200:], seq=self.seq, ticks=self.ticks, last=str(self.last_ts)[:19] if self.last_ts else None,
+                        packets=dict(all=self.raw, no_price=self.zero, last=str(self.raw_ts)[11:19] if self.raw_ts else None))
+
+    def _sectors(self):
+        """Live sector table from every stock's quote: up / down, median change, best / worst, the sector index if any."""
+        try:
+            from core.indices import SECTOR_INDEX
+        except Exception:
+            SECTOR_INDEX = {}
+        g = {}
+        for s in self.stocks.values():
+            v = self._qv(s)
+            if v["chg"] is None:
+                continue
+            g.setdefault(self.sector_of.get(s) or "Other", []).append((s, v["chg"], v["vs_vwap"]))
+        out = []
+        for sec, xs in g.items():
+            ch = sorted(x[1] for x in xs)
+            best, worst = max(xs, key=lambda x: x[1]), min(xs, key=lambda x: x[1])
+            ix = SECTOR_INDEX.get(sec)
+            iv = self._qv(ix) if ix and ix in self.q else None
+            out.append(dict(sector=sec, n=len(xs), adv=sum(1 for x in xs if x[1] > 0), dec=sum(1 for x in xs if x[1] < 0),
+                            median=round(float(np.median(ch)), 2), above_vwap=sum(1 for x in xs if (x[2] or 0) > 0),
+                            best=dict(symbol=best[0], chg=best[1]), worst=dict(symbol=worst[0], chg=worst[1]),
+                            index=None if not iv else dict(key=ix, label=index_label(ix), chg=iv["chg"])))
+        return sorted(out, key=lambda x: -x["median"])
+
+    def sector_rows(self, sector):
+        with self.lock:
+            rows = [dict(symbol=s, watched=s in self.watch, **self._qv(s)) for s in self.stocks.values() if (self.sector_of.get(s) or "Other") == sector]
+        return sorted([r for r in rows if r["chg"] is not None], key=lambda r: -r["chg"])
 
     def chart(self, sym, extra=None):
         with self.lock:
             live = {k: list(v) for k, v in self.bars.get(sym, {}).items()}
             base = dict(extra or self.base.get(sym) or {})
             q = dict(self.q.get(sym) or {})
-        b = merge_bars(base, live)
+        b = fill_gaps(merge_bars(base, live))
         ks = sorted(b)
         t = [k.strftime("%Y-%m-%dT%H:%M:00") for k in ks]
         o, h, l, c, v = ([b[k][i] for k in ks] for i in range(5))
@@ -339,7 +394,10 @@ class Book:
         orh = max(b[k][1] for k in orb) if orb else None
         orl = min(b[k][2] for k in orb) if orb else None
         plan = (self.plans.get(sym) or {}).get("intraday") or {}
-        return dict(symbol=sym, bars=dict(t=t, o=o, h=h, l=l, c=c, v=v, vwap=vwap), prev=q.get("prev"), ltp=q.get("ltp"),
+        first = ks[0] if ks else None
+        offset = 0 if not first else max(0, (first.hour * 60 + first.minute - (9 * 60 + 15)) // BAR_MIN)
+        return dict(symbol=sym, index=sym in set(self.indices.values()), label=index_label(sym) if sym in set(self.indices.values()) else sym,
+                    offset=offset, slots=SLOTS, bars=dict(t=t, o=o, h=h, l=l, c=c, v=v, vwap=vwap), prev=q.get("prev"), ltp=q.get("ltp"),
                     or_high=orh, or_low=orl, legs=[x for x in plan.get("legs", []) if x.get("price") is not None], lean=plan.get("lean"),
                     call=self.call(sym), from_api=len([k for k in base if k not in live]))
 
@@ -357,6 +415,23 @@ class Book:
             atomic.to_parquet(pd.DataFrame(rows), out / "bars.parquet")
         atomic.write_text(out / "alerts.json", json.dumps(alerts, indent=0, default=str))
         atomic.write_text(out / "takes.json", json.dumps(takes, indent=1, default=str))
+
+
+def fill_gaps(b):
+    """5-min slots with no trade get a flat bar at the last close (keeps the time axis honest)."""
+    if not b:
+        return b
+    ks = sorted(b)
+    out, k, last = {}, ks[0], None
+    step = dt.timedelta(minutes=BAR_MIN)
+    while k <= ks[-1]:
+        if k in b:
+            out[k] = b[k]
+            last = b[k][3]
+        elif last is not None and dt.time(9, 15) <= k.time() <= dt.time(15, 25):
+            out[k] = [last, last, last, last, 0]
+        k += step
+    return out
 
 
 def merge_bars(base, live):
@@ -476,9 +551,14 @@ class Feed:
     def _build(self, plan_day=None, prev=None):
         inp = inputs(plan_day)
         stocks = stock_tokens()
-        idx = {str(v): k for k, v in index_tokens(self._log).items() if k in dict(STRIP)}
+        idx = {str(v): k for k, v in index_tokens(self._log).items()}                      # every index Angel lists (about 20)
+        try:
+            u = pd.read_csv(C.DATA / "universe.csv")
+            sectors = dict(zip(u.Symbol, u.Industry))
+        except Exception:
+            sectors = {}
         self.book = Book(stocks, idx, watch=set(inp["sources"]), plans=inp["plans"], takes=inp["takes"], picks=inp["picks"],
-                         prev_close=prev, sources=inp["sources"])
+                         prev_close=prev, sources=inp["sources"], sectors=sectors)
         self.plan_day = inp["day"]
 
     def _log(self, m):
@@ -531,7 +611,7 @@ class Feed:
         import pyotp, fetch_angel as FA
         from SmartApi import SmartConnect
         c = FA.creds()
-        api = SmartConnect(api_key=c["ANGEL_API_KEY"])
+        api = SmartConnect(api_key=c["ANGEL_API_KEY"], timeout=20)
         s = api.generateSession(c["ANGEL_CLIENT_CODE"], c["ANGEL_PIN"], pyotp.TOTP(c["ANGEL_TOTP_SECRET"]).now())
         if not s or not s.get("status"):
             raise RuntimeError(f"Angel login failed: {(s or {}).get('message', 'no response')}")
@@ -547,6 +627,7 @@ class Feed:
             return
         saver = threading.Thread(target=self._saver, daemon=True)
         saver.start()
+        threading.Thread(target=self._fill_loop, daemon=True, name="mx-live-fill").start()
         wait = 3
         while not self._stop.is_set():
             if not market_open():
@@ -561,8 +642,6 @@ class Feed:
                 def on_open(_):
                     self.state, self.msg = "live", "connected"
                     ws.subscribe("mx", QUOTE_MODE, toks)
-                    if not b.base:
-                        threading.Thread(target=self._fill_all, daemon=True, name="mx-live-fill").start()
 
                 def on_data(_, m):
                     try:
@@ -640,12 +719,22 @@ class Feed:
                 b.fill["error"] = f"{sym}: {type(e).__name__}: {str(e)[:120]}"
             return {}
 
-    def _fill_all(self):
+    def _fill_loop(self):
+        """Earlier bars for every watched stock, from 09:20 (when there is a bar to fetch); failures (timeouts at the open
+        are common) are retried every minute until they load."""
         b = self.book
-        for s in sorted(b.watch):
-            if self._stop.is_set() or self.book is not b:
+        while not self._stop.wait(20):
+            if self.book is not b or self.state == "stopped":
                 return
-            self.backfill(s)
+            if self.state != "live" or now().time() < dt.time(9, 20):
+                continue
+            for s in sorted(b.watch):
+                if self._stop.is_set():
+                    return
+                if s not in b.base:
+                    self.backfill(s)
+            with b.lock:
+                b.fill["waiting"] = len([s for s in b.watch if s not in b.base])
 
     # ---- replay: a saved session's 5-min bars as ticks
     def _replay(self, day=None, speed=4.0):
