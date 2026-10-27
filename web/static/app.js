@@ -21,6 +21,7 @@
     const opt = body === undefined ? {} : { method: "POST", headers: { "Content-Type": "application/json", "X-MX-Token": TOKEN }, body: JSON.stringify(body) };
     const r = await fetch(`/api/${path}`, opt);
     const j = await r.json().catch(() => ({ error: `HTTP ${r.status}` }));
+    if (r.status === 401 && j.error === "login") { location.reload(); throw new Error("Signed out: sign in again"); }   // session ended
     if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`);
     return j;
   }
@@ -28,6 +29,7 @@
     .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(Array.isArray(v) ? v.join(",") : v)}`).join("&");
   function toast(msg, bad) { const t = $("#toast"); t.textContent = msg; t.className = `toast${bad ? " bad" : ""}`; t.hidden = false; clearTimeout(t._h); t._h = setTimeout(() => (t.hidden = true), 3600); }
   async function startJob(name, args) {
+    if (document.body.dataset.role === "tester" && name !== "desk-analyse") { toast("Only the owner can start this here", true); return false; }
     try { await api("job/start", { name, args }); toast("Started — progress is in the bar at the top"); refreshStatus(true); return true; }
     catch (e) { toast(e.message, true); return false; }
   }
@@ -513,15 +515,19 @@
     const pin = document.getElementById("sidepin"), side = document.querySelector(".side");
     if (!pin || !side) return;
     const get = () => { try { return localStorage.getItem("mx-side-min") === "1"; } catch (e) { return false; } };
-    const set = (v) => { document.body.classList.toggle("side-min", v); pin.textContent = v ? "»" : "«"; pin.title = v ? "Pin the menu open (shortcut: [ )" : "Hide the menu (shortcut: [ )";
+    const set = (v) => { side.classList.remove("peek"); document.body.classList.toggle("side-min", v); pin.textContent = v ? "»" : "«"; pin.title = v ? "Pin the menu open (shortcut: [ )" : "Hide the menu (shortcut: [ )";
       try { localStorage.setItem("mx-side-min", v ? "1" : "0"); } catch (e) { /* ignore */ } setTimeout(() => window.dispatchEvent(new Event("resize")), 220); };
     set(get());
-    pin.addEventListener("click", (e) => { e.preventDefault(); set(!document.body.classList.contains("side-min")); });
-    // no hover (the browser's own edge gestures get in the way): click the edge strip to open, click outside or pick a page to close
-    side.addEventListener("click", (e) => { if (!document.body.classList.contains("side-min")) return;
-      if (!side.classList.contains("peek")) { if (e.target === side) side.classList.add("peek"); return; }
-      if (e.target.closest("#nav a")) side.classList.remove("peek"); });
-    document.addEventListener("click", (e) => { if (side.classList.contains("peek") && !side.contains(e.target)) side.classList.remove("peek"); });
+    pin.addEventListener("click", (e) => { e.preventDefault(); e.stopPropagation(); set(!document.body.classList.contains("side-min")); });
+    // no hover, no overlay: clicking the thin edge strip brings the menu back (pinned, the page makes room)
+    side.addEventListener("click", (e) => { if (document.body.classList.contains("side-min") && e.clientX <= 24) set(false); });
     document.addEventListener("keydown", (e) => { if (e.key === "[" && !/INPUT|TEXTAREA|SELECT/.test(e.target.tagName) && !e.target.isContentEditable) set(!document.body.classList.contains("side-min")); });
   })();
+
+  // ---------- who is signed in (only when logins are on) ----------
+  api("auth/whoami").then((w) => { if (!w.enabled || !w.user) return; const f = document.querySelector(".side-foot"); if (!f) return;
+    const d = document.createElement("div"); d.className = "who"; d.innerHTML = `Signed in as <b>${esc(w.user)}</b> · ${esc(w.role)} · <a href="#" id="logout">Log out</a>`;
+    f.prepend(d); document.body.dataset.role = w.role;
+    $("#logout").addEventListener("click", async (e) => { e.preventDefault(); await fetch("/api/auth/logout", { method: "POST", headers: { "X-MX-Token": TOKEN } }); location.replace("/"); });
+  }).catch(() => {});
 })();

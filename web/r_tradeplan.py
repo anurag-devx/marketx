@@ -165,7 +165,8 @@ def ask(_, body):
 # ---------- paper takes: plans you chose to (paper) take; graded in Market Lab → Review against all plans ----------
 def _paper_file():
     from core import config as C
-    return C.DATA / "paper" / "takes.json"
+    from core import userdata as U
+    return U.path(C.DATA / "paper" / "takes.json", "paper", "takes.json")
 
 
 def paper_list():

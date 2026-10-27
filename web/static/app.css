@@ -501,3 +501,18 @@ button.lv-ix:hover { border-color: var(--accent); }
 .lv-secst { background: var(--surface-2); border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; cursor: pointer; font: inherit; color: inherit; font-size: 12.5px; }
 .lv-secst:hover { border-color: var(--accent); }
 .lv-focus .lv-r1 { grid-template-columns: minmax(0, 4fr) minmax(260px, 1fr); }
+/* the page stays centred in whatever width it gets (menu shown or hidden) */
+.page { margin-left: auto; margin-right: auto; }
+body.side-min .page { max-width: 1600px; }
+
+/* ---- sign in ---- */
+.login-body { display: flex; align-items: center; justify-content: center; min-height: 100vh; background: var(--bg); }
+.login-card { width: min(360px, 92vw); display: flex; flex-direction: column; gap: 8px; padding: 26px; }
+.login-card .brand { margin-bottom: 10px; }
+.who { color: var(--muted); font-size: 12px; }
+
+/* ---- tester (friend) login: owner-only controls hidden; the server refuses them anyway ---- */
+body[data-role="tester"] #runall, body[data-role="tester"] [data-stop], body[data-role="tester"] [data-log],
+body[data-role="tester"] #lvgo, body[data-role="tester"] .lv-rep, body[data-role="tester"] #b-agents, body[data-role="tester"] #b-agents2,
+body[data-role="tester"] #mlb, body[data-role="tester"] #mlt1, body[data-role="tester"] #rvgo,
+body[data-role="tester"] #nav a[href="#/settings"], body[data-role="tester"] #nav a[href="#/lab"] { display: none !important; }

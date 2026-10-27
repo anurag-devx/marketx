@@ -99,7 +99,8 @@ def build(day, move="cc", size=1.0, mode="intraday", live=None):
     pgr = pd.read_parquet(pg) if pg.exists() else pd.DataFrame()
     pgr = pgr[pgr["mode"] == mode].set_index("symbol") if len(pgr) else pgr
     try:
-        takes = [t for t in json.loads((C.DATA / "paper" / "takes.json").read_text()) if t.get("day") == day]
+        from core import userdata as U
+        takes = [t for t in json.loads(U.path(C.DATA / "paper" / "takes.json", "paper", "takes.json").read_text()) if t.get("day") == day]
     except (OSError, ValueError):
         takes = []
     paper = {t["symbol"]: t for t in takes if t.get("mode", "intraday") == mode}

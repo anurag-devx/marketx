@@ -5,6 +5,12 @@ from html.parser import HTMLParser
 import pandas as pd
 from core import atomic
 from .analyse import DIR
+from core import userdata as U
+
+
+def _ndir():
+    """Notes, decisions and the watchlist: the signed-in tester's own (data/users/<name>/desk), else the owner's."""
+    return U.path(DIR, "desk")
 
 _lock = threading.Lock()
 KEEP_VERSIONS = 50
@@ -55,7 +61,7 @@ def text_of(h):
 
 
 def _file(sym):
-    return DIR / sym / "notes.json"
+    return _ndir() / sym / "notes.json"
 
 
 def load(sym):
@@ -158,9 +164,10 @@ def add_review(sym, decision_id, lesson, outcome_=None):
 def search(q):
     q = str(q or "").strip().lower()
     out = []
-    if not DIR.exists():
+    nd = _ndir()
+    if not nd.exists():
         return out
-    for f in DIR.glob("*/notes.json"):
+    for f in nd.glob("*/notes.json"):
         try:
             n = json.loads(f.read_text())
         except ValueError:
@@ -176,19 +183,19 @@ def search(q):
 
 def watchlist():
     try:
-        return json.loads((DIR / "watchlist.json").read_text())
+        return json.loads((_ndir() / "watchlist.json").read_text())
     except (OSError, ValueError):
         return []
 
 
 def set_watchlist(items):
-    DIR.mkdir(parents=True, exist_ok=True)
+    _ndir().mkdir(parents=True, exist_ok=True)
     w = []
     for s in items:
         s = str(s).upper().strip()
         if re.fullmatch(r"[A-Z0-9&\-]{1,20}", s) and s not in w:
             w.append(s)
-    atomic.write_text(DIR / "watchlist.json", json.dumps(w[:100]))
+    atomic.write_text(_ndir() / "watchlist.json", json.dumps(w[:100]))
     return w
 
 

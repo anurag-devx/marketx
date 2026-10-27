@@ -12,16 +12,22 @@ STATUS = ("idea", "watching", "taken", "closed")
 TOOLS = ("hline", "trend", "rect", "arrow", "text", "entry", "exit")
 
 
+def _file():
+    from core import userdata as U
+    return U.path(FILE, "workspace", "charts.json")
+
+
 def _load():
     try:
-        return json.loads(FILE.read_text())
+        return json.loads(_file().read_text())
     except (OSError, ValueError):
         return []
 
 
 def _save(items):
-    FILE.parent.mkdir(parents=True, exist_ok=True)
-    atomic.write_text(FILE, json.dumps(items, indent=1, default=str))
+    f = _file()
+    f.parent.mkdir(parents=True, exist_ok=True)
+    atomic.write_text(f, json.dumps(items, indent=1, default=str))
 
 
 def _snapshot(sym):

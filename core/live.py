@@ -451,9 +451,14 @@ def merge_bars(base, live):
 ADDED = DIR / "added.json"
 
 
+def _added_file():
+    from core import userdata as U
+    return U.path(ADDED, "live", "added.json")
+
+
 def added():
     try:
-        return [str(x) for x in json.loads(ADDED.read_text())][:50]
+        return [str(x) for x in json.loads(_added_file().read_text())][:50]
     except (OSError, ValueError):
         return []
 
@@ -461,8 +466,9 @@ def added():
 def save_added(sym):
     a = added()
     if sym not in a:
-        DIR.mkdir(parents=True, exist_ok=True)
-        atomic.write_text(ADDED, json.dumps(a + [sym]))
+        f = _added_file()
+        f.parent.mkdir(parents=True, exist_ok=True)
+        atomic.write_text(f, json.dumps(a + [sym]))
 def index_tokens(log=print):
     try:
         d = json.loads(IDX_FILE.read_text())
