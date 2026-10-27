@@ -19,10 +19,11 @@
       <div class="card section"><div class="ct"><h2>Search notes</h2></div><div class="row"><input class="in" id="dkq" placeholder="word, tag or symbol" style="width:280px"><button class="btn" id="dkqb">Search</button></div><div id="dkqr" class="section"></div></div>`;
     const draw = async () => {
       const d = await api("desk/watchlist");
+      const SP = await MX.sparks(d.items.map((x) => x.symbol));
       const host = $("#dkw", el);
       if (!d.items.length) { host.innerHTML = `<p class="muted">Your desk is empty: add a stock above.</p>`; return; }
       host.innerHTML = table(d.items, [["symbol", "", (v) => `<input type="checkbox" class="dkpick" value="${esc(v)}">`], ["symbol", "Stock", (v, r) => `<a href="${newTab(v)}" target="_blank" rel="noopener"><b>${esc(v)}</b> ↗</a><div class="muted small">${esc(r.name || "")}</div>`],
-        ["analysed", "Analysed", (v, r) => v ? `${esc(v.slice(0, 16))}<div class="muted small">as of ${esc(r.as_of)}</div>` : `<span class="muted">not yet</span>`], ["read", "Chart read", (v) => ar(v)],
+        ["symbol", "20 days", (v) => MX.spark(SP[v])], ["analysed", "Analysed", (v, r) => v ? `${esc(v.slice(0, 16))}<div class="muted small">as of ${esc(r.as_of)}</div>` : `<span class="muted">not yet</span>`], ["read", "Chart read", (v) => ar(v)],
         ["notes", "Notes", (v, r) => `${v ? "✓" : "—"} ${r.decisions ? `· ${r.decisions} decisions` : ""}`], ["symbol", "", (v) => `<button class="btn small dkrm" data-s="${esc(v)}">Remove</button>`]]);
       $$(".dkrm", host).forEach((b) => b.addEventListener("click", async () => { await MX.post("desk/watchlist", { remove: b.dataset.s }); draw(); }));
     };

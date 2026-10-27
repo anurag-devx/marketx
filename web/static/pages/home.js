@@ -15,20 +15,22 @@
     const host = $("#loop", el); if (!host) return;
     // 1 Night
     const running = (st && st.running) || [], stale = asof && asof.stale;
-    const night = `<div class="loop-kv"><div><span class="k">Prices</span><b>${F(st && st.last_bar)}</b></div><div><span class="k">Radar</span><b>${asof && asof.day ? `${F(asof.day)} → ${F(asof.for_day)}` : "not built"}</b></div>
+    const night = `<div class="loop-kv"><div title="Daily bars from Angel One (checked against NSE's bhavcopy); last downloaded ${esc((st && st.last_download) || "—")}"><span class="k">Prices</span><b>${F(st && st.last_bar)}</b></div>
+        <div title="Market Lab radar built from that day's close, for the next session"><span class="k">Radar</span><b>${asof && asof.day ? `${F(asof.day)} → ${F(asof.for_day)}` : "not built"}</b></div>
         <div><span class="k">Jobs</span><b>${running.length ? running.map((j) => esc(j.title)).join(", ") : "idle"}</b></div></div>
       ${stale ? note(`Prices are newer than the radar: run <b>Fetch + run all</b> (or Build tonight's radar) to bring it up to date.`, "warn") : ""}
       <div class="row" style="gap:6px"><button class="btn primary owner-act" id="ovfetch">Fetch + run all</button><a class="btn" href="#/data">Data health</a><a class="btn" href="#/coverage">Coverage</a></div>`;
     // 2 Morning
     const rows = rd && rd.ready ? rd.rows.slice(0, 10) : [];
-    const picks = rows.length ? `<table class="tbl"><thead><tr><th>Stock</th><th class="r">Chance ≥1%</th><th class="r">Usual</th><th>Lean</th><th>Confidence</th><th>Biggest drivers</th></tr></thead><tbody>${rows.map((r) =>
-        `<tr><td><a class="sym" href="#/desk/${encodeURIComponent(r.symbol)}" target="_blank" rel="noopener">${esc(r.symbol)}</a><div class="co">${esc(r.sector || "")}</div></td><td class="r"><b>${P(r.chance)}</b></td><td class="r muted">${P(r.usual)}</td>
-          <td>${LEAN(r.lean)}</td><td><span class="tag">${esc(r.confidence)}</span></td><td class="small">${esc(r.why || "")}</td></tr>`).join("")}</tbody></table>`
-      : `<p class="muted">${esc((rd && rd.why) || "No radar yet.")}</p>`;
+    const SP = await MX.sparks(rows.map((r) => r.symbol));
+    const picks = rows.length ? `<table class="tbl"><thead><tr><th>Stock</th><th>20 days</th><th>Chance ≥1% <span class="muted small">(tick = usual)</span></th><th class="r">Edge</th><th>Lean</th><th>Confidence</th><th>Biggest drivers</th></tr></thead><tbody>${rows.map((r) =>
+        `<tr><td><a class="sym" href="#/desk/${encodeURIComponent(r.symbol)}" target="_blank" rel="noopener">${esc(r.symbol)}</a><div class="co">${esc(r.sector || "")}</div></td><td>${MX.spark(SP[r.symbol])}</td><td>${MX.chanceBar(r.chance, r.usual)}</td><td class="r">${MX.chg(100 * (r.chance - r.usual), 0, { pct: false, suffix: " pts" })}</td>
+          <td>${MX.lean(r.lean)}</td><td>${MX.conf(r.confidence)}</td><td class="small">${esc(r.why || "")}</td></tr>`).join("")}</tbody></table>`
+      : `<div class="empty-next"><b>No picks yet.</b> ${esc((rd && rd.why) || "")} <span class="muted">Next: run Fetch + run all (after 18:00), or Market Lab → Scorecard → Build tonight's radar.</span></div>`;
     const morning = picks + `<div class="row" style="gap:6px;margin-top:8px"><a class="btn" href="#/market-lab">Full Move Radar →</a><span class="muted small">top 10 by edge · close-to-close ≥1% · click a stock for its Stock Desk</span></div>`;
     // 3 Day
     const s = lv && lv.status, on = s && ["live", "replay", "reconnecting", "starting"].includes(s.state);
-    const strip = (lv && lv.strip || []).slice(0, 4).map((x) => `<div><span class="k">${esc(x.label)}</span><b>${num(x.ltp, x.ltp > 1000 ? 0 : 2)}</b> <span class="${x.chg > 0 ? "up" : x.chg < 0 ? "down" : "muted"}">${x.chg > 0 ? "+" : ""}${num(x.chg, 2)}%</span></div>`).join("");
+    const strip = (lv && lv.strip || []).slice(0, 4).map((x) => `<div><span class="k">${esc(x.label)}</span><b>${num(x.ltp, x.ltp > 1000 ? 0 : 2)}</b> ${MX.chg(x.chg, 2)}</div>`).join("");
     const dayb = `<div class="loop-kv"><div><span class="k">Feed</span><b>${s ? (on ? `<span class="up">● ${esc(s.state)}</span>` : esc(s.state)) : "—"}</b></div>
         <div><span class="k">Market</span><b>${s && s.market_open ? "open hours" : "closed"}</b></div>${strip}</div>
       ${lv && lv.alerts && lv.alerts.length ? `<div class="small muted">Latest alert: ${esc(lv.alerts[lv.alerts.length - 1].at)} ${esc(lv.alerts[lv.alerts.length - 1].text)}</div>` : ""}
@@ -37,9 +39,9 @@
     const k = ty && ty.ready ? ty.kpis : null;
     const evening = k ? `<div class="loop-kv"><div><span class="k">Projected</span><b>${F(ty.day)} → ${F(ty.for_day)}</b></div>
         <div><span class="k">Picks moved</span><b>${k.picks_hit}/${k.picks_done || k.picks}</b> <span class="muted small">said ${P(k.said)} · happened ${P(k.happened)}</span></div>
-        <div><span class="k">Plans</span><b>${k.plans_entered ? `${k.plans_r > 0 ? "+" : ""}${num(k.plans_r, 1)} R` : "not graded"}</b></div>
-        <div><span class="k">Paper</span><b>${k.paper_rs != null ? `₹${num(k.paper_rs, 0)}` : k.paper ? "open" : "—"}</b></div></div>
-      <div class="row" style="gap:6px;margin-top:8px"><a class="btn" href="#/tally">Tally →</a></div>` : `<p class="muted">${esc((ty && ty.why) || "Nothing graded yet.")}</p>`;
+        <div><span class="k">Plans</span><b>${k.plans_entered ? MX.chg(k.plans_r, 1, { pct: false, suffix: " R" }) : "not graded"}</b></div>
+        <div><span class="k">Paper</span><b class="${k.paper_rs > 0 ? "up" : k.paper_rs < 0 ? "down" : ""}">${k.paper_rs != null ? MX.money(k.paper_rs, { sign: true, short: true }) : k.paper ? "open" : "—"}</b></div></div>
+      <div class="row" style="gap:6px;margin-top:8px"><a class="btn" href="#/tally">Tally →</a></div>` : `<div class="empty-next"><b>Nothing graded yet.</b> <span class="muted">A night is graded after the next session's prices download (Fetch + run all).</span></div>`;
     host.innerHTML = step(1, "Night · data in", "Fetch + run all after 18:00", night, stale ? "warn" : "") + step(2, "Morning · tonight's picks", rd && rd.day ? `radar of ${F(rd.day)}` : "", morning) +
       step(3, "Day · live", "09:15–15:30", dayb, on ? "live" : "") + step(4, "Evening · tally", "said vs happened", evening);
     $("#ovfetch", el)?.addEventListener("click", () => startJob("fetch+pipeline"));

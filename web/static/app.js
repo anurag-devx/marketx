@@ -47,6 +47,36 @@
   const nameOf = (v) => (typeof v === "string" && (momName(v) || NAMES[v])) || null;
   const named = (v) => { const n = nameOf(v); return n ? `${esc(n)} <span class="code">${esc(v)}</span>` : null; };
 
+  // ---------- signal language: the same marks everywhere (colour only adds to the symbol) ----------
+  // chg: a change with ▲/▼/• and an explicit sign. v in the unit given (pct=true: already in %; scale=100: a fraction).
+  function chg(v, d = 2, o = {}) {
+    if (!isNum(v)) return `<span class="muted">—</span>`;
+    const x = Number(v) * (o.scale || 1), c = Math.abs(x) < (o.flat ?? 1e-9) ? "flat" : x > 0 ? "up" : "down";
+    const mark = c === "up" ? "▲" : c === "down" ? "▼" : "•", sfx = o.suffix ?? (o.pct === false ? "" : "%");
+    return `<span class="chg ${c}">${mark} ${x > 0 ? "+" : x < 0 ? "−" : ""}${num(Math.abs(x), d)}${sfx}</span>`;
+  }
+  const lean = (v) => v === "up" ? `<span class="lean up">▲ up</span>` : v === "down" ? `<span class="lean down">▼ down</span>` : `<span class="lean flat">• ${esc(v || "unclear")}</span>`;
+  const CONF = { low: "c-low", medium: "c-med", high: "c-high" };
+  const conf = (v) => v ? `<span class="tag conf ${CONF[String(v).toLowerCase()] || ""}">${esc(v)}</span>` : "—";
+  // chance as a bar with the stock's usual chance as a tick; the fill gets stronger with the edge (chance - usual)
+  function chanceBar(ch, us) {
+    if (!isNum(ch)) return "—";
+    const e = isNum(us) ? ch - us : 0, a = Math.max(0.25, Math.min(1, 0.35 + 3 * e));
+    return `<span class="cbar" title="chance ${num(100 * ch, 0)}%${isNum(us) ? ` · usual ${num(100 * us, 0)}% · edge ${e >= 0 ? "+" : ""}${num(100 * e, 0)} pts` : ""}"><i style="width:${Math.min(100, 100 * ch)}%;opacity:${a}"></i>${isNum(us) ? `<b style="left:${Math.min(100, 100 * us)}%"></b>` : ""}</span><span class="cbar-v">${num(100 * ch, 0)}%</span>`;
+  }
+  const okMark = (v) => v == null ? `<span class="muted">—</span>` : v ? `<span class="ok up">✓</span>` : `<span class="ok down">✗</span>`;
+  // 20-session trend line for lists (fetched in one call per list: MX.sparks(symbols) -> {SYM: [closes]})
+  const spark = (vals) => vals && vals.length > 1 ? `<span class="spark" title="last ${vals.length} sessions: ${num(vals[0], 2)} → ${num(vals[vals.length - 1], 2)}">${MXCharts.sparkline(vals, { w: 84, h: 22 })}</span>` : `<span class="spark muted">—</span>`;
+  const sparks = async (syms, n = 20) => { const u = [...new Set((syms || []).filter(Boolean))]; if (!u.length) return {};
+    try { return (await api(`spark?${qs({ symbols: u.join(","), n })}`)).items || {}; } catch (e) { return {}; } };
+  // heat: a background tint for a value in a table cell (green up / red down), stronger with size (full at `max`)
+  const heat = (v, max = 2) => !isNum(v) || !v ? "" : `background:color-mix(in srgb, var(${v > 0 ? "--up" : "--down"}) ${Math.round(4 + 22 * Math.min(1, Math.abs(v) / max))}%, transparent)`;
+  // money: ₹ with Indian grouping; lakh / crore for big amounts (opt.short)
+  const money = (v, o = {}) => { if (!isNum(v)) return "—"; const a = Math.abs(v), s = v < 0 ? "−" : o.sign && v > 0 ? "+" : "";
+    if (o.short && a >= 1e7) return `${s}₹${num(a / 1e7, 2)} cr`; if (o.short && a >= 1e5) return `${s}₹${num(a / 1e5, 2)} L`;
+    return `${s}₹${num(a, a >= 1000 ? 0 : 2)}`; };
+  const sdot = (state, label) => `<span class="sdot ${state}" title="${esc(label || state)}"></span>`;
+
   // ---------- formatting by column type ----------
   const FMT = {
     text: (v) => named(v) || esc(v ?? "—"),
@@ -55,16 +85,16 @@
     symonly: (v) => v ? `<a class="sym" href="#/desk/${encodeURIComponent(v)}">${esc(v)}</a>` : "—",
     int: (v) => num(v, 0), num0: (v) => num(v, 0), num1: (v) => num(v, 1), num2: (v) => num(v, 2), num3: (v) => num(v, 3),
     pct0: (v) => isNum(v) ? `${num(v, 0)}%` : "—", pct1: (v) => isNum(v) ? `${num(v, 1)}%` : "—",
-    spct1: (v) => `<span class="${cls(v)}">${pct(v, 1)}</span>`, spct2: (v) => `<span class="${cls(v)}">${pct(v, 2)}</span>`,
-    snum1: (v) => `<span class="${cls(v)}">${isNum(v) ? (v > 0 ? "+" : "") + num(v, 1) : "—"}</span>`,
-    snum2: (v) => `<span class="${cls(v)}">${isNum(v) ? (v > 0 ? "+" : "") + num(v, 2) : "—"}</span>`,
+    spct1: (v) => chg(v, 1), spct2: (v) => chg(v, 2),
+    snum1: (v) => chg(v, 1, { pct: false }), snum2: (v) => chg(v, 2, { pct: false }),
+    chg: (v) => chg(v, 2), chgf: (v) => chg(v, 2, { scale: 100 }), lean: (v) => lean(v), conf: (v) => conf(v), ok: (v) => okMark(v),
     frac: (v) => isNum(v) ? `${num(100 * v, 1)}%` : "—",
     inr: (v) => inr(v), inr0: (v) => inr(v, 0), cr: (v) => isNum(v) ? `₹${num(v, 0)} cr` : "—", cr1: (v) => isNum(v) ? `₹${num(v, 1)} cr` : "—",
     x1: (v) => isNum(v) ? `${num(v, 1)}×` : "—",
     date: (v) => day(v), dt: (v) => dt(v),
     bool: (v) => v === true || v === "True" || v === 1 ? `<span class="up">✓</span>` : v === false || v === 0 || v === "False" ? `<span class="muted">—</span>` : "—",
     link: (v) => safeUrl(v) ? `<a href="${esc(v)}" target="_blank" rel="noopener noreferrer">open</a>` : "—",
-    tag: (v) => v ? `<span class="tag">${esc(v)}</span>` : "—",
+    tag: (v) => !v ? "—" : CONF[String(v).toLowerCase()] ? conf(v) : `<span class="tag">${esc(v)}</span>`,
     strat: (v) => named(v) || esc(v ?? "—"),
     status: (v) => { const s = String(v || "").toLowerCase(); const c = /ok|pass|valid|enabled|approved|done|clean/.test(s) ? "pos" : /error|fail|reject|bad/.test(s) ? "neg" : ""; return v ? `<span class="tag ${c}">${esc(v)}</span>` : "—"; },
   };
@@ -72,11 +102,11 @@
   const fmt = (type, v, row) => (typeof type === "function" ? type : FMT[type] || FMT.text)(v, row);
 
   // simple table: cols = [[key, label, fn|type, right]]
-  function table(rows, cols, empty = "Nothing here.") {
+  function table(rows, cols, empty = "Nothing here.", opt = {}) {
     if (!rows || !rows.length) return `<div class="empty">${esc(empty)}</div>`;
     const right = (c) => c[3] ?? (typeof c[2] === "string" && RIGHT.test(c[2]));
     return `<table class="tbl"><thead><tr>${cols.map((c) => `<th class="${right(c) ? "r" : ""}">${esc(c[1])}</th>`).join("")}</tr></thead><tbody>` +
-      rows.map((row) => `<tr>${cols.map((c) => `<td class="${right(c) ? "r" : ""}">${fmt(c[2] || "text", row[c[0]], row)}</td>`).join("")}</tr>`).join("") + `</tbody></table>`;
+      rows.map((row) => `<tr${opt.rowClass ? ` class="${esc(opt.rowClass(row) || "")}"` : ""}>${cols.map((c) => `<td class="${right(c) ? "r" : ""}">${fmt(c[2] || "text", row[c[0]], row)}</td>`).join("")}</tr>`).join("") + `</tbody></table>`;
   }
 
   // data table: sortable, searchable, CSV, paged. Returns a DOM node.
@@ -104,7 +134,7 @@
           ${opt.csv ? `<button class="btn small dt-csv">Download CSV</button>` : ""}</div>`}
         <div class="scroll" ${opt.height ? `style="max-height:${opt.height}px"` : ""}>${!r.length ? `<div class="empty">${esc(opt.empty || "Nothing here.")}</div>` :
         `<table class="tbl"><thead><tr>${cols.map((c) => `<th data-k="${esc(c[0])}" class="${right(c) ? "r" : ""} sortable">${esc(c[1])}${sortK === c[0] ? (sortDir > 0 ? " ↑" : " ↓") : ""}</th>`).join("")}</tr></thead>
-        <tbody>${vis.map((row) => `<tr${opt.onRow ? ' class="click"' : ""}>${cols.map((c) => `<td class="${right(c) ? "r" : ""}">${fmt(c[2] || "text", row[c[0]], row)}</td>`).join("")}</tr>`).join("")}</tbody></table>`}</div>
+        <tbody>${vis.map((row) => `<tr class="${opt.onRow ? "click " : ""}${opt.rowClass ? esc(opt.rowClass(row) || "") : ""}">${cols.map((c) => `<td class="${right(c) ? "r" : ""}">${fmt(c[2] || "text", row[c[0]], row)}</td>`).join("")}</tr>`).join("")}</tbody></table>`}</div>
         ${pages > 1 ? `<div class="dt-pages"><button class="btn small dt-prev" ${page ? "" : "disabled"}>‹</button><span class="muted">page ${page + 1} of ${pages}</span><button class="btn small dt-next" ${page < pages - 1 ? "" : "disabled"}>›</button></div>` : ""}`;
       $$("th.sortable", box).forEach((th) => th.addEventListener("click", () => { const k = th.dataset.k; sortDir = sortK === k ? -sortDir : (isNum(rows.find((x) => x[k] != null)?.[k]) ? -1 : 1); sortK = k; draw(); }));
       const f = $(".dt-f", box); if (f) f.addEventListener("input", () => { filter = f.value; page = 0; const pos = f.selectionStart; draw(); const g = $(".dt-f", box); g.focus(); g.setSelectionRange(pos, pos); });
@@ -174,7 +204,8 @@
   const head = (title, sub = "", actions = "") => `<div class="head"><div><h1>${title}</h1>${sub ? `<div class="sub">${sub}</div>` : ""}</div>${actions ? `<div class="actions">${actions}</div>` : ""}</div>`;
   const note = (text, tone = "info") => `<div class="note ${tone}">${text}</div>`;
   const loading = () => `<div class="head"><div><div class="skeleton" style="width:180px;height:22px"></div><div class="skeleton" style="width:320px"></div></div></div><div class="grid g4">${'<div class="card"><div class="skeleton"></div><div class="skeleton" style="width:60%"></div></div>'.repeat(4)}</div>`;
-  const spinner = (text = "Working…") => `<div class="empty"><span class="spin"></span> ${esc(text)}</div>`;
+  // loading: skeleton lines (the shape of content to come) with the message under them
+  const spinner = (text = "Working…") => `<div class="sk-wrap" role="status"><div class="skeleton" style="width:38%"></div><div class="skeleton" style="width:72%"></div><div class="skeleton" style="width:56%"></div><div class="muted small"><span class="spin"></span> ${esc(text)}</div></div>`;
 
   // minimal markdown (headings, bold, italics, bullets, numbered, tables, links, code) — for reports
   function md(text) {
@@ -446,6 +477,15 @@
       else if (e.key === "Escape") { items = []; draw(); inp.blur(); }
     });
     box.addEventListener("click", () => { inp.value = ""; items = []; draw(); });
+    // keyboard: "/" search · g then o/m/d/l/t/c/h/r = Overview, Market Lab, Desk, Live, Tally, Coverage, Data health, Retro · ? = list
+    let gAt = 0;
+    const GO = { o: "overview", m: "market-lab", d: "desk", l: "live", t: "tally", c: "coverage", h: "data", r: "retro" };
+    document.addEventListener("keydown", (e) => {
+      if (e.metaKey || e.ctrlKey || e.altKey || /input|textarea|select/i.test(document.activeElement.tagName) || document.activeElement.isContentEditable) return;
+      if (e.key === "g") { gAt = Date.now(); return; }
+      if (Date.now() - gAt < 1200 && GO[e.key]) { e.preventDefault(); gAt = 0; location.hash = `#/${GO[e.key]}`; return; }
+      if (e.key === "?") { toast("Keys: / search · g o Overview · g m Market Lab · g d Desk · g l Live · g t Tally · g c Coverage · g h Data health · g r Retro · [ menu"); }
+    });
     document.addEventListener("keydown", (e) => { if (e.key === "/" && document.activeElement !== inp && !/input|textarea|select/i.test(document.activeElement.tagName)) { e.preventDefault(); inp.focus(); } });
     document.addEventListener("click", (e) => { if (!e.target.closest(".search")) { items = []; draw(); } });
   }
@@ -502,7 +542,7 @@
   window.addEventListener("hashchange", () => { render(); window.scrollTo(0, 0); });
   let rz; window.addEventListener("resize", () => { clearTimeout(rz); rz = setTimeout(() => window.dispatchEvent(new Event("mx-resize")), 200); });
 
-  window.MX = { api, qs, post, toast, startJob, esc, num, pct, cls, inr, day, dt, mmss, safeUrl, isNum, $, $$, table, dataTable, csv, download,
+  window.MX = { api, qs, post, toast, startJob, esc, num, pct, cls, inr, day, dt, mmss, safeUrl, isNum, $, $$, table, dataTable, csv, download, chg, lean, conf, chanceBar, okMark, sdot, spark, sparks, heat, money,
                 cols, kpi, card, nameOf, named, chartDrawer, head, note, loading, spinner, md, form, tabs, sections, section, newsList, drawer, editTable, openLog, fmt, debounce,
                 page: (k, def) => (PAGES[k] = def), pageDef: (k) => PAGES[k], suggest, remember, status: () => lastStatus, refreshStatus, route, render };
   document.addEventListener("DOMContentLoaded", async () => { setupTheme(); setupSearch(); refreshStatus();

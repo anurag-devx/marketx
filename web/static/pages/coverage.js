@@ -7,7 +7,8 @@
   const st = Object.assign({ q: "", sector: "", need: [], missing: "", radar: false, tab: "stocks" }, S);
   const save = () => { try { sessionStorage.setItem("mx-cov", JSON.stringify(st)); } catch (e) { /* ignore */ } };
   const ICON = { ok: ["✓", "up"], partial: ["◐", "warn"], stale: ["◐", "warn"], missing: ["✗", "down"], none: ["·", "muted"], "n/a": ["–", "muted"] };
-  const cell = (d) => { const [i, c] = ICON[d.state] || ["?", "muted"]; return `<span class="cv-i ${c}" title="${esc(d.state)}: ${esc(d.detail)}">${i}</span>`; };
+  const DOT = { ok: "ok", partial: "partial", stale: "stale", missing: "missing", none: "none", "n/a": "na" };
+  const cell = (d) => { const [i, c] = ICON[d.state] || ["?", "muted"]; return `<span title="${esc(d.state)}: ${esc(d.detail)}">${MX.sdot(DOT[d.state] || "none")}<span class="cv-i ${c}">${i}</span></span>`; };
   const STATUS = { used: ["used", "up"], shown: ["shown only", "muted"], candidate: ["candidate", "warn"] };
   let selected = new Set();
 
@@ -23,7 +24,7 @@
     el.innerHTML = spinner("Checking every stock …");
     let d; try { d = await api("coverage"); } catch (e) { el.innerHTML = note(esc(e.message), "warn"); return; }
     const items = d.items, sectors = [...new Set(d.rows.map((r) => r.sector).filter(Boolean))].sort();
-    el.innerHTML = `<div class="cv-sum">${items.map((it) => `<div class="cv-s"><div class="k">${esc(it.label)}</div><div class="cv-bar"><i style="width:${100 * d.summary[it.id]}%"></i></div>
+    el.innerHTML = `<div class="cv-sum">${items.map((it) => `<div class="cv-s" style="${d.summary[it.id] < 0.5 ? "border-color:color-mix(in srgb, var(--down) 45%, var(--line))" : d.summary[it.id] < 0.9 ? "border-color:color-mix(in srgb, var(--warn) 45%, var(--line))" : ""}"><div class="k">${esc(it.label)}</div><div class="cv-bar"><i style="width:${100 * d.summary[it.id]}%"></i></div>
           <div class="row" style="justify-content:space-between"><b>${num(100 * d.summary[it.id], 0)}%</b><button class="btn small owner-act cvfix" data-job="${esc(it.job)}" title="run the job that fills this">Fix</button></div></div>`).join("")}</div>
       <div class="card section"><div class="mllab">Signals (Market Lab groups) · radar of ${esc(d.radar_day || "—")}</div><div class="cv-sig">${Object.entries(d.signals).map(([g, s]) =>
         `<span class="tag ${STATUS[s][1]}" title="${s === "used" ? "feeds tonight's chance" : s === "shown" ? "in the engine but not shown to help (Scorecard)" : "built, not used until it passes the candidate test"}">${esc(g)} · ${STATUS[s][0]}</span>`).join("")}</div></div>
@@ -97,8 +98,8 @@
       ${r.filter && Object.keys(r.filter).length ? `<p class="small muted">Selection: ${esc(JSON.stringify(r.filter))}</p>` : ""}
       ${MX.table(d.rows, [["symbol", "Stock", (v, x) => `<a class="sym" href="#/desk/${encodeURIComponent(v)}" target="_blank" rel="noopener">${esc(v)} ↗</a><div class="co">${esc(x.sector || "")}</div>`],
         ["state", "State", (v, x) => v === "done" ? `<span class="up">✓</span> <span class="muted small">${esc(x.snap)}</span>` : v === "failed" ? `<span class="down" title="${esc(x.why || "")}">failed</span>` : `<span class="muted">waiting</span>`],
-        ["close", "Close", (v) => v == null ? "—" : num(v, 2)], ["chance", "Chance ≥1%", (v, x) => v == null ? "—" : `<b>${P(v)}</b> <span class="muted small">usual ${P(x.usual)}</span>`], ["lean", "Lean", (v) => DIR(v)],
-        ["confidence", "Conf."], ["ta", "Chart read", (v, x) => `${DIR(v)} ${x.ta_net != null ? `<span class="muted small">${x.ta_net > 0 ? "+" : ""}${x.ta_net}</span>` : ""}`],
+        ["close", "Close", (v) => v == null ? "—" : num(v, 2)], ["chance", "Chance ≥1%", (v, x) => v == null ? "—" : MX.chanceBar(v, x.usual)], ["lean", "Lean", (v) => MX.lean(v)],
+        ["confidence", "Conf.", (v) => v ? MX.conf(v) : "—"], ["ta", "Chart read", (v, x) => `${DIR(v)} ${x.ta_net != null ? `<span class="muted small">${x.ta_net > 0 ? "+" : ""}${x.ta_net}</span>` : ""}`],
         ["pros", "For / against", (v, x) => x.state === "done" ? `<span class="up">${v}</span> / <span class="down">${x.cons}</span>` : "—"]])}
       <p class="muted small">Each analysis is the one saved in this run; Stock Desk keeps every one (pick it in its "saved analyses" list).</p></div>`;
     if (r.status !== "done") setTimeout(() => { if (host.isConnected) runDetail(host, id); }, 10000);

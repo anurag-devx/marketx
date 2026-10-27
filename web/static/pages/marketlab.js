@@ -65,6 +65,7 @@
     b.innerHTML = spinner("Loading tonight's radar …");
     const d = await api(`marketlab/radar?${qs({ when: st.when, move: st.move, size: st.size, day: st.vday || undefined })}`);
     const tp = await api(`tradeplan/summary?${qs({ mode: st.move === "oc" ? "intraday" : "swing", day: st.vday || undefined })}`).catch(() => ({ rows: {} }));
+    const SP = d.ready ? await MX.sparks(d.rows.map((r) => r.symbol)) : {};
     b.innerHTML = selectors(d) + `<div id="mlr" class="section"></div>`;
     $$(".seg[data-k]", b).forEach((sg) => sg.addEventListener("click", (e) => { const x = e.target.closest("button"); if (!x) return; st[sg.dataset.k] = x.dataset.v; save(); radarTab(b, go); }));
     $("#mlsec", b)?.addEventListener("change", (e) => { st.sector = e.target.value; save(); radarTab(b, go); });
@@ -76,7 +77,7 @@
     host.innerHTML = note(`Radar for ${esc(day(d.day))} → next session · ${esc(d.moves[d.move])} · at least ${esc(d.size)}% · status: <b>${esc(d.status)}</b>.
       Sorted by edge: the chance minus the stock's usual chance. ${RETRO ? "Click a row for its influence map." : "Click a row to open the stock in Stock Desk (new tab)."}`, d.status === "tested" ? "info" : "warn") + (d.day_note ? note(esc(d.day_note), "warn") : "") + `<div class="card flush section" id="mlt"></div>`;
     $("#mlt", host).appendChild(dataTable(rows, [
-      ["symbol", "Stock", "sym"], ["nodes", "Map", (v) => mini(v)],
+      ["symbol", "Stock", "sym"], ["spark", "20 days", (v, r) => MX.spark(SP[r.symbol])], ["nodes", "Map", (v) => mini(v)],
       ["chance_pct", `Chance ≥${d.size}%`, (v, r) => `<span class="mlbar"><i style="width:${Math.min(100, v)}%"></i><b style="left:${Math.min(100, r.usual_pct)}%"></b></span><b>${num(v, 0)}%</b>`],
       ["usual_pct", "Usual", "pct0"], ["edge", "Edge (pts)", "snum1"], ["lean", "Lean", (v) => leanHtml(v)], ["confidence", "Confidence", "tag"],
       ["n_big", "Cases that big", "int"], ["plan", "Plan", (v, r) => v == null ? "—" : v === "no trade" ? `<span title="${esc(r.plan_why || "")}" class="muted">no trade</span>`
@@ -84,7 +85,7 @@
       ["second", "TA · Fund.", (v, r) => { if (!v) return "—"; const [a, f] = v.split("|"), ic = (x) => x === "up" ? `<span class="up">▲</span>` : x === "down" ? `<span class="down">▼</span>` : `<span class="muted">•</span>`;
         return `<span title="${esc(r.second_why || "")}" style="white-space:nowrap">${ic(a)} TA · ${ic(f)} Fund.</span>`; }],
       ["why", "Biggest drivers", (v) => `<span class="small">${arr(v)}</span>`], ["sector", "Sector"]],
-      { csv: `market_lab_${d.day}_${d.move}_${d.size}`, sort: "edge", desc: true, per: 25, show: ["symbol", "nodes", "chance_pct", "usual_pct", "edge", "lean", "confidence", "plan", "rr", "second", "why"], onRow: (r) => { if (RETRO) { st.sym = r.symbol; save(); go("stock"); } else window.open(`#/desk/${encodeURIComponent(r.symbol)}`, "_blank", "noopener"); }, chart: { x: "usual_pct", y: "chance_pct" } }));
+      { csv: `market_lab_${d.day}_${d.move}_${d.size}`, sort: "edge", desc: true, per: 25, show: ["symbol", "spark", "nodes", "chance_pct", "usual_pct", "edge", "lean", "confidence", "plan", "rr", "second", "why"], onRow: (r) => { if (RETRO) { st.sym = r.symbol; save(); go("stock"); } else window.open(`#/desk/${encodeURIComponent(r.symbol)}`, "_blank", "noopener"); }, chart: { x: "usual_pct", y: "chance_pct" } }));
     host.insertAdjacentHTML("beforeend", `<p class="muted small">Bar = chance tomorrow; black tick = the stock's usual chance on any day. Only rows where the bar clearly passes the tick are interesting. Map: green pushes up, red pushes down, grey no clear push.</p>`);
   }
 

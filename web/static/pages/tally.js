@@ -76,13 +76,14 @@
       if (!rows.length) { host.innerHTML = `<p class="muted" style="padding:12px">Nothing to show with these filters.</p>`; return; }
       host.appendChild(MX.dataTable(rows, [
         ["symbol", "Stock", (v, r) => `<a class="ty-desk" href="#/desk/${encodeURIComponent(v)}" target="_blank" rel="noopener" title="open in Stock Desk"><b>${esc(v)}</b> ↗</a>${r.pick ? ` <span class="tag">pick #${r.rank}</span>` : ""}${r.paper ? ` <span class="tag">paper</span>` : ""}<div class="muted small">${esc(r.sector || "")}</div>`],
-        ["chance_pct", `Said: chance ≥${esc(d.size)}%`, (v, r) => v == null ? "—" : `<b>${num(v, 0)}%</b> <span class="muted small">usual ${P(r.usual)} · ${esc(r.confidence || "")}</span>`],
+        ["chance_pct", `Said: chance ≥${esc(d.size)}%`, (v, r) => v == null ? "—" : `${MX.chanceBar(r.chance, r.usual)} ${MX.conf(r.confidence)}`],
         ["lean", "Said: lean", (v) => DIR(v)], ["ta", "TA", (v) => DIR(v)], ["fund", "Fund.", (v) => DIR(v)],
         ["ret", `Happened: ${esc((MOVES.find((m) => m[0] === d.move) || [])[1] || d.move)}`, (v, r) => RET(v, r.so_far)],
         ["hit", `≥${esc(d.size)}%?`, (v) => OK(v)], ["lean_right", "Lean right?", (v) => OK(v)], ["ta_right", "TA right?", (v) => OK(v)],
         ["status", "Plan result", (v, r) => planCell(r)], ["r", "R", (v) => v == null ? "—" : `<b class="${v > 0 ? "up" : v < 0 ? "down" : ""}">${v > 0 ? "+" : ""}${num(v, 2)}</b>`],
-        ["pnl_rs", "Paper ₹", (v) => v == null ? "—" : `<b class="${v > 0 ? "up" : "down"}">${num(v, 0)}</b>`]],
-        { csv: `tally_${d.day}_${d.move}_${d.size}_${d.mode}`, sort: st.result === "matched" ? "ret_abs" : st.show === "all" ? "ret_abs" : "chance_pct", desc: true, per: 50, onRow: (r) => chart(r) }));
+        ["pnl_rs", "Paper ₹", (v) => v == null ? "—" : `<b class="${v > 0 ? "up" : "down"}">${v > 0 ? "▲ " : "▼ "}${MX.money(v, { sign: true })}</b>`]],
+        { rowClass: (r) => r.hit == null ? "" : (r.hit === true && r.lean_right !== false) ? "row-hit" : "row-miss",
+          csv: `tally_${d.day}_${d.move}_${d.size}_${d.mode}`, sort: st.result === "matched" ? "ret_abs" : st.show === "all" ? "ret_abs" : "chance_pct", desc: true, per: 50, onRow: (r) => chart(r) }));
     }
 
     async function chart(r) {
@@ -127,7 +128,7 @@
     } else el.querySelector("#tych1").innerHTML = `<p class="muted small">Pick at least 2 days for the chart.</p>`;
     el.querySelector("#tyct").appendChild(MX.dataTable(rows.slice().reverse(), [
       ["day", "Projected on", (v, r) => `<a href="#/tally/${encodeURIComponent(v)}">${F(v)}</a><div class="muted small">for ${F(r.for_day)}</div>`],
-      ["picks_hit", "Picks moved", (v, r) => `${v}/${r.picks_done || r.picks}`], ["said", "Said", (v) => pct1(v)], ["happened", "Happened", (v) => pct1(v)], ["usual", "Usual", (v) => pct1(v)],
+      ["picks_hit", "Picks moved", (v, r) => `${v}/${r.picks_done || r.picks}`], ["said", "Said", (v) => pct1(v)], ["happened", "Happened", (v, r) => `<span style="${MX.heat(r.happened != null && r.said != null ? 100 * (r.happened - r.said) : null, 20)};padding:2px 6px;border-radius:5px">${pct1(v)}</span>`], ["usual", "Usual", (v) => pct1(v)],
       ["lean_right", "Lean right", (v, r) => r.lean_n ? `${v}/${r.lean_n}` : "—"], ["ta_right", "TA right", (v, r) => r.ta_n ? `${v}/${r.ta_n}` : "—"],
       ["plans_r", "Plan R", (v, r) => v == null ? `<span class="muted">not graded</span>` : `<b class="${v > 0 ? "up" : v < 0 ? "down" : ""}">${v > 0 ? "+" : ""}${num(v, 1)}</b> <span class="muted small">${r.plans_entered} entered · avg ${num(r.plans_avg_r, 2)}</span>`],
       ["target_first", "Target / stop first", (v, r) => r.plans_entered ? `${v} / ${r.stop_first}` : "—"], ["paper_rs", "Paper ₹", (v, r) => v == null ? (r.paper ? "open" : "—") : num(v, 0)]],
@@ -155,10 +156,10 @@
         <div class="card flush section" id="tyht"></div>`;
       host.querySelector("#tyht").appendChild(MX.dataTable(d.rows, [
         ["day", "Projected on", (v, r) => `<a href="#/tally/${encodeURIComponent(v)}">${F(v)}</a><div class="muted small">for ${F(r.for_day)}</div>`],
-        ["pick", "Pick", (v, r) => v ? `<span class="tag">#${r.rank}</span>` : `<span class="muted">—</span>`], ["chance", "Said: chance", (v, r) => v == null ? "—" : `<b>${P(v)}</b> <span class="muted small">usual ${P(r.usual)}</span>`],
+        ["pick", "Pick", (v, r) => v ? `<span class="tag">#${r.rank}</span>` : `<span class="muted">—</span>`], ["chance", "Said: chance", (v, r) => v == null ? "—" : MX.chanceBar(v, r.usual)],
         ["lean", "Lean", (v) => DIR(v)], ["ta", "TA", (v) => DIR(v)], ["ret", "Happened", (v) => RET(v)], ["hit", `≥${esc(d.size)}%?`, (v) => OK(v)], ["lean_right", "Lean right?", (v) => OK(v)],
         ["status", "Plan result", (v, r) => planCell(r)], ["r", "R", (v) => v == null ? "—" : `<b class="${v > 0 ? "up" : v < 0 ? "down" : ""}">${v > 0 ? "+" : ""}${num(v, 2)}</b>`]],
-        { csv: `tally_${d.symbol}_history`, per: 60 }));
+        { csv: `tally_${d.symbol}_history`, per: 60, rowClass: (r) => r.hit == null ? "" : (r.hit === true && r.lean_right !== false) ? "row-hit" : "row-miss" }));
     }
     draw();
   }

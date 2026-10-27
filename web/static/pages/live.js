@@ -6,10 +6,10 @@
 (function () {
   const { api, esc, num, $, $$, table, note } = MX;
   const COL = { E1: "up", SL: "down", T1: "blue", T2: "blue" };
-  const C = (x, d = 2) => x == null ? "—" : `<span class="${x > 0 ? "up" : x < 0 ? "down" : "muted"}">${x > 0 ? "+" : ""}${num(x, d)}%</span>`;
+  const C = (x, d = 2) => MX.chg(x, d);
   const P = (x) => x == null ? "—" : num(x, x >= 1000 ? 1 : 2);
   const AR = (d) => d === "up" ? `<span class="up">▲</span>` : d === "down" ? `<span class="down">▼</span>` : `<span class="muted">•</span>`;
-  const LBL = (d) => d === "up" ? `<span class="up">▲ up</span>` : d === "down" ? `<span class="down">▼ down</span>` : `<span class="muted">${esc(d || "—")}</span>`;
+  const LBL = (d) => MX.lean(d);
   const MV = { cc: "close-to-close", oc: "open-to-close" };
   function chips(r) {
     const out = [];
@@ -83,7 +83,7 @@
 
     // sel: {kind: "stock"|"index", key}
     let sel = arg ? { kind: "stock", key: String(arg).toUpperCase() } : store.get("lv-sel2", null), seq = 0, tab = "picks", tab2 = store.get("lv-tab2", "watch"),
-      snd = store.get("lv-sound", true), last = {}, alerts = [], busy = false, data = null, firstLoad = true, callFor = null, openSec = null;
+      snd = store.get("lv-sound", true), last = {}, alerts = [], busy = false, data = null, firstLoad = true, callFor = null, openSec = null, SPK = {}, spkBusy = false;
     const selKey = () => sel ? `${sel.kind}:${sel.key}` : "";
     const sndBtn = $("#lvsnd", el); const drawSnd = () => { sndBtn.textContent = snd ? "🔔" : "🔕"; }; drawSnd();
     sndBtn.addEventListener("click", () => { snd = !snd; store.set("lv-sound", snd); drawSnd(); if (snd) beep("up"); });
@@ -135,11 +135,13 @@
       if (tab2 === "watch") {
         const rows = d.watch || [];
         if (!rows.length) { host.innerHTML = `<p class="muted small">Start the feed: watched = Stock Desk list + Market Lab picks + paper takes + stocks you search.</p>`; return; }
-        host.innerHTML = `<div class="scroll"><table class="tbl lv-tbl"><thead><tr><th>Stock</th><th>Signals</th><th class="r">Last</th><th class="r">Chg</th><th class="r">vs VWAP</th><th class="r">Day range</th><th>Plan / crosses</th><th>Sector</th></tr></thead><tbody>${rows.map((r) => {
+        const need = rows.map((r) => r.symbol).filter((s) => !(s in SPK));
+        if (need.length && !spkBusy) { spkBusy = true; MX.sparks(need).then((x) => { need.forEach((s) => { SPK[s] = x[s] || null; }); spkBusy = false; }); }
+        host.innerHTML = `<div class="scroll"><table class="tbl lv-tbl"><thead><tr><th>Stock</th><th>20 days</th><th>Signals</th><th class="r">Last</th><th class="r">Chg</th><th class="r">vs VWAP</th><th class="r">Day range</th><th>Plan / crosses</th><th>Sector</th></tr></thead><tbody>${rows.map((r) => {
           const f = last[r.symbol] != null && r.ltp != null && r.ltp !== last[r.symbol] ? (r.ltp > last[r.symbol] ? "fl-up" : "fl-down") : "";
           const sig = chips({ ...r, crossed: [], fired: [] }), ev = chips({ crossed: r.crossed, fired: r.fired });
           return `<tr class="lv-row ${selKey() === "stock:" + r.symbol ? "sel" : ""}" data-k="stock:${esc(r.symbol)}" data-s="${esc(r.symbol)}"><td><b>${esc(r.symbol)}</b> <span class="muted small">${r.src.map(esc).join(" · ")}</span></td>
-            <td><div class="lv-chips">${sig}</div></td><td class="r num ${f}">${P(r.ltp)}</td><td class="r">${C(r.chg)}</td><td class="r">${C(r.vs_vwap)}</td>
+            <td>${MX.spark(SPK[r.symbol])}</td><td><div class="lv-chips">${sig}</div></td><td class="r num ${f}">${P(r.ltp)}</td><td class="r" style="${MX.heat(r.chg, 3)}">${C(r.chg)}</td><td class="r">${C(r.vs_vwap)}</td>
             <td class="r small">${r.low != null ? `${P(r.low)} – ${P(r.high)}` : "—"}</td><td><div class="lv-chips">${ev || `<span class="muted small">—</span>`}</div></td><td class="small muted">${esc(r.sector || "")}</td></tr>`; }).join("")}</tbody></table></div>`;
         rows.forEach((r) => { last[r.symbol] = r.ltp; });
         $$(".lv-row", host).forEach((tr) => tr.addEventListener("click", () => pickStock(tr.dataset.s)));
@@ -149,7 +151,7 @@
         host.innerHTML = `<div class="scroll"><table class="tbl lv-tbl"><thead><tr><th>Sector</th><th class="r">Stocks</th><th>Up / down</th><th class="r">Median</th><th class="r">Sector index</th><th class="r">Above VWAP</th><th>Best</th><th>Worst</th></tr></thead><tbody>${rows.map((r) =>
           `<tr class="lv-row lv-sec ${openSec === r.sector ? "sel" : ""}" data-sec="${esc(r.sector)}"><td><b>${openSec === r.sector ? "▾" : "▸"} ${esc(r.sector)}</b></td><td class="r">${r.n}</td>
             <td><div class="lv-bar sm"><span class="up" style="width:${100 * r.adv / r.n}%"></span><span class="down" style="width:${100 * r.dec / r.n}%"></span></div><span class="small"><span class="up">${r.adv}</span> / <span class="down">${r.dec}</span></span></td>
-            <td class="r">${C(r.median)}</td><td class="r">${r.index ? `<button class="lv-sym" data-ix="${esc(r.index.key)}">${esc(r.index.label)}</button> ${C(r.index.chg)}` : `<span class="muted small">—</span>`}</td><td class="r">${r.above_vwap}/${r.n}</td>
+            <td class="r" style="${MX.heat(r.median, 2)}">${C(r.median)}</td><td class="r">${r.index ? `<button class="lv-sym" data-ix="${esc(r.index.key)}">${esc(r.index.label)}</button> ${C(r.index.chg)}` : `<span class="muted small">—</span>`}</td><td class="r">${r.above_vwap}/${r.n}</td>
             <td><button class="lv-sym" data-s="${esc(r.best.symbol)}">${esc(r.best.symbol)}</button> ${C(r.best.chg)}</td><td><button class="lv-sym" data-s="${esc(r.worst.symbol)}">${esc(r.worst.symbol)}</button> ${C(r.worst.chg)}</td></tr>
             ${openSec === r.sector ? `<tr><td colspan="8" id="lvsecrows"><span class="muted small">Loading …</span></td></tr>` : ""}`).join("")}</tbody></table></div>`;
         $$(".lv-sec", host).forEach((tr) => tr.addEventListener("click", (e) => { if (e.target.closest("button")) return; openSec = openSec === tr.dataset.sec ? null : tr.dataset.sec; drawRow2(); }));
@@ -160,7 +162,7 @@
         const rows = d.indices || [];
         if (!rows.length) { host.innerHTML = `<p class="muted small">Indices appear once the feed runs.</p>`; return; }
         host.innerHTML = `<div class="scroll"><table class="tbl lv-tbl"><thead><tr><th>Index</th><th class="r">Last</th><th class="r">Chg</th><th class="r">vs open</th><th class="r">Day range</th><th class="r">Updated</th></tr></thead><tbody>${rows.sort((a, b) => (b.chg ?? -99) - (a.chg ?? -99)).map((r) =>
-          `<tr class="lv-row ${selKey() === "index:" + r.key ? "sel" : ""}" data-k="index:${esc(r.key)}" data-ix="${esc(r.key)}"><td><b>${esc(r.label)}</b></td><td class="r num">${P(r.ltp)}</td><td class="r">${C(r.chg)}</td><td class="r">${C(r.vs_open)}</td>
+          `<tr class="lv-row ${selKey() === "index:" + r.key ? "sel" : ""}" data-k="index:${esc(r.key)}" data-ix="${esc(r.key)}"><td><b>${esc(r.label)}</b></td><td class="r num">${P(r.ltp)}</td><td class="r" style="${MX.heat(r.chg, 2)}">${C(r.chg)}</td><td class="r">${C(r.vs_open)}</td>
             <td class="r small">${r.low != null ? `${P(r.low)} – ${P(r.high)}` : "—"}</td><td class="r small muted">${esc(r.ts || "")}</td></tr>`).join("")}</tbody></table></div>`;
       }
       $$("[data-ix]", host).forEach((b) => b.addEventListener("click", (e) => { e.stopPropagation(); pickIndex(b.dataset.ix); }));
@@ -186,10 +188,10 @@
         const done = p.filter((x) => x.moved), right = p.filter((x) => x.lean_right != null), ok = right.filter((x) => x.lean_right);
         host.innerHTML = `<p class="small">So far: <b>${done.length}/${p.length}</b> picks are ≥1% away now · ${p.filter((x) => x.touched).length} touched 1% · lean right <b>${ok.length}/${right.length}</b> (only picks with a shown lean).</p>` +
           table(p, [["symbol", "Stock", (v) => `<button class="lv-sym" data-s="${esc(v)}">${esc(v)}</button>`], ["move", "Move", (v) => v === "cc" ? "close-to-close" : "open-to-close"],
-            ["chance", "Chance ≥1%", (v, r) => `${num(100 * v, 0)}% <span class="muted small">usual ${num(100 * r.usual, 0)}%</span>`], ["lean", "Lean", (v) => LBL(v)],
+            ["chance", "Chance ≥1%", (v, r) => MX.chanceBar(v, r.usual)], ["lean", "Lean", (v) => LBL(v)],
             ["move_now", "Now", (v) => C(v)], ["moved", "≥1% now", (v) => v == null ? "—" : v ? "✓" : "·"], ["touched", "Touched", (v) => v == null ? "—" : v ? "✓" : "·"],
             ["beyond_min", "Min beyond 1%", (v, r) => v ? `${num(v, 0)} <span class="muted small">from ${esc(r.first || "")}</span>` : "—"], ["lean_right", "Lean right?", (v) => v == null ? "—" : v ? `<span class="up">yes</span>` : `<span class="down">no</span>`],
-            ["confidence", "Conf."]]);
+            ["confidence", "Conf.", (v) => MX.conf(v)]], "Nothing here.", { rowClass: (r) => r.moved == null ? "" : r.moved && r.lean_right !== false ? "row-hit" : r.touched ? "" : "row-miss" });
       } else {
         const t = d.takes || [];
         if (!t.length) { host.innerHTML = `<p class="muted">No paper takes for this plan (Trade plan → Paper take).</p>`; return; }
@@ -198,7 +200,7 @@
           table(t, [["symbol", "Stock", (v) => `<button class="lv-sym" data-s="${esc(v)}">${esc(v)}</button>`], ["mode", "Mode"], ["state", "State"], ["side", "Side", (v) => v || "—"],
             ["entry", "Entry", (v) => P(v)], ["left", "Open qty", (v, r) => `${v}/${r.qty}`], ["stop", "Stop", (v) => P(v)], ["last", "Last", (v) => P(v)],
             ["gross", "Gross ₹", (v) => num(v, 0)], ["costs", "Costs ₹", (v) => v ? `<span class="muted">−${num(v, 0)}</span>` : "—"],
-            ["pnl", "Net P&L ₹", (v) => `<b class="${v > 0 ? "up" : v < 0 ? "down" : ""}">${num(v, 0)}</b>`], ["r", "Net R", (v) => v == null ? "—" : num(v, 2)],
+            ["pnl", "Net P&L", (v) => `<b class="${v > 0 ? "up" : v < 0 ? "down" : ""}">${v > 0 ? "▲ " : v < 0 ? "▼ " : ""}${MX.money(v, { sign: true })}</b>`], ["r", "Net R", (v) => v == null ? "—" : num(v, 2)],
             ["events", "Fills", (v) => (v || []).map((e) => `<div class="small">${esc(e.at)} ${esc(e.what)} @ ${P(e.price)}</div>`).join("")]]);
       }
       $$(".lv-sym", host).forEach((b) => b.addEventListener("click", () => pickStock(b.dataset.s)));

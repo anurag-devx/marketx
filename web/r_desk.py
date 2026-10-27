@@ -284,3 +284,18 @@ def diff(p):
     moved = None if not (ca and cb) else cb / ca - 1
     return dict(symbol=sym, then=dict(at=p.get("at"), built=a.get("built"), as_of=a.get("as_of")), now=dict(built=b.get("built"), as_of=b.get("as_of")),
                 moved=moved, rows=rows, reasons=reasons)
+
+
+@route("GET", "spark")
+def spark(p):
+    """Last n daily closes per stock for the small trend lines in lists (default 20 sessions; at most 600 stocks)."""
+    px = prices()
+    syms = [s for s in str(p.get("symbols") or "").upper().split(",") if SYM.match(s)][:600]
+    try:
+        n = max(5, min(120, int(p.get("n") or 20)))
+    except ValueError:
+        n = 20
+    if px is None or not syms:
+        return dict(items={})
+    g = px[px.symbol.isin(syms)].sort_values("date").groupby("symbol").tail(n)
+    return dict(items={s: [round(float(x), 2) for x in v.close] for s, v in g.groupby("symbol")})
