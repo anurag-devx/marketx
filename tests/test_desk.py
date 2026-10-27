@@ -79,3 +79,20 @@ def test_routes_read_snapshots_and_compare(ddir):
     assert not api.ROUTES[("GET", "desk/marketlab")]({"symbol": "AAA"})["ready"]
     with pytest.raises(Exception):
         api.ROUTES[("POST", "desk/analyse")](None, {"symbols": []})
+
+
+def test_desk_diff_compares_a_saved_analysis_with_the_latest(tmp_path, monkeypatch):
+    import json
+    from desk import notes as N
+    from web import api
+    monkeypatch.setattr(N, "DIR", tmp_path)
+    old = dict(symbol="AAA", as_of="2026-10-20", built="b1", price=dict(close=100.0), market_lab=dict(verdicts=[dict(move="cc", size=1.0, chance=0.4, lean="unclear", confidence="low")]),
+               ta=dict(evidence=dict(dir="down", net=-3)), reasons=dict(pro=[], con=[dict(text="below the 20-day")]))
+    new = dict(old, as_of="2026-10-23", built="b2", price=dict(close=110.0), ta=dict(evidence=dict(dir="up", net=4)), reasons=dict(pro=[dict(text="above the 20-day")], con=[]))
+    (tmp_path / "AAA" / "snaps").mkdir(parents=True)
+    (tmp_path / "AAA" / "snaps" / "2026-10-20_100000.json").write_text(json.dumps(old))
+    (tmp_path / "AAA" / "latest.json").write_text(json.dumps(new))
+    r = api.ROUTES[("GET", "desk/diff")]({"symbol": "AAA", "at": "2026-10-20_100000.json"})
+    rows = {x["label"]: x for x in r["rows"]}
+    assert abs(r["moved"] - 0.1) < 1e-9 and rows["Chart read"]["then"] == "down" and rows["Chart read"]["now"] == "up" and rows["Chart read"]["changed"]
+    assert r["reasons"]["pro_new"] == ["above the 20-day"] and r["reasons"]["con_gone"] == ["below the 20-day"]

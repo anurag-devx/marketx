@@ -1,6 +1,6 @@
 """API: Market Lab (Move Radar, Stock analysis with the influence map, Scorecard, case explainer). Reads data/marketlab/
 built by `python -m marketlab`; the walk-forward Scorecard comes from results/marketlab/score.json (`python -m marketlab test`)."""
-import json
+import json, re
 import numpy as np, pandas as pd
 from core import config as C
 from web.api import route, UserError
@@ -85,18 +85,56 @@ def _verdict(r, m, s, skill):
     return dict(chance=ch, usual=us, lift=ch - us, up_share=up, n_big=nb, lean=lean, lean_raw=raw, direction_tested=dir_ok, confidence=conf, dist_pct=float(r.dist_pct))
 
 
+NAMES = ("radar", "drivers", "cases", "spread")
+
+
+def _view_day(p):
+    d = str(p.get("day") or "")
+    if d and not re.fullmatch(r"\d{4}-\d{2}-\d{2}", d):
+        raise UserError("day must be YYYY-MM-DD")
+    return d or None
+
+
+def frames(day=None):
+    """(day, {radar, drivers, cases, spread}) for the latest radar, or for a past night as it was kept then (the radar
+    folder, else the Review ledger). Past nights are read-only views; nothing is recomputed."""
+    from marketlab import radar as R, tally as T, review as RV
+    latest = R.latest_day()
+    if not day or day == latest:
+        return latest, {n: R.read(n) for n in NAMES}
+    if (R.DIR / "radar" / f"{day}.parquet").exists():
+        return day, {n: R.read(n, day) for n in NAMES}
+    k = T.pick_kind(day)
+    if not k:
+        raise UserError(f"Nothing kept for {day}.")
+    dd = RV._dir(k, day)
+    return day, {n: (pd.read_parquet(dd / f"{n}.parquet") if (dd / f"{n}.parquet").exists() else R.read(n, day)) for n in NAMES}
+
+
+@route("GET", "marketlab/days")
+def ml_days(_):
+    """Every night with a saved radar (newest first): the radar folder and the Review ledger (live and replayed)."""
+    from marketlab import radar as R, tally as T
+    ds = {p.stem: "radar" for p in (R.DIR / "radar").glob("*.parquet")} if (R.DIR / "radar").exists() else {}
+    for x in T.days():
+        ds.setdefault(x["day"], x["kind"])
+    return dict(latest=R.latest_day(), items=[dict(day=d, kind=k) for d, k in sorted(ds.items(), reverse=True)])
+
+
 @route("GET", "marketlab/radar")
 def radar(p):
     from marketlab import radar as R
     when = p.get("when", "close")
     m, s = _args(p)
-    day = R.latest_day()
+    vd = _view_day(p)
+    day = R.latest_day() if not vd else vd
     base = dict(day=day, when=when, move=m, size=s, whens=WHEN, moves=MOVE_LABEL)
     if when != "close":
         return dict(base, ready=False, why=f"{WHEN.get(when, when)} isn't ready yet: it {NOT_READY.get(when, 'is not built')}.")
     if not day:
         return dict(base, ready=False, why="No radar yet. Run Fetch + run all (it builds the radar at the end), or Build tonight's radar below.")
-    rd, dv = R.read("radar"), R.read("drivers")
+    day, F = frames(vd)
+    rd, dv = F["radar"], F["drivers"]
     skill, gs = _skill(m, s)
     dv = dv[(dv.move == m) & (dv["size"] == s)]
     rows = []
@@ -113,7 +151,7 @@ def radar(p):
     dp = float(rd.day_pct.median()) if "day_pct" in rd else None
     day_note = ("Unusual market day: few past days had market / macro moves like these, so the matches lean on each stock's own situation."
                 if dp is not None and dp >= 0.9 else None)
-    return dict(base, ready=True, rows=rows, status=status, skill=skill, day_pct=dp, day_note=day_note, sectors=sorted(set(rd.sector.dropna()) - {""}))
+    return dict(base, ready=True, day=day, past=bool(vd) and vd != R.latest_day(), rows=rows, status=status, skill=skill, day_pct=dp, day_note=day_note, sectors=sorted(set(rd.sector.dropna()) - {""}))
 
 
 def _evidence(sym, day):
@@ -149,14 +187,15 @@ def stock(p):
     from marketlab import radar as R
     m, s = _args(p)
     sym = str(p.get("symbol", "")).upper().strip()
-    day = R.latest_day()
-    if not day:
+    vd = _view_day(p)
+    if not R.latest_day():
         raise UserError("No radar yet: build tonight's radar first.")
-    rd = R.read("radar")
+    day, F = frames(vd)
+    rd = F["radar"]
     if rd[rd.symbol == sym].empty:
-        raise UserError(f"{sym} isn't in tonight's radar (not in the Nifty 500, or no price on {day}).")
-    out = stock_view(dict(radar=rd, drivers=R.read("drivers"), cases=R.read("cases"), spread=R.read("spread")), sym, m, s)
-    return dict(out, day=day, evidence=_evidence(sym, day))
+        raise UserError(f"{sym} isn't in the radar of {day} (not in the Nifty 500, or no price that day).")
+    out = stock_view(F, sym, m, s)
+    return dict(out, day=day, past=bool(vd) and vd != R.latest_day(), evidence=_evidence(sym, day))
 
 
 def stock_view(F, sym, m, s):

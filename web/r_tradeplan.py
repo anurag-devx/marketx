@@ -4,6 +4,27 @@ from web.api import route, UserError, prices
 from core import jobs
 
 
+def _saved(p):
+    """Tonight's saved plans, or a past night's (data/tradeplan/<day>.json, else the copy kept in the Review ledger)."""
+    import json, re
+    from tradeplan import plan as TP
+    d = str(p.get("day") or "")
+    if not d:
+        return TP.load()
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", d):
+        raise UserError("day must be YYYY-MM-DD")
+    s = TP.load(d)
+    if s:
+        return s
+    from marketlab import tally as T, review as RV
+    k = T.pick_kind(d)
+    f = RV._dir(k, d) / "plans.json" if k else None
+    try:
+        return json.loads(f.read_text()) if f and f.exists() else None
+    except ValueError:
+        return None
+
+
 @route("GET", "tradeplan")
 def tradeplan(p):
     from tradeplan import plan as TP, patterns as PT
@@ -11,7 +32,7 @@ def tradeplan(p):
     mode = p.get("mode", "intraday")
     if mode not in TP.MODES:
         raise UserError("mode must be intraday or swing")
-    saved = TP.load()
+    saved = _saved(p)
     ta = PT.talib_status()
     base = dict(symbol=sym, mode=mode, talib=ta, version=TP.VERSION)
     if not saved or sym not in saved.get("plans", {}):
@@ -122,7 +143,7 @@ def summary(p):
     """One row per stock for the Move Radar: tradeable?, reward:risk, entries/exits, first flag."""
     from tradeplan import plan as TP
     mode = p.get("mode", "intraday")
-    saved = TP.load() or {}
+    saved = _saved(p) or {}
     out = {}
     for sym, e in (saved.get("plans") or {}).items():
         x = e.get(mode) or {}

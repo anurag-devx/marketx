@@ -81,3 +81,26 @@ def test_assistant_withholds_model_numbers_not_in_the_facts(monkeypatch):
     assert w == "template" and "count: 11" in text
     monkeypatch.setattr(llm, "chat", lambda *a, **k: "11 of the 20 picks matched.")
     assert A.write("q", "Matched", dict(count=11, graded=20)) == ("11 of the 20 picks matched.", "model")
+
+
+def test_compare_and_stock_history_routes(tmp_path, monkeypatch):
+    from web import api
+    from marketlab import assistant as A
+    _ledger(tmp_path, monkeypatch)
+    A._cache.clear()
+    c = api.ROUTES[("GET", "tally/compare")]({})
+    d = c["days"][0]
+    assert c["available"] == ["2026-10-22"] and (d["picks_hit"], d["plans_entered"], d["plans_r"], d["paper_rs"]) == (1, 1, 1.5, 3000)
+    s = api.ROUTES[("GET", "tally/stock")]({"symbol": "AAA"})
+    assert s["summary"]["hit"] == 1 and s["rows"][0]["r"] == 1.5 and s["rows"][0]["for_day"] == "2026-10-23"
+    assert api.ROUTES[("GET", "tally/stock")]({"symbol": "ZZZ"})["rows"] == []
+
+
+def test_past_night_plans_come_from_the_ledger(tmp_path, monkeypatch):
+    from web import r_tradeplan as RT
+    from tradeplan import plan as TP
+    _ledger(tmp_path, monkeypatch)
+    monkeypatch.setattr(TP, "DIR", tmp_path / "tradeplan")
+    s = RT._saved({"day": "2026-10-22"})
+    assert s["day"] == "2026-10-22" and "AAA" in s["plans"]
+    assert RT._saved({"day": "2026-01-01"}) is None

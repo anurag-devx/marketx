@@ -516,3 +516,5 @@ body[data-role="tester"] #runall, body[data-role="tester"] [data-stop], body[dat
 body[data-role="tester"] #lvgo, body[data-role="tester"] .lv-rep, body[data-role="tester"] #b-agents, body[data-role="tester"] #b-agents2,
 body[data-role="tester"] #mlb, body[data-role="tester"] #mlt1, body[data-role="tester"] #rvgo,
 body[data-role="tester"] #nav a[href="#/settings"], body[data-role="tester"] #nav a[href="#/lab"] { display: none !important; }
+.ty-days { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 6px; }
+.ty-day { font-size: 12.5px; white-space: nowrap; }

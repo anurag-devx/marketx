@@ -106,10 +106,10 @@
   }
 
   /* ---------- compact view: Stock tab and Market Lab ---------- */
-  async function planView(host, symbol) {
+  async function planView(host, symbol, viewDay) {           // viewDay: a past night's saved plan (read-only: no paper take)
     const load = async () => {
       host.innerHTML = MX.spinner("Loading …");
-      const d = await api(`tradeplan?${MX.qs({ symbol, mode })}`);
+      const d = await api(`tradeplan?${MX.qs({ symbol, mode, day: viewDay || undefined })}`);
       if (!d.ready) { host.innerHTML = note(esc(d.why), "warn"); return; }
       host.innerHTML = `<div class="row" style="justify-content:space-between;margin-bottom:8px">${modeSeg("tpm")}
           <span class="row" style="gap:6px"><button class="btn small" id="tppt">Paper take</button><a class="btn primary" href="#/ta/${encodeURIComponent(symbol)}">Open TA workspace →</a></span></div>
@@ -118,7 +118,7 @@
             <div style="min-width:220px"><div class="mllab">Fundamentals</div>${ar((d.fund && d.fund.label || {}).dir)}</div>
             <div style="min-width:220px"><div class="mllab">Candles (5 sessions)</div>${d.patterns.length ? d.patterns.slice(0, 3).map((p) => `<div class="small">${p.direction === "bullish" ? "▲" : p.direction === "bearish" ? "▼" : "•"} ${esc(p.label)} ${p.strength && p.strength !== "neutral" ? `<span class="tag">${esc(p.strength)}</span>` : ""}</div>`).join("") : `<span class="muted small">none</span>`}</div></div></div>`;
       $("#tpm", host).addEventListener("click", (e) => { const x = e.target.closest("button"); if (!x) return; setMode(x.dataset.v); load(); });
-      paperButton(host, symbol, d);
+      if (viewDay) { const pb = $("#tppt", host); if (pb) pb.remove(); } else paperButton(host, symbol, d);
     };
     await load();
   }

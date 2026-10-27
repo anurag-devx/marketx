@@ -89,7 +89,7 @@
   const TABS = [["overview", "Overview"], ["ml", "Market Lab"], ["ta", "Technical"], ["beh", "Behaviour"], ["fund", "Fundamentals"], ["own", "Ownership & F&O"], ["peers", "Peers & sector"], ["news", "News & filings"]];
   async function stockPage(el, sym) {
     document.title = `${sym} · Stock Desk`;
-    let tab = (() => { try { return sessionStorage.getItem("mx-dk-tab") || "overview"; } catch (e) { return "overview"; } })(), at = null, snap = null, notes = null;
+    let tab = (() => { try { return sessionStorage.getItem("mx-dk-tab") || "overview"; } catch (e) { return "overview"; } })(), at = null, snap = null, notes = null, autoRun = false;
     el.innerHTML = `<div class="dk-wrap"><div class="dk-main"><div id="dkh"></div><div class="tabs" id="dkt">${TABS.map(([k, l]) => `<button data-t="${k}" class="${k === tab ? "on" : ""}">${l}</button>`).join("")}</div><div id="dkb"></div></div>
       <div class="dk-side" id="dkside"></div></div>`;
     notes = notesPanel($("#dkside", el), sym, () => snap);
@@ -101,13 +101,26 @@
         <div><div class="muted small"><a href="#/desk">Stock Desk</a> · ${esc(s ? s.sector : "")}</div><h1 style="margin:2px 0">${esc(sym)} <span class="muted" style="font-size:16px">${esc(s ? s.name : "")}</span></h1>
           ${p ? `<div><b style="font-size:20px">${inr(p.close)}</b> ${S(p.change, 2)} <span class="muted small">· 1m ${S(p.r1m)} · 3m ${S(p.r3m)} · 1y ${S(p.r1y)} · 52w ${inr(p.lo52)}–${inr(p.hi52)}</span></div>` : ""}</div>
         <div class="row" style="gap:6px;flex-wrap:wrap"><select class="in" id="dksnap" title="saved snapshots">${(d.snapshots || []).map((x) => `<option value="${esc(x)}" ${x === at ? "selected" : ""}>${esc(x.replace(".json", "").replace("_", " · "))}</option>`).join("") || "<option>no snapshot</option>"}</select>
+          ${(d.snapshots || []).length > 1 ? `<button class="btn" id="dkdiff" title="this saved analysis next to the latest one">Compare with latest</button>` : ""}
           <label class="small muted">as of <input class="in" type="date" id="dkasof"></label><button class="btn primary" id="dkan">${s ? "Refresh" : "Analyse"}</button>
           <button class="btn" id="dkbr">AI brief</button><input class="in" id="dkcmpq" placeholder="Compare with…" style="width:150px"></div></div>
         ${s ? `<div class="muted small">as of ${esc(s.as_of)} · built ${esc(s.built)} · ${esc(s.took_s)} s</div>` : ""}<div id="dkbrief"></div>`;
       $("#dksnap", el).addEventListener("change", (e) => { at = e.target.value; load(); });
-      $("#dkan", el).addEventListener("click", async () => { try { const before = s ? s.built : null; await MX.post("desk/analyse", { symbols: [sym], as_of: $("#dkasof", el).value || undefined }, "Analysing …");
-        MX.refreshStatus(true); let n = 0; const poll = setInterval(async () => { n++; const r = await api(`desk/snapshot?${qs({ symbol: sym })}`).catch(() => null);
-          if (r && r.ready && r.snap.built !== before) { clearInterval(poll); at = null; load(); MX.toast("Analysis ready"); } if (n > 60) clearInterval(poll); }, 5000); } catch (e) { /* toast */ } });
+      $("#dkdiff", el)?.addEventListener("click", async () => {
+        const box = $("#dkbrief", el), pick = at || ((d.snapshots || [])[1]);
+        if (!pick) return MX.toast("Only one saved analysis so far", true);
+        box.innerHTML = spinner("Comparing …");
+        let r; try { r = await api(`desk/diff?${qs({ symbol: sym, at: pick })}`); } catch (e) { box.innerHTML = note(esc(e.message), "warn"); return; }
+        const fmtv = (k, v) => v == null ? "—" : k === "pct" ? P(v) : k === "dir" ? ar(v) : k === "num" ? num(v, 2) : esc(v);
+        const list = (xs, cls) => xs.length ? `<ul class="small">${xs.map((x) => `<li class="${cls}">${esc(x)}</li>`).join("")}</ul>` : `<span class="muted small">none</span>`;
+        box.innerHTML = `<div class="card section"><div class="ct"><h2>Saved ${esc(String(pick).replace(".json", "").replace("_", " · "))} vs latest</h2><span class="aside small">price since: ${S(r.moved, 2)} <button class="btn small" id="dkdiffx">Close</button></span></div>
+          <div class="muted small">then: as of ${esc(r.then.as_of)} (built ${esc(r.then.built)}) · now: as of ${esc(r.now.as_of)} (built ${esc(r.now.built)})</div>
+          ${table(r.rows, [["label", ""], ["then", "Then", (v, x) => fmtv(x.kind, v)], ["now", "Now", (v, x) => fmtv(x.kind, v)], ["changed", "", (v) => v ? `<span class="tag warn">changed</span>` : ""]])}
+          <div class="grid g2 section"><div><div class="mllab">For: new</div>${list(r.reasons.pro_new, "up")}<div class="mllab">For: gone</div>${list(r.reasons.pro_gone, "muted")}</div>
+            <div><div class="mllab">Against: new</div>${list(r.reasons.con_new, "down")}<div class="mllab">Against: gone</div>${list(r.reasons.con_gone, "muted")}</div></div></div>`;
+        $("#dkdiffx", el).addEventListener("click", () => { box.innerHTML = ""; });
+      });
+      $("#dkan", el).addEventListener("click", () => analyse(s ? s.built : null, $("#dkasof", el).value || undefined));
       $("#dkbr", el).addEventListener("click", async () => { const box = $("#dkbrief", el); box.innerHTML = spinner("Writing the brief from the computed facts …");
         try { const r = await MX.post("desk/brief", { symbol: sym }); const out = await MX.pollTask(r.task, () => {});
           box.innerHTML = `<div class="card section"><div class="ct"><h2>Brief</h2><span class="aside muted small">${out.writer === "model" ? "local model, numbers checked" : "facts-only summary"} ${pinBtn("Brief: " + out.text.slice(0, 300))}</span></div><div class="small" style="white-space:pre-line">${esc(out.text)}</div></div>`; wirePins(box); }
@@ -116,9 +129,45 @@
       MX.suggest($("#dkcmpq", el), { kinds: "stocks", recent: "stock", onPick: (r) => { cmp(r.value); $("#dkcmpq", el).value = ""; } });
       $("#dkcmpq", el).addEventListener("keydown", (e) => { if (e.key === "Enter" && e.target.value.trim()) { cmp(e.target.value); e.target.value = ""; } });
     };
+    // Analyse (button, or by itself the first time a stock without an analysis is opened): job + wait for the new snapshot
+    const analyse = async (before, asOf, quiet) => {
+      try { await MX.post("desk/analyse", { symbols: [sym], as_of: asOf }, quiet ? undefined : "Analysing …"); }
+      catch (e) { const q = $("#dkqs", el); if (q) q.innerHTML = note(`Couldn't start the analysis: ${esc(e.message)}. Try <b>Analyse</b> in a minute.`, "warn"); return; }
+      MX.refreshStatus(true); let n = 0;
+      const poll = setInterval(async () => { n++; if (!el.isConnected) return clearInterval(poll);
+        const r = await api(`desk/snapshot?${qs({ symbol: sym })}`).catch(() => null);
+        if (r && r.ready && r.snap.built !== before) { clearInterval(poll); at = null; load(); MX.toast("Analysis ready"); }
+        if (n > 60) { clearInterval(poll); const q = $("#dkqs", el); if (q) q.innerHTML = note("The analysis is taking long: check the job in the bar at the top.", "warn"); } }, 5000);
+    };
+    const quickView = async (b) => {
+      b.innerHTML = `<div id="dkqs">${note("No full analysis for this stock yet: <b>analysing now</b> (8–30 s; peers, behaviour, ownership, F&amp;O, news). Meanwhile, what MarketX already saved:", "info")}</div><div id="dkqv">${spinner("Loading …")}</div>`;
+      if (!autoRun && !at) { autoRun = true; analyse(null, undefined, true); }
+      let q; try { q = await api(`desk/quick?${qs({ symbol: sym })}`); } catch (e) { $("#dkqv", el).innerHTML = note(esc(e.message), "warn"); return; }
+      if (!el.isConnected || snap) return;
+      const F = (v) => v ? day(v) : "—", LEAN = (l) => ar(l), legs = (pl) => { if (!pl || !pl.legs.length) return `<span class="muted">—</span>`;
+        const sd = (side) => { const g = (k) => pl.legs.find((x) => x.leg === k && x.side === side); const e = g("E1"); return e ? `<div class="small"><b class="${side === "long" ? "up" : "down"}">${side === "long" ? "▲ Long" : "▼ Short"}</b> E1 ${inr(e.price)} · SL ${inr(g("SL")?.price)} · T1 ${inr(g("T1")?.price)} · T2 ${inr(g("T2")?.price)}</div>` : ""; };
+        return `<div class="small">lean ${LEAN(pl.lean)}</div>${sd("long")}${sd("short")}`; };
+      const why = (o) => (o && o.why || []).slice(0, 6).map((w) => `<li>${esc(w)}</li>`).join("");
+      const ml = q.market_lab, pl = q.plan, t = q.tally, p = q.price;
+      $("#dkqv", el).innerHTML = `
+        ${p ? `<div class="card section"><b style="font-size:20px">${inr(p.close)}</b> ${S(p.change, 2)} <span class="muted small">· ${F(p.date)} · 1m ${S(p.r1m)} · 3m ${S(p.r3m)} · 1y ${S(p.r1y)}</span></div>` : ""}
+        <div class="grid g2 section">
+          <div class="card"><div class="ct"><h2>Market Lab</h2><span class="aside muted small">${ml ? `radar of ${F(ml.day)}` : ""}</span></div>
+            ${ml && ml.rows.length ? table(ml.rows, [["move", "Move", (v) => (MOVES.find((m) => m[0] === v) || [])[1] || v], ["chance", "Chance ≥1%", (v) => P(v)], ["usual", "Usual", (v) => P(v)], ["lean", "Lean", (v) => LEAN(v)]]) : `<p class="muted">Not on the latest radar.</p>`}</div>
+          <div class="card"><div class="ct"><h2>Last graded result</h2><span class="aside muted small">${t ? `projected ${F(t.day)} → ${F(t.for_day)}` : ""}</span></div>
+            ${t ? `<p>Said ${t.chance != null ? `<b>${P(t.chance)}</b> (usual ${P(t.usual)})` : "—"} · lean ${LEAN(t.lean)}${t.pick ? ` · <span class="tag">pick</span>` : ""}</p>
+              <p>Happened ${S(t.ret, 2)} · ≥1%: ${t.hit == null ? "—" : t.hit ? `<span class="up">✓</span>` : `<span class="down">✗</span>`} · plan ${t.status === "no data" ? `<span class="muted">not graded yet</span>` : esc(t.status || "—")}${t.r != null ? ` · <b>${num(t.r, 2)} R</b>` : ""}</p>
+              <p class="small"><a href="#/tally/${encodeURIComponent(t.day)}" target="_blank" rel="noopener">Open that day in Tally ↗</a></p>` : `<p class="muted">Not graded yet.</p>`}</div>
+          <div class="card"><div class="ct"><h2>Technical ${pl && pl.ta ? `· ${LEAN(pl.ta.dir)} <span class="muted small">score ${pl.ta.score ?? "—"}</span>` : ""}</h2></div>
+            ${pl && pl.ta ? `<ul class="small">${why(pl.ta)}</ul>${(pl.patterns || []).map((x) => `<div class="muted small">candle: ${esc(x.label || x.pattern || "")} ${esc(x.direction || "")}</div>`).join("")}` : `<p class="muted">No technical read saved.</p>`}</div>
+          <div class="card"><div class="ct"><h2>Plan ${pl ? `<span class="muted small">for the session after ${F(pl.day)}</span>` : ""}</h2></div>
+            ${pl ? `<div class="mllab">Intraday</div>${legs(pl.intraday)}<div class="mllab" style="margin-top:8px">Swing</div>${legs(pl.swing)}
+              <div class="mllab" style="margin-top:8px">Fundamentals · ${LEAN(pl.fund && pl.fund.dir)}</div><ul class="small">${why(pl.fund)}</ul>` : `<p class="muted">No plan saved.</p>`}</div>
+        </div>`;
+    };
     const body = async () => {
       const b = $("#dkb", el);
-      if (!snap) { b.innerHTML = note("Not analysed yet: click <b>Analyse</b> (about 30–60 s). It runs Market Lab, technical, behaviour, fundamentals, ownership, peers and news for this stock.", "info"); return; }
+      if (!snap) return quickView(b);
       try { await (RENDER[tab] || RENDER.overview)(b, snap, sym, { pinBtn, wirePins, at }); } catch (e) { b.innerHTML = note(esc(e.message), "warn"); console.error(e); }
     };
     const load = async () => { const d = await api(`desk/snapshot?${qs({ symbol: sym, at })}`); snap = d.ready ? d.snap : null; header(d); await body(); };

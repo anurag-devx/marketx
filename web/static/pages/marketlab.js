@@ -62,8 +62,8 @@
 
   async function radarTab(b, go) {
     b.innerHTML = spinner("Loading tonight's radar …");
-    const d = await api(`marketlab/radar?${qs({ when: st.when, move: st.move, size: st.size })}`);
-    const tp = await api(`tradeplan/summary?${qs({ mode: st.move === "oc" ? "intraday" : "swing" })}`).catch(() => ({ rows: {} }));
+    const d = await api(`marketlab/radar?${qs({ when: st.when, move: st.move, size: st.size, day: st.vday || undefined })}`);
+    const tp = await api(`tradeplan/summary?${qs({ mode: st.move === "oc" ? "intraday" : "swing", day: st.vday || undefined })}`).catch(() => ({ rows: {} }));
     b.innerHTML = selectors(d) + `<div id="mlr" class="section"></div>`;
     $$(".seg[data-k]", b).forEach((sg) => sg.addEventListener("click", (e) => { const x = e.target.closest("button"); if (!x) return; st[sg.dataset.k] = x.dataset.v; save(); radarTab(b, go); }));
     $("#mlsec", b)?.addEventListener("change", (e) => { st.sector = e.target.value; save(); radarTab(b, go); });
@@ -93,7 +93,7 @@
       MX.suggest($("#mls", b), { kinds: "stocks", recent: "stock", onPick: (r) => { st.sym = r.value; save(); stockTab(b); } }); return; }
     b.innerHTML = spinner(`Loading ${st.sym} …`);
     let d;
-    try { d = await api(`marketlab/stock?${qs({ symbol: st.sym, move: st.move, size: st.size })}`); }
+    try { d = await api(`marketlab/stock?${qs({ symbol: st.sym, move: st.move, size: st.size, day: st.vday || undefined })}`); }
     catch (e) { b.innerHTML = note(esc(e.message), "warn"); return; }
     const v = d.verdict;
     b.innerHTML = `<div class="row" style="justify-content:space-between"><div><h2 style="margin:0">${esc(d.symbol)} <a class="small" href="#/stock/${encodeURIComponent(d.symbol)}">stock page →</a> <a class="small" href="#/desk/${encodeURIComponent(d.symbol)}" target="_blank" rel="noopener">Stock Desk ↗</a></h2>
@@ -111,7 +111,7 @@
       <details class="fold section"><summary>Outcome range of the 150 closest cases</summary><div id="mlo" style="padding:0 14px 14px"></div></details>
       <details class="fold section"><summary>Today's evidence: ${d.evidence.news.length} headlines, ${d.evidence.filings.length} filings</summary><div id="mle" style="padding:0 14px 14px"></div></details>`;
     drawMap($("#mlmap", b), d, (x) => ($("#mlpanel", b).innerHTML = nodePanel(x, d)));
-    MX.planView($("#mltpb", b), d.symbol);
+    MX.planView($("#mltpb", b), d.symbol, d.past ? d.day : undefined);
     $("#mlgo", b).addEventListener("click", () => { const s = $("#mls", b).value.trim().toUpperCase(); if (s) { st.sym = s; save(); stockTab(b); } });
     MX.suggest($("#mls", b), { kinds: "stocks", recent: "stock", onPick: (r) => { st.sym = r.value; save(); stockTab(b); } });
     $("#mlc", b).appendChild(dataTable(d.cases, [["rank", "#", "int"], ["symbol", "Stock", "symonly"], ["date", "Date", "date"], ["move", `Next ${d.move_label} %`, "snum2"],
@@ -234,6 +234,17 @@
       el.innerHTML = head("Market Lab", "Which stocks are likely to move at least 1% next session, which way, and what's driving it. Built from the closest past situations; numbers never come from the AI.") +
         `<div class="tabs" id="mltabs">${[["radar", "Move Radar"], ["stock", "Stock analysis"], ["review", "Review"], ["score", "Scorecard"], ["debate", "Debate (classic)"]].map(([k, l]) => `<button data-t="${k}" class="${st.tab === k ? "on" : ""}">${l}</button>`).join("")}</div><div id="mlb2"></div>`;
       $("#mltabs", el).insertAdjacentHTML("beforebegin", `<div id="mlasof" class="ml-asof"></div>`);
+      const drawPast = async () => { const x = $("#mlpast", el); if (!x) return;
+        let ds; try { ds = await api("marketlab/days"); } catch (e) { return; }
+        if (st.vday && !ds.items.some((i) => i.day === st.vday)) { st.vday = null; save(); }
+        const f = (v) => day(v, { weekday: "short", day: "numeric", month: "short" });
+        x.innerHTML = `<label class="small muted">View night <select class="in" id="mlvday"><option value="">Latest (${f(ds.latest)})</option>${ds.items.filter((i) => i.day !== ds.latest)
+          .map((i) => `<option value="${i.day}" ${st.vday === i.day ? "selected" : ""}>${f(i.day)}${i.kind === "replay" ? " · replayed" : ""}</option>`).join("")}</select></label>` +
+          (st.vday ? ` <span class="tag warn">Viewing the radar and plans saved on ${f(st.vday)} (read-only)</span> <button class="btn small" id="mlvback">Back to latest</button>` : "");
+        $("#mlvday", el).addEventListener("change", (e) => { st.vday = e.target.value || null; save(); drawPast(); if (st.tab === "radar" || st.tab === "stock") show(); });
+        $("#mlvback", el)?.addEventListener("click", () => { st.vday = null; save(); drawPast(); show(); }); };
+      $("#mlasof", el).insertAdjacentHTML("afterend", `<div id="mlpast" class="ml-asof"></div>`);
+      drawPast();
       api("marketlab/asof").then((a) => { const x = $("#mlasof", el); if (!x) return;
         const f = (v) => v ? day(v, { weekday: "short", day: "numeric", month: "short", year: "numeric" }) : "—";
         x.innerHTML = !a.day ? `<span class="tag warn">No radar built yet</span>` : `<span class="ml-asof-k">Radar built from</span> <b>${f(a.day)}</b> close <span class="muted">→</span> <span class="ml-asof-k">for</span> <b>${f(a.for_day)}</b> <span class="muted small">(next weekday; holidays not counted)</span>` +
