@@ -367,7 +367,8 @@ def _market_today():
         i = idx.dropna(subset=["nifty"])
         nifty = dict(value=i.nifty.iat[-1], chg=100 * (i.nifty.iat[-1] / i.nifty.iat[-2] - 1),
                      spark=i.nifty.tail(60).round(1).tolist(), vix=i.vix.dropna().iat[-1] if "vix" in i and i.vix.notna().any() else None)
-    return dict(summary=s, nifty=nifty, gainers=d.nlargest(6, "r1")[cols], losers=d.nsmallest(6, "r1")[cols],
+    last = prices().date.max()
+    return dict(date=last, summary=s, nifty=nifty, gainers=d.nlargest(6, "r1")[cols], losers=d.nsmallest(6, "r1")[cols],
                 sectors_top=sec.head(4), sectors_bottom=sec.tail(4).iloc[::-1],
                 unusual=d[d.vol_ratio >= 3].nlargest(6, "vol_ratio")[cols])
 

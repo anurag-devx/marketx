@@ -33,15 +33,17 @@
     async render(el) {
       const o = await api("overview");
       const r = o.regime, m = o.market, s = m && m.summary, nifty = m && m.nifty;
-      el.innerHTML = head("Overview", r ? `Market as of ${day(r.date, { weekday: "short", day: "numeric", month: "short", year: "numeric" })}` : "The agents haven't completed a run yet",
-        `<button class="btn" id="b-agents">Run all agents</button>`) +
+      const F = (v) => day(v, { weekday: "short", day: "numeric", month: "short", year: "numeric" });
+      const mDate = m && m.date ? m.date : r && r.date, behind = r && m && m.date && String(r.date).slice(0, 10) < String(m.date).slice(0, 10);
+      el.innerHTML = head("Overview", mDate ? `Market as of ${F(mDate)}` : "No prices yet", `<button class="btn" id="b-agents">Run all agents</button>`) +
+        (behind ? `<div class="section">${note(`Prices are up to ${F(m.date)}. The agents last ran on ${F(r.date)}: market state, trades, exits and the shortlist are from that run. <a href="#" id="b-agents2">Run all agents</a> to bring them up to date.`, "info")}</div>` : "") +
         (o.pending ? `<div class="section">${note(`${o.pending} proposal(s) wait for your approval — <a href="#/settings">Settings → Approvals</a>.`)}</div>` : "") +
         (r && r.note ? note(esc(r.note), "warn") : "") +
         `<div class="grid g4 section">
           ${kpi("Nifty 50", nifty ? num(nifty.value, 0) : "—", nifty ? `<span class="${cls(nifty.chg)}">${pct(nifty.chg, 2)}</span> today` : "", nifty ? MXCharts.sparkline(nifty.spark, { h: 34 }) : "")}
-          ${kpi("Market state", r ? esc(r.state) : "—", r ? `${r.days} days · size ×${r.size}` : "")}
+          ${kpi("Market state", r ? esc(r.state) : "—", r ? `${r.days} days · size ×${r.size}${behind ? ` · <span class="muted">as of ${day(r.date, { day: "numeric", month: "short" })}</span>` : ""}` : "")}
           ${kpi("Breadth", s ? `${num(s.above200, 0)}%` : "—", s ? `above 200-day · <span class="up">${s.up} up</span> / <span class="down">${s.down} down</span>` : "")}
-          ${kpi("India VIX", r && r.vix != null ? num(r.vix, 1) : nifty && nifty.vix ? num(nifty.vix, 1) : "—", r && r.vix_median ? `1-year median ${num(r.vix_median, 1)}` : "")}
+          ${kpi("India VIX", nifty && nifty.vix ? num(nifty.vix, 1) : r && r.vix != null ? num(r.vix, 1) : "—", r && r.vix_median ? `1-year median ${num(r.vix_median, 1)}` : "")}
         </div>
         <div class="section"><div class="sh"><h3>Agents</h3><a class="more" href="#/agents">Details</a></div>
           <div class="tiles">${o.agents.map((a) => `<div class="tile ${a.state === "run" ? "run" : ""}" title="${esc(a.note || a.sub || "")}"><div class="n"><span class="dot ${a.state}"></span>${esc(a.name)}</div><div class="s">${esc(a.sub)}</div></div>`).join("")}</div></div>
@@ -65,6 +67,7 @@
         ${o.backdrop.length ? `<div class="section"><div class="sh"><h3>Backdrop</h3><a class="more" href="#/market-news/macro">Macro</a></div><div class="grid g6">${o.backdrop.map((b) =>
           kpi(esc(b.label), b.change_kind === "total" ? `${inr(b.value, 0)} cr` : num(b.value, 2), b.change_kind === "total" ? (b.chg_5d != null ? `5 days ${inr(b.chg_5d, 0)} cr` : "") : (b.chg_20d != null ? `${b.chg_20d > 0 ? "+" : ""}${num(b.chg_20d, 2)}${b.change_kind === "points" ? " pts" : "%"} in a month` : ""))).join("")}</div></div>` : ""}`;
       $("#b-agents", el)?.addEventListener("click", () => startJob("pipeline"));
+      $("#b-agents2", el)?.addEventListener("click", (e) => { e.preventDefault(); startJob("pipeline"); });
     },
   });
 
