@@ -517,9 +517,11 @@
       try { localStorage.setItem("mx-side-min", v ? "1" : "0"); } catch (e) { /* ignore */ } setTimeout(() => window.dispatchEvent(new Event("resize")), 220); };
     set(get());
     pin.addEventListener("click", (e) => { e.preventDefault(); set(!document.body.classList.contains("side-min")); });
-    side.addEventListener("click", (e) => { if (document.body.classList.contains("side-min") && !side.classList.contains("peek") && e.target === side) side.classList.add("peek"); });
-    side.addEventListener("mouseenter", () => { if (document.body.classList.contains("side-min")) side.classList.add("peek"); });
-    side.addEventListener("mouseleave", () => side.classList.remove("peek"));
+    // no hover (the browser's own edge gestures get in the way): click the edge strip to open, click outside or pick a page to close
+    side.addEventListener("click", (e) => { if (!document.body.classList.contains("side-min")) return;
+      if (!side.classList.contains("peek")) { if (e.target === side) side.classList.add("peek"); return; }
+      if (e.target.closest("#nav a")) side.classList.remove("peek"); });
+    document.addEventListener("click", (e) => { if (side.classList.contains("peek") && !side.contains(e.target)) side.classList.remove("peek"); });
     document.addEventListener("keydown", (e) => { if (e.key === "[" && !/INPUT|TEXTAREA|SELECT/.test(e.target.tagName) && !e.target.isContentEditable) set(!document.body.classList.contains("side-min")); });
   })();
 })();
