@@ -38,8 +38,9 @@ def _r(x, d=2):
     return None if x is None or not np.isfinite(x) else round(float(x), d)
 
 
-def evidence(g, patterns=(), lv=None):
-    """g: daily bars (date, open, high, low, close, volume), date-sorted, up to the plan's day. Returns dict."""
+def evidence(g, patterns=(), lv=None, delivery=None):
+    """g: daily bars (date, open, high, low, close, volume), date-sorted, up to the plan's day. Returns dict.
+    delivery: core.bhavcopy.delivery_read() for the same day (optional): shown as D1, information only (never counted)."""
     g = g.reset_index(drop=True)
     c, v = g.close.astype(float), g.volume.astype(float)
     n = len(g)
@@ -113,6 +114,12 @@ def evidence(g, patterns=(), lv=None):
         else:
             add("E12", "Levels", "20-day high / low", f"{(phi - last) / a1:.1f} ATR below the high, {(last - plo) / a1:.1f} ATR above the low" if np.isfinite(a1) else "inside the range",
                 "inside = neutral", 0, f"inside the 20-day range ({_r(plo)}–{_r(phi)})")
+    if delivery and delivery.get("deliv_pct") is not None:
+        dp, avg, dd = delivery["deliv_pct"], delivery.get("avg20"), delivery.get("diff_pts") or 0
+        up_day = n > 1 and last > prev
+        tone = ("high delivery on an up day: buyers took delivery" if up_day and dd >= 10 else "high delivery on a down day: sellers delivered" if dd >= 10
+                else "low delivery: mostly intraday churn" if dd <= -10 else "delivery about normal")
+        add("D1", "Volume", "Delivery % vs 20-day average (NSE)", f"{dp:.0f}% vs {avg:.0f}%", "information only (not tested yet)", 0, tone)
     recent = sorted({p["date"] for p in patterns})[-2:]
     for i, p in enumerate([p for p in patterns if p["date"] in recent], 13):
         vd = 1 if p.get("direction") == "bullish" else -1 if p.get("direction") == "bearish" else 0

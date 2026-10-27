@@ -105,6 +105,68 @@ def run(panel=None, log=print, step=5, ablation_step=20, groups=GROUPS):
     return res
 
 
+OUT_C = C.RESULTS / "marketlab" / "candidates.json"
+MIN_CAND_YEARS = 3      # a candidate must help in most of at least 3 test years before it may enter the forecasts
+
+
+def run_candidates(panel=None, log=print, step=10):
+    """Candidate groups (features.CANDIDATES): for each test year, score the engine without and with the group (every 10th
+    day, all moves at 1%) on the same walk-forward split. A candidate 'helps' when adding it raises the brier skill or the
+    direction hit rate in most years and on average. Rows with no data for a candidate count as average (zero after
+    scaling), so only the years where its data exists can show a difference."""
+    from . import radar
+    from .features import BASE_GROUPS, CANDIDATES
+    d = panel if panel is not None else radar.panel(log)
+    d = d.dropna(subset=["cc"])
+    base_g = dict(BASE_GROUPS)
+    years = sorted(y for y in d.date.dt.year.unique() if y >= FIRST_YEAR)
+    rows, t0 = [], time.time()
+    for y in years:
+        start = pd.Timestamp(f"{y}-01-01")
+        lib = d[d.next_date < start]
+        days = np.sort(d[d.date.dt.year == y].date.unique())
+        if len(lib) < 50000 or not len(days):
+            continue
+        q = d[d.date.isin(days[::step])]
+        L0 = E.Library(lib, base_g, max_rows=LIB_ROWS, seed=int(y))
+        e0 = L0.estimate(q)[0]
+        for g, fs in CANDIDATES.items():
+            cover = float(q[fs].notna().any(axis=1).mean()) if all(f in q for f in fs) else 0.0
+            if cover < 0.05:
+                rows.append(dict(year=int(y), node=g, coverage=cover, skipped=True))
+                continue
+            L1 = E.Library(lib, dict(base_g, **{g: fs}), max_rows=LIB_ROWS, seed=int(y))
+            e1 = L1.estimate(q)[0]
+            for m in MOVES:
+                a, b = metrics(q, e0, m, 1.0), metrics(q, e1, m, 1.0)
+                rows.append(dict(year=int(y), node=g, move=m, coverage=cover, d_brier=b["brier_skill"] - a["brier_skill"],
+                                 d_dir=(b["dir_hit"] or 0) - (a["dir_hit"] or 0), d_lift=b["lift"] - a["lift"]))
+        log(f"  {y}: candidates scored · {int(time.time() - t0)} s")
+    r = pd.DataFrame(rows)
+    summary = []
+    if len(r) and "d_brier" in r:
+        ok = r.dropna(subset=["d_brier"])
+        for (g, m), x in ok.groupby(["node", "move"]):
+            yrs = len(x)
+            helps = bool(yrs >= MIN_CAND_YEARS and (((x.d_brier.mean() > 0) and (x.d_brier > 0).sum() >= np.ceil(0.6 * yrs)) or
+                                                    ((x.d_dir.mean() > 0) and (x.d_dir > 0).sum() >= np.ceil(0.6 * yrs))))
+            summary.append(dict(node=g, move=m, years=yrs, d_brier=float(x.d_brier.mean()), d_dir=float(x.d_dir.mean()), d_lift=float(x.d_lift.mean()),
+                                brier_pos=int((x.d_brier > 0).sum()), dir_pos=int((x.d_dir > 0).sum()), coverage=float(x.coverage.mean()), helps=helps))
+    res = dict(built=str(pd.Timestamp.now().floor("s")), step=step, rows=rows, summary=summary,
+               skipped=sorted({x["node"] for x in rows if x.get("skipped")} - {x["node"] for x in summary}))
+    OUT_C.parent.mkdir(parents=True, exist_ok=True)
+    atomic.write_text(OUT_C, json.dumps(res, default=lambda o: None if isinstance(o, float) and not np.isfinite(o) else (o.item() if hasattr(o, "item") else str(o)), indent=1))
+    log(f"Candidate test done in {int(time.time() - t0)} s: " + ("; ".join(f"{x['node']} {x['move']}: {'helps' if x['helps'] else 'no help'}" for x in summary) or "no candidate had enough data"))
+    return res
+
+
+def load_candidates():
+    try:
+        return json.loads(OUT_C.read_text())
+    except (OSError, ValueError):
+        return None
+
+
 def load():
     try:
         return json.loads(OUT.read_text())

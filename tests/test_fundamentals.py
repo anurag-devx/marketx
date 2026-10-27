@@ -118,6 +118,12 @@ def test_update_end_to_end(tmp_path, monkeypatch):
     assert F.calendar().symbol.tolist() == ["BBB"]
     ok2, _ = F.update(days=40, log=lambda *a: None, fetch=fetch, workers=2)  # nothing new: nothing read again
     assert ok2 == 0 and len(F.results()) == 1
+    fl = pd.read_parquet(F.FILINGS)                                            # an older unread filing listed by a backfill
+    old = fl.iloc[[0]].assign(filing_id="nse:old", xbrl="a/old.xml", period_end=pd.Timestamp("2022-03-31"))
+    pd.concat([fl, old]).to_parquet(F.FILINGS)
+    msgs = []
+    ok3, _ = F.update(days=40, log=msgs.append, fetch=fetch, workers=2)       # the nightly update leaves it to the backfill
+    assert ok3 == 0 and not any("old.xml" in u for u in sess.urls) and any("older ones not read yet" in m for m in msgs)
 
 
 def test_calendar_from_board_meeting_filings():

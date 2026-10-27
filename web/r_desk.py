@@ -231,6 +231,12 @@ def quick(p):
         out["plan"] = dict(day=saved.get("day"), ta=pl.get("ta"), fund=pl.get("fund"), patterns=pl.get("patterns", [])[:4],
                            intraday=dict(lean=(pl.get("intraday") or {}).get("lean"), legs=legs("intraday")),
                            swing=dict(lean=(pl.get("swing") or {}).get("lean"), legs=legs("swing")))
+    try:
+        from core import valuation as V, bhavcopy as BH
+        out["valuation"] = V.latest(sym)
+        out["delivery"] = BH.delivery_read(sym) if BH.DAILY.exists() else None
+    except Exception:
+        pass
     graded = [x["day"] for x in T.days() if x["graded"]]
     if graded:
         b = T.build(graded[0])

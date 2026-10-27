@@ -357,6 +357,47 @@ def score(_):
     return dict(sections=secs)
 
 
+@route("GET", "marketlab/candidates")
+def candidates(_):
+    """Candidate signal groups (delivery, valuation): test results and whether each is used in the forecasts."""
+    from marketlab import evaluate as V
+    from marketlab.features import CANDIDATES, LABEL, active_candidates
+    r = V.load_candidates() or {}
+    act = active_candidates()
+    out = []
+    for g, fs in CANDIDATES.items():
+        rows = [x for x in r.get("summary", []) if x["node"] == g]
+        out.append(dict(node=g, features=[LABEL.get(f, f) for f in fs], active=g in act, tested=bool(rows),
+                        helps=any(x["helps"] and x.get("years", 0) >= V.MIN_CAND_YEARS for x in rows), min_years=V.MIN_CAND_YEARS,
+                        results=rows, skipped=g in (r.get("skipped") or [])))
+    return dict(built=r.get("built"), items=out)
+
+
+@route("POST", "marketlab/candidates")
+def candidates_set(_, body):
+    """Switch a candidate group on / off for the forecasts (owner). Only a group the test showed to help can be switched
+    on. Takes effect at the next radar build; re-run the Scorecard test afterwards."""
+    import json as _json
+    from core import atomic
+    from marketlab.features import CANDIDATES, ACTIVE_FILE, active_candidates
+    from marketlab import evaluate as V
+    b = body or {}
+    g = str(b.get("node") or "")
+    if g not in CANDIDATES:
+        raise UserError("unknown candidate")
+    act = set(active_candidates())
+    if b.get("on"):
+        r = V.load_candidates() or {}
+        if not any(x["node"] == g and x["helps"] and x.get("years", 0) >= V.MIN_CAND_YEARS for x in r.get("summary", [])):
+            raise UserError(f"{g} hasn't been shown to help in at least {V.MIN_CAND_YEARS} test years yet (download more history, then re-run the candidate test)")
+        act.add(g)
+    else:
+        act.discard(g)
+    ACTIVE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    atomic.write_text(ACTIVE_FILE, _json.dumps(sorted(act)))
+    return dict(active=sorted(act), note="Used from the next radar build (restart the app so every page uses it).")
+
+
 @route("GET", "marketlab/asof")
 def asof(_):
     """Which day the radar was built from, the session it is for, and whether newer prices exist (radar out of date)."""

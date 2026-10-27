@@ -164,7 +164,9 @@ JOB_LABEL = {"strategy-research": "Strategy research", "screener-experiments": "
              "announcements": "Fetch news and filings", "fundamentals": "Update quarterly results",
              "fundamentals-backfill": "Download results history", "macro-all": "Fetch macro data + study", "market-report": "Write market report",
              "debate-batch": "Nightly forecasts", "backtest": "Run backtest + analysis", "screener": "Run screener",
-             "shareholding": "Download shareholding patterns", "fo": "Update F&O data", "fo-backfill": "Download F&O history", "kronos-install": "Install Kronos", "kronos-forecast": "Kronos forecasts", "kronos-replay": "Kronos replay", "intraday": "Download 5-minute bars", "intraday-probe": "Check Angel's intraday history", "market-lab": "Market Lab radar", "market-lab-test": "Market Lab Scorecard test", "market-lab-replay": "Market Lab replay (past days)", "pattern-test": "Test candle patterns on history", "desk-analyse": "Stock Desk: analyse", "articles-90d": "Read articles (last 90 days)", "talib-install": "Install TA-Lib (optional)", "search-compact": "Compact the search database", "fundamentals-balance": "Read balance sheets and cash flow"}
+             "shareholding": "Download shareholding patterns", "fo": "Update F&O data", "fo-backfill": "Download F&O history", "kronos-install": "Install Kronos", "kronos-forecast": "Kronos forecasts", "kronos-replay": "Kronos replay", "intraday": "Download 5-minute bars", "intraday-probe": "Check Angel's intraday history", "market-lab": "Market Lab radar", "market-lab-test": "Market Lab Scorecard test", "market-lab-replay": "Market Lab replay (past days)", "pattern-test": "Test candle patterns on history", "desk-analyse": "Stock Desk: analyse", "articles-90d": "Read articles (last 90 days)", "talib-install": "Install TA-Lib (optional)", "search-compact": "Compact the search database", "fundamentals-balance": "Read balance sheets and cash flow",
+             "bhavcopy": "NSE bhavcopy + delivery (last days)", "bhavcopy-backfill": "Download NSE bhavcopy history (since 2021)",
+             "market-lab-candidates": "Market Lab: test candidate signals (delivery, valuation)"}
 STARTABLE = set(jobs.COMMANDS)                # only the fixed commands in core/jobs.py; arguments are dates and flags only
 
 
@@ -554,4 +556,21 @@ def _stock_news(sym, n=40):
 
 
 # route modules register themselves on import
-from web import r_today, r_screener, r_agents, r_research, r_tools, r_setup, r_kronos, r_help, r_marketlab, r_review, r_tradeplan, r_workspace, r_desk, r_live, r_tally  # noqa: E402,F401
+# sign-in routes are answered by web/server.py before ROUTES (they set or read the session cookie); listed here so the
+# pages' API paths all resolve
+@route("GET", "auth/whoami")
+def _whoami(_):
+    raise UserError("handled by the server")
+
+
+@route("POST", "auth/logout")
+def _logout(_, __):
+    raise UserError("handled by the server")
+
+
+@route("POST", "auth/login")
+def _login(_, __):
+    raise UserError("handled by the server")
+
+
+from web import r_today, r_screener, r_agents, r_research, r_tools, r_setup, r_kronos, r_help, r_marketlab, r_review, r_tradeplan, r_workspace, r_desk, r_live, r_tally, r_coverage  # noqa: E402,F401

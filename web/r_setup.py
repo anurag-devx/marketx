@@ -336,6 +336,34 @@ def _history():
     except Exception:
         pass
     try:
+        import json as js_
+        from core import bhavcopy as BH
+        bst = BH.state()
+        nd = len([d for d in bst.get("done", []) if d not in bst.get("missing", {})])
+        from core.derivatives import trading_days
+        want = len(trading_days("2021-01-01"))
+        chk = js_.loads(BH.CHECK.read_text()) if BH.CHECK.exists() else {}
+        cdet = (f" · price check vs NSE: {chk.get('compared', 0):,} bars, {len(chk.get('mismatches', []))} differ >0.5%, {len(chk.get('missing', []))} missing"
+                if chk.get("ready") else "")
+        rows.append(dict(label="NSE bhavcopy + delivery (2021 →)", frac=min(1.0, nd / max(want, 1)), job="bhavcopy-backfill", button="Download / continue",
+                         detail=f"{nd:,} of {want:,} trading days{cdet}",
+                         help="NSE's official daily file for every stock: prices, trades and delivery %. New days come in Fetch + run all (after 18:00). "
+                              "History resumes where it stopped; about 1.2 s per day."))
+    except Exception:
+        pass
+    try:
+        from marketlab import evaluate as MV
+        from marketlab.features import CANDIDATES, active_candidates
+        rc = MV.load_candidates()
+        act = active_candidates()
+        rows.append(dict(label="Market Lab candidate signals (delivery, valuation)", frac=1.0 if rc else 0.0, job="market-lab-candidates",
+                         button="Run test" if not rc else "Re-run",
+                         detail=("; ".join(f"{x['node']} {x['move']}: {'helps' if x['helps'] else 'no help'}" for x in (rc or {}).get("summary", [])) or
+                                 ("not enough data yet" if rc else "not run yet")) + (f" · in use: {', '.join(act)}" if act else " · in use: none"),
+                         help="Tests each candidate group with vs without on past years before it may be used in forecasts (Market Lab → Scorecard). About 10–20 min."))
+    except Exception:
+        pass
+    try:
         from tradeplan import patterns as PT
         st = PT.load_stats()
         m = (st or {}).get("meta") or {}

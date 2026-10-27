@@ -419,6 +419,18 @@ def reasons(snap):
 
 
 # ---------------- run ----------------
+def delivery(sym, day):
+    """NSE delivery % (bhavcopy): the last 20 sessions and the latest vs its 20-day average. A description; not tested."""
+    from core import bhavcopy as BH
+    if not BH.DAILY.exists():
+        return dict(ready=False, why="NSE bhavcopy not downloaded yet (Data health → NSE bhavcopy)")
+    d = BH.delivery(sym, day, 20)
+    if d.empty:
+        return dict(ready=False, why="no bhavcopy rows for this stock")
+    return dict(ready=True, read=BH.delivery_read(sym, day), rows=[dict(date=str(r.date.date()), deliv_pct=None if r.deliv_pct != r.deliv_pct else float(r.deliv_pct),
+                                                                       deliv_qty=None if r.deliv_qty != r.deliv_qty else float(r.deliv_qty), close=float(r.close)) for r in d.itertuples()])
+
+
 def one(ctx, sym, day):
     t0 = time.time()
     g = ctx.bars(sym, day).reset_index(drop=True)
@@ -436,7 +448,8 @@ def one(ctx, sym, day):
              ("fundamentals", lambda: fundamentals(ctx, sym, day, snap["price"]["close"])), ("ownership", lambda: ownership(ctx, sym, day)),
              ("fo", lambda: fo(ctx, sym, day)), ("peers", lambda: peers(ctx, sym, day)),
              ("relative", lambda: relative(ctx, sym, day, [r["symbol"] for r in (snap.get("peers") or {}).get("rows", [])])),
-             ("news", lambda: news(ctx, sym, day)), ("upcoming", lambda: upcoming(ctx, sym, day, snap.get("fo") or {}))]
+             ("news", lambda: news(ctx, sym, day)), ("upcoming", lambda: upcoming(ctx, sym, day, snap.get("fo") or {})),
+             ("delivery", lambda: delivery(sym, day))]
     for name, fn in steps:
         try:
             snap[name] = fn()
@@ -458,8 +471,34 @@ def save(snap):
     return name
 
 
-def run(symbols, as_of=None, log=print, topup=True):
+RUNS = DIR / "runs"
+
+
+def run_record(run_id):
+    try:
+        return json.loads((RUNS / f"{run_id}.json").read_text())
+    except (OSError, ValueError):
+        return None
+
+
+def _run_update(run_id, **kw):
+    if not run_id:
+        return
+    r = run_record(run_id) or dict(id=run_id)
+    for k, v in kw.items():
+        if k == "result":
+            r.setdefault("results", {})[v[0]] = v[1]
+        else:
+            r[k] = v
+    RUNS.mkdir(parents=True, exist_ok=True)
+    atomic.write_text(RUNS / f"{run_id}.json", json.dumps(r, indent=1, default=str))
+
+
+def run(symbols, as_of=None, log=print, topup=True, run_id=None):
+    """run_id: an analysis run started from Coverage (data/desk/runs/<id>.json): each stock's saved analysis is recorded
+    there as it finishes, so the run can be reopened later."""
     syms = [s.strip().upper() for s in symbols if s.strip()]
+    _run_update(run_id, status="running", started_job=str(pd.Timestamp.now().floor("s")))
     if topup:
         try:
             from fetch_angel import login
@@ -477,9 +516,13 @@ def run(symbols, as_of=None, log=print, topup=True):
         log(f"Analysing {s} as of {day:%d %b %Y} ...")
         try:
             snap = one(ctx, s, day)
-            done.append((s, save(snap)))
+            name = save(snap)
+            done.append((s, name))
+            _run_update(run_id, result=(s, dict(snap=name, ok=True)))
             log(f"  {s}: saved ({snap['took_s']} s).")
         except Exception as e:
+            _run_update(run_id, result=(s, dict(ok=False, why=f"{type(e).__name__}: {str(e)[:160]}")))
             log(f"  {s}: failed: {type(e).__name__}: {str(e)[:160]}")
+    _run_update(run_id, status="done", finished=str(pd.Timestamp.now().floor("s")))
     log(f"Stock Desk: {len(done)} of {len(syms)} analysed.")
     return done

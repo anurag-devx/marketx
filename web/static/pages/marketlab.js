@@ -60,6 +60,7 @@
       ${d && d.sectors ? `<div><div class="mllab">Sector</div><select class="in" id="mlsec"><option value="">All</option>${d.sectors.map((x) => `<option ${x === st.sector ? "selected" : ""}>${esc(x)}</option>`).join("")}</select></div>` : ""}</div></div>`;
   }
 
+  let RETRO = false;
   async function radarTab(b, go) {
     b.innerHTML = spinner("Loading tonight's radar …");
     const d = await api(`marketlab/radar?${qs({ when: st.when, move: st.move, size: st.size, day: st.vday || undefined })}`);
@@ -73,7 +74,7 @@
     const rows = d.rows.filter((r) => !st.sector || r.sector === st.sector).map((r) => { const t = tp.rows[r.symbol] || {};
       return { ...r, chance_pct: 100 * r.chance, usual_pct: 100 * r.usual, edge: 100 * r.lift, plan: t.ok == null ? null : t.ok ? t.act : "no trade", plan_why: t.why, rr: t.rr, second: t.ta ? `${t.ta}|${t.fund || "no data"}` : null, second_why: t.second_why }; });
     host.innerHTML = note(`Radar for ${esc(day(d.day))} → next session · ${esc(d.moves[d.move])} · at least ${esc(d.size)}% · status: <b>${esc(d.status)}</b>.
-      Sorted by edge: the chance minus the stock's usual chance. Click a row for its influence map.`, d.status === "tested" ? "info" : "warn") + (d.day_note ? note(esc(d.day_note), "warn") : "") + `<div class="card flush section" id="mlt"></div>`;
+      Sorted by edge: the chance minus the stock's usual chance. ${RETRO ? "Click a row for its influence map." : "Click a row to open the stock in Stock Desk (new tab)."}`, d.status === "tested" ? "info" : "warn") + (d.day_note ? note(esc(d.day_note), "warn") : "") + `<div class="card flush section" id="mlt"></div>`;
     $("#mlt", host).appendChild(dataTable(rows, [
       ["symbol", "Stock", "sym"], ["nodes", "Map", (v) => mini(v)],
       ["chance_pct", `Chance ≥${d.size}%`, (v, r) => `<span class="mlbar"><i style="width:${Math.min(100, v)}%"></i><b style="left:${Math.min(100, r.usual_pct)}%"></b></span><b>${num(v, 0)}%</b>`],
@@ -83,7 +84,7 @@
       ["second", "TA · Fund.", (v, r) => { if (!v) return "—"; const [a, f] = v.split("|"), ic = (x) => x === "up" ? `<span class="up">▲</span>` : x === "down" ? `<span class="down">▼</span>` : `<span class="muted">•</span>`;
         return `<span title="${esc(r.second_why || "")}" style="white-space:nowrap">${ic(a)} TA · ${ic(f)} Fund.</span>`; }],
       ["why", "Biggest drivers", (v) => `<span class="small">${arr(v)}</span>`], ["sector", "Sector"]],
-      { csv: `market_lab_${d.day}_${d.move}_${d.size}`, sort: "edge", desc: true, per: 25, show: ["symbol", "nodes", "chance_pct", "usual_pct", "edge", "lean", "confidence", "plan", "rr", "second", "why"], onRow: (r) => { st.sym = r.symbol; save(); go("stock"); }, chart: { x: "usual_pct", y: "chance_pct" } }));
+      { csv: `market_lab_${d.day}_${d.move}_${d.size}`, sort: "edge", desc: true, per: 25, show: ["symbol", "nodes", "chance_pct", "usual_pct", "edge", "lean", "confidence", "plan", "rr", "second", "why"], onRow: (r) => { if (RETRO) { st.sym = r.symbol; save(); go("stock"); } else window.open(`#/desk/${encodeURIComponent(r.symbol)}`, "_blank", "noopener"); }, chart: { x: "usual_pct", y: "chance_pct" } }));
     host.insertAdjacentHTML("beforeend", `<p class="muted small">Bar = chance tomorrow; black tick = the stock's usual chance on any day. Only rows where the bar clearly passes the tick are interesting. Map: green pushes up, red pushes down, grey no clear push.</p>`);
   }
 
@@ -139,6 +140,22 @@
     $("#mlt1", b).addEventListener("click", () => startJob("market-lab-test"));
     $("#mlb", b).addEventListener("click", () => startJob("market-lab"));
     sections($("#mls", b), (await api("marketlab/score")).sections);
+    b.insertAdjacentHTML("beforeend", `<div class="card section" id="mlcand"></div>`);
+    const drawCand = async () => {
+      const host = $("#mlcand", b); if (!host) return;
+      let c; try { c = await api("marketlab/candidates"); } catch (e) { host.innerHTML = note(esc(e.message), "warn"); return; }
+      host.innerHTML = `<div class="ct"><h2>Candidate signals</h2><span class="aside muted small">tested before they may enter the forecasts${c.built ? ` · test of ${esc(c.built.slice(0, 16))}` : ""}</span></div>
+        <p class="small muted">Built into every night's scenario but not used in the chances until the test below shows they help. Data comes from NSE: bhavcopy (delivery) and results filings (valuation), point-in-time.</p>
+        ${MX.table(c.items, [["node", "Group", (v, r) => `<b>${esc(v)}</b><div class="muted small">${r.features.map(esc).join(" · ")}</div>`],
+          ["tested", "Test", (v, r) => !v ? (r.skipped ? `<span class="muted">not enough data yet</span>` : `<span class="muted">not run</span>`)
+            : r.results.map((x) => `<div class="small">${esc(x.move)}: ${x.helps && x.years >= r.min_years ? `<span class="up">helps</span>` : x.helps ? `<span class="muted">too few years (${x.years} of ${r.min_years} needed)</span>` : `<span class="muted">no help</span>`} <span class="muted">chance ${x.d_brier >= 0 ? "+" : ""}${num(x.d_brier, 4)} · direction ${x.d_dir >= 0 ? "+" : ""}${num(100 * x.d_dir, 1)} pts · ${x.years} yrs · data on ${num(100 * x.coverage, 0)}% of rows</span></div>`).join("")],
+          ["active", "In forecasts", (v, r) => v ? `${r.helps ? `<span class="up">✓ in use</span>` : `<span class="down">⚠ in use without a passing test</span>`} <button class="btn small mlcand" data-n="${esc(r.node)}" data-on="0">Stop using</button>`
+            : r.helps ? `<button class="btn small primary mlcand" data-n="${esc(r.node)}" data-on="1">Use in forecasts</button>` : `<span class="muted">no</span>`]])}
+        <div class="row section"><button class="btn" id="mlcandrun">Run the candidate test</button><span class="muted small">about 10–20 min on this Mac · needs the bhavcopy history and results history downloaded first (Data health)</span></div>`;
+      $("#mlcandrun", host).addEventListener("click", () => startJob("market-lab-candidates"));
+      $$(".mlcand", host).forEach((x) => x.addEventListener("click", async () => { try { const r = await post("marketlab/candidates", { node: x.dataset.n, on: x.dataset.on === "1" }); MX.toast(r.note); drawCand(); } catch (e) { /* toast */ } }));
+    };
+    drawCand();
   }
 
   /* ---------- Review: graded calls, calibration, plan results, intraday profile ---------- */
@@ -227,12 +244,18 @@
     $("#pfu", host).addEventListener("click", () => profileView(host, symbol, dayStr, +$("#pft", host).value, +$("#pfb", host).value));
   }
 
-  MX.page("market-lab", {
-    title: "Market Lab", reloadOnJob: true,
-    async render(el, arg) {
-      if (arg) { st.sym = arg.toUpperCase(); st.tab = "stock"; save(); }
+  // Market Lab = Move Radar + Scorecard. The full classic tab set (Stock analysis, Review, Debate) lives in Retro.
+  const TABS_MAIN = [["radar", "Move Radar"], ["score", "Scorecard"]];
+  const TABS_ALL = [["radar", "Move Radar"], ["stock", "Stock analysis"], ["review", "Review"], ["score", "Scorecard"], ["debate", "Debate (classic)"]];
+  async function mlRender(el, arg, retro) {
+      const TABS = retro ? TABS_ALL : TABS_MAIN;
+      RETRO = !!retro;
+      if (arg && retro) { st.sym = arg.toUpperCase(); st.tab = "stock"; save(); }
+      if (arg && !retro) { location.hash = `#/desk/${encodeURIComponent(arg.toUpperCase())}`; return; }
+      if (!TABS.some(([k]) => k === st.tab)) st.tab = "radar";
       el.innerHTML = head("Market Lab", "Which stocks are likely to move at least 1% next session, which way, and what's driving it. Built from the closest past situations; numbers never come from the AI.") +
-        `<div class="tabs" id="mltabs">${[["radar", "Move Radar"], ["stock", "Stock analysis"], ["review", "Review"], ["score", "Scorecard"], ["debate", "Debate (classic)"]].map(([k, l]) => `<button data-t="${k}" class="${st.tab === k ? "on" : ""}">${l}</button>`).join("")}</div><div id="mlb2"></div>`;
+        (retro ? note(`Market Lab classic (Retro): every tab, including Stock analysis and Review. The everyday Market Lab is <a href="#/market-lab">here</a>.`, "info") : "") +
+        `<div class="tabs" id="mltabs">${TABS.map(([k, l]) => `<button data-t="${k}" class="${st.tab === k ? "on" : ""}">${l}</button>`).join("")}</div><div id="mlb2"></div>`;
       $("#mltabs", el).insertAdjacentHTML("beforebegin", `<div id="mlasof" class="ml-asof"></div>`);
       const drawPast = async () => { const x = $("#mlpast", el); if (!x) return;
         let ds; try { ds = await api("marketlab/days"); } catch (e) { return; }
@@ -260,7 +283,8 @@
         } catch (e) { if (b.isConnected) b.innerHTML = note(esc(e.message), "warn"); } };
       $("#mltabs", el).addEventListener("click", (e) => { const x = e.target.closest("button"); if (x) go(x.dataset.t); });
       await show();
-    },
-  });
+  }
+  MX.page("market-lab", { title: "Market Lab", reloadOnJob: true, render: (el, arg) => mlRender(el, arg, false) });
+  MX.page("market-lab-retro", { title: "Market Lab classic", reloadOnJob: true, render: (el, arg) => mlRender(el, arg, true) });
   MX.mlMap = drawMap; MX.mlMini = mini; MX.mlNodePanel = nodePanel;
 })();

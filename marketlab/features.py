@@ -14,7 +14,7 @@ SIZES = (0.5, 1.0, 2.0, 3.0)
 MOVES = ("cc", "oc", "gp")
 MATERIAL = {"Order / contract", "Acquisition / merger", "Fund raising", "Credit rating", "Legal / regulatory", "Shareholding / insider",
             "Management change"}
-GROUPS = {
+BASE_GROUPS = {
     "Price action": ["f_ret1", "f_ret5", "f_gap", "f_rng"],
     "Volume": ["f_vol", "f_vtr"],
     "Volatility": ["f_rv", "f_atr"],
@@ -25,7 +25,27 @@ GROUPS = {
     "Filings": ["a_cnt", "a_mat"],
     "Macro": ["x_brent", "x_inr", "x_vix", "x_y10"],
 }
+# Candidate groups: built into the panel and tested by `python -m marketlab candidates` (Scorecard tab), but used in the
+# forecasts only once switched on (data/marketlab/active_groups.json, set from the Scorecard after the test shows they
+# help). Until then every forecast is exactly as before.
+CANDIDATES = {
+    "Delivery": ["d_rel", "d_pct"],
+    "Valuation": ["v_ey", "v_pb", "v_roe", "v_de", "v_gr"],
+}
+ACTIVE_FILE = C.DATA / "marketlab" / "active_groups.json"
+
+
+def active_candidates():
+    import json
+    try:
+        return [g for g in json.loads(ACTIVE_FILE.read_text()) if g in CANDIDATES]
+    except (OSError, ValueError):
+        return []
+
+
+GROUPS = dict(BASE_GROUPS, **{g: CANDIDATES[g] for g in active_candidates()})
 FEATURES = [f for g in GROUPS.values() for f in g]
+ALL_FEATURES = [f for g in BASE_GROUPS.values() for f in g] + [f for g in CANDIDATES.values() for f in g]
 LABEL = {"f_ret1": "today's move (× its usual daily move)", "f_ret5": "5-day move (× usual)", "f_gap": "today's opening gap (× usual)",
          "f_rng": "position in its 20-day range (−0.5 low … +0.5 high)", "f_vol": "volume vs 20-day normal (log)", "f_vtr": "5-day vs 50-day volume (log)",
          "f_rv": "20-day volatility (log)", "f_atr": "daily range % (log)", "m_r1": "Nifty today", "m_r5": "Nifty 5 days", "m_vix": "India VIX vs 1-year median",
@@ -33,7 +53,10 @@ LABEL = {"f_ret1": "today's move (× its usual daily move)", "f_ret5": "5-day mo
          "e_res_s": "results filed during today's session", "e_res_e": "results filed after the close", "e_sue": "results surprise (SUE)",
          "n_cnt": "headlines naming the stock (log count)", "n_tone": "net news tone (−1 … +1)", "a_cnt": "other filings (log count)",
          "a_mat": "material filing (order, deal, rating, legal, insider, management)", "x_brent": "Brent crude, last change %",
-         "x_inr": "USD-INR, last change %", "x_vix": "US VIX, last change", "x_y10": "US 10-year yield, last change"}
+         "x_inr": "USD-INR, last change %", "x_vix": "US VIX, last change", "x_y10": "US 10-year yield, last change",
+         "d_rel": "delivered shares vs 20-day normal (log)", "d_pct": "delivery % minus its 20-day average",
+         "v_ey": "earnings yield (TTM EPS / price)", "v_pb": "price / book (log)", "v_roe": "return on equity (TTM)",
+         "v_de": "debt / equity (log)", "v_gr": "profit growth vs a year ago"}
 
 
 def decision_day(ts, days):
@@ -208,11 +231,47 @@ def build(px, idx, uni, news=None, ann=None, quarters=None, macro=None, indices=
     d = _events(d, days, news, ann, quarters)
     log("  macro ...")
     d = _macro(d, macro)
+    log("  candidates (delivery, valuation) ...")
+    d = _candidates(d, days, log)
     d["raw_m_r1"], d["raw_s_r1"] = 100 * d.m_r1, 100 * (d.s_r1 + d.m_r1)
-    keep = ["symbol", "date", "next_date", "sector", "close"] + [c for c in d if c.startswith("raw_")] + FEATURES + list(MOVES) + [c for c in d if c.startswith("u_")]
+    keep = ["symbol", "date", "next_date", "sector", "close"] + [c for c in d if c.startswith("raw_")] + ALL_FEATURES + list(MOVES) + [c for c in d if c.startswith("u_")]
     d = d[keep].sort_values(["date", "symbol"]).reset_index(drop=True)
-    for c in FEATURES + list(MOVES) + [c for c in d if c.startswith("u_")]:
+    for c in ALL_FEATURES + list(MOVES) + [c for c in d if c.startswith("u_")]:
         d[c] = d[c].astype("float32")
+    return d
+
+
+def _delivery(d, bh):
+    """d_rel: delivered shares vs the stock's previous 20 sessions (log); d_pct: delivery % minus its previous 20-session
+    average (fraction). NSE publishes them by about 18:00 on the day, inside the 21:00 cut-off."""
+    if bh is None or not len(bh):
+        d["d_rel"], d["d_pct"] = np.nan, np.nan
+        return d
+    b = bh.sort_values("series").drop_duplicates(["date", "symbol"])[["date", "symbol", "deliv_qty", "deliv_pct"]].copy()
+    b["date"] = pd.to_datetime(b.date).astype(NS)
+    b = b.sort_values(["symbol", "date"])
+    g = b.groupby("symbol")
+    q20 = g.deliv_qty.transform(lambda x: x.shift(1).rolling(20, min_periods=10).mean())
+    p20 = g.deliv_pct.transform(lambda x: x.shift(1).rolling(20, min_periods=10).mean())
+    b["d_rel"] = np.log((b.deliv_qty / q20.where(q20 > 0)).clip(0.05, 50))
+    b["d_pct"] = (b.deliv_pct - p20) / 100
+    return d.merge(b[["date", "symbol", "d_rel", "d_pct"]], on=["date", "symbol"], how="left")
+
+
+def _candidates(d, days, log=print):
+    try:
+        from core import bhavcopy as BH
+        d = _delivery(d, BH.daily() if BH.DAILY.exists() else None)
+    except Exception as e:
+        log(f"    delivery skipped ({type(e).__name__})")
+        d["d_rel"], d["d_pct"] = np.nan, np.nan
+    try:
+        from core import valuation as V
+        d = V.panel_columns(d, days)
+    except Exception as e:
+        log(f"    valuation skipped ({type(e).__name__})")
+        for c in ("v_ey", "v_pb", "v_roe", "v_de", "v_gr"):
+            d[c] = np.nan
     return d
 
 

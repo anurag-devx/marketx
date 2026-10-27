@@ -24,7 +24,7 @@ CURRENT = threading.local()      # the signed-in user of the request being serve
 TESTER_POST = {"auth/login", "auth/logout", "ask", "deep/run", "documents/ask",
                "desk/analyse", "desk/brief", "desk/decision", "desk/notes", "desk/review", "desk/watchlist",
                "marketlab/assistant", "marketlab/explain", "tradeplan/ask", "tradeplan/explain", "tradeplan/paper",
-               "live/watch", "live/note", "screener/run", "workspace/save", "workspace/delete"}
+               "live/watch", "live/note", "screener/run", "workspace/save", "workspace/delete", "desk/run"}
 OWNER_GET = {"settings", "job/log", "job/file"}          # settings and raw job logs stay private
 
 

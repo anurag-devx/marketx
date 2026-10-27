@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="mx-token" content="__TOKEN__">
+<title>Sign in · MarketX</title>
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/app.css">
+</head>
+<body class="login-body">
+<form class="card login-card" id="lf" autocomplete="on">
+  <div class="brand"><img src="/icon.svg" alt=""><span>Market<b>X</b></span></div>
+  <label class="small muted" for="lu">Name</label>
+  <input class="in" id="lu" name="username" autocomplete="username" required autofocus>
+  <label class="small muted" for="lp">Password</label>
+  <input class="in" id="lp" name="password" type="password" autocomplete="current-password" required>
+  <button class="btn primary" type="submit">Sign in</button>
+  <p class="small" id="lm" role="alert"></p>
+  <p class="muted small">Research tool · places no orders.</p>
+</form>
+<script src="/login.js"></script>
+</body>
+</html>

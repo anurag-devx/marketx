@@ -28,14 +28,14 @@
   const { api, esc, num, pct, cls, inr, day, dt, $, table, kpi, card, head, note, form, tabs, sections, newsList, startJob, dataTable, qs } = MX;
   const sym = "sym";
 
-  MX.page("overview", {
-    title: "Overview", reloadOnJob: true,
+  MX.page("overview-retro", {
+    title: "Agents overview", reloadOnJob: true,
     async render(el) {
       const o = await api("overview");
       const r = o.regime, m = o.market, s = m && m.summary, nifty = m && m.nifty;
       const F = (v) => day(v, { weekday: "short", day: "numeric", month: "short", year: "numeric" });
       const mDate = m && m.date ? m.date : r && r.date, behind = r && m && m.date && String(r.date).slice(0, 10) < String(m.date).slice(0, 10);
-      el.innerHTML = head("Overview", mDate ? `Market as of ${F(mDate)}` : "No prices yet", `<button class="btn" id="b-agents">Run all agents</button>`) +
+      el.innerHTML = head("Agents overview (Retro)", mDate ? `Market as of ${F(mDate)}` : "No prices yet", `<button class="btn" id="b-agents">Run all agents</button>`) +
         (behind ? `<div class="section">${note(`Prices are up to ${F(m.date)}. The agents last ran on ${F(r.date)}: market state, trades, exits and the shortlist are from that run. <a href="#" id="b-agents2">Run all agents</a> to bring them up to date.`, "info")}</div>` : "") +
         (o.pending ? `<div class="section">${note(`${o.pending} proposal(s) wait for your approval — <a href="#/settings">Settings → Approvals</a>.`)}</div>` : "") +
         (r && r.note ? note(esc(r.note), "warn") : "") +

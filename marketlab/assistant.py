@@ -295,7 +295,7 @@ ROUTER = ("You route questions about a stock-prediction scorecard to ONE fixed q
 
 def route(q, symbols=(), use_model=True):
     kw = keywords(q, symbols)
-    if not use_model:
+    if not use_model or kw["intent"] != "overview":        # keywords understood it: no need to wait for the model
         return kw, "keywords"
     try:
         from core import llm
@@ -355,7 +355,8 @@ def write(question, title, facts, use_model=True):
         return template(title, facts), "template"
 
 
-def answer(question, day=None, move="cc", size=1.0, mode="intraday", use_model=True):
+def answer(question, day=None, move="cc", size=1.0, mode="intraday", use_model=True, word=True):
+    """word=False: table + plain summary at once (the page then asks again with word=True for the AI's wording)."""
     q = str(question or "").strip()[:500]
     if not q:
         return dict(answer="Ask about matches, misses, hit rate, plans, paper takes, TA / fundamentals, a stock, or the trend.", rows=[], columns=[])
@@ -377,5 +378,5 @@ def answer(question, day=None, move="cc", size=1.0, mode="intraday", use_model=T
         return dict(answer=f"No graded rows for {', '.join(days) or 'that'}.", rows=[], columns=[], params=p)
     title, facts, table = RUN[p["intent"]](f, p)
     facts = dict(days=days if len(days) <= 3 else f"{len(days)} days, {days[-1]} to {days[0]}", move=move, size_pct=size, **facts)
-    text, writer = write(q, title, facts, use_model)
+    text, writer = write(q, title, facts, use_model and word)
     return dict(answer=text, writer=writer, router=router, intent=p["intent"], params=p, title=title, days=days, **table)

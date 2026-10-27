@@ -7,7 +7,7 @@
     if (v == null || v === "") return `<span class="muted">—</span>`;
     switch (t) {
       case "day": return `<span title="projected on this day's close, for the next session">${F(v)}</span>`;
-      case "sym": return `<a href="#/tally/${encodeURIComponent(r.day || "")}" target="_blank" rel="noopener"><b>${esc(v)}</b></a>`;
+      case "sym": return `<a href="#/desk/${encodeURIComponent(v)}" target="_blank" rel="noopener" title="open in Stock Desk"><b>${esc(v)}</b> ↗</a>`;
       case "pct": return `${num(100 * v, 0)}%`;
       case "ret": return `<span class="${v > 0 ? "up" : v < 0 ? "down" : "muted"}">${v > 0 ? "▲ +" : v < 0 ? "▼ " : ""}${num(100 * v, 2)}%</span>`;
       case "ok": return v ? `<span class="up">✓</span>` : `<span class="down">✗</span>`;
@@ -24,20 +24,29 @@
     host.innerHTML = `<div class="card gc"><div class="ct"><h2>Ask about the grades</h2><span class="aside muted small">numbers are computed from the ledger; the AI only words them</span></div>
       <div class="gc-log" id="gclog"></div>
       <div class="row" style="gap:6px;margin-top:8px"><input class="in" id="gcq" placeholder="e.g. Which stocks matched with real?" style="flex:1"><button class="btn primary" id="gcgo">Ask</button></div>
-      <div class="gc-ex">${EX.map((x) => `<button class="lchip" data-q="${esc(x)}">${esc(x)}</button>`).join("")}</div></div>`;
+      <div class="gc-ex">${EX.map((x) => `<button class="gc-chip" data-q="${esc(x)}">${esc(x)}</button>`).join("")}</div></div>`;
     const log = host.querySelector("#gclog"), inp = host.querySelector("#gcq");
     const ask = async (q) => {
       q = (q || inp.value).trim(); if (!q) return; inp.value = "";
       const item = document.createElement("div"); item.className = "gc-item";
       item.innerHTML = `<div class="gc-q">${esc(q)}</div><div class="gc-a muted small">Working it out …</div>`;
       log.prepend(item);
-      let d; try { d = await MX.api("marketlab/assistant", Object.assign({ question: q }, ctx ? ctx() : {})); }
+      const body = Object.assign({ question: q }, ctx ? ctx() : {});
+      let d; try { d = await MX.api("marketlab/assistant", body); }
       catch (e) { item.querySelector(".gc-a").textContent = e.message; return; }
       const days = d.days && d.days.length ? (d.days.length === 1 ? `projected on ${F(d.days[0])}` : `${d.days.length} days, ${F(d.days[d.days.length - 1])} – ${F(d.days[0])}`) : "";
       const tbl = d.rows && d.rows.length ? `<div class="scroll"><table class="tbl"><thead><tr>${d.columns.map((c) => `<th>${esc(c.label)}</th>`).join("")}</tr></thead><tbody>${
         d.rows.map((r) => `<tr>${d.columns.map((c) => `<td>${cell(c.type, r[c.key], r)}</td>`).join("")}</tr>`).join("")}</tbody></table></div>` : "";
       item.querySelector(".gc-a").outerHTML = `<div class="gc-a"><div class="gc-meta muted small">${esc(d.title || "")}${days ? ` · ${days}` : ""} · ${d.writer === "model" ? "worded by the AI, numbers checked" : "plain summary"}</div>
-        <p>${esc(d.answer || "")}</p>${tbl}</div>`;
+        <p class="gc-text">${esc(d.answer || "")}</p>${tbl}</div>`;
+      if (d.intent) {                                  // then the AI's wording (slower, local model); the plain summary stays if it fails
+        const meta = item.querySelector(".gc-meta"), base = meta.textContent.replace(/ · plain summary$/, "");
+        meta.textContent = base + " · wording with the AI …";
+        MX.api("marketlab/assistant", Object.assign({ word: true }, body)).then((w) => {
+          if (w.writer === "model") { item.querySelector(".gc-text").textContent = w.answer; meta.textContent = base + " · worded by the AI, numbers checked"; }
+          else meta.textContent = base + " · plain summary";
+        }).catch(() => { meta.textContent = base + " · plain summary"; });
+      }
     };
     host.querySelector("#gcgo").addEventListener("click", () => ask());
     inp.addEventListener("keydown", (e) => { if (e.key === "Enter") ask(); });

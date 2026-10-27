@@ -56,7 +56,12 @@ def tradeplan(p):
         pats, _ = PT.recent(g260.reset_index(drop=True), days=5)
     except Exception:
         pats = [dict(x, meaning=x.get("meaning") or PT.meaning(x.get("pattern"), x.get("direction"))) for x in e.get("patterns", [])]
-    ev = EV.evidence(g260, pats, e[mode].get("levels")) if len(g260) >= 30 else None
+    try:
+        from core import bhavcopy as BH
+        dl = BH.delivery_read(sym, saved["day"]) if BH.DAILY.exists() else None
+    except Exception:
+        dl = None
+    ev = EV.evidence(g260, pats, e[mode].get("levels"), delivery=dl) if len(g260) >= 30 else None
     return dict(base, ready=True, day=saved["day"], plan=e[mode], patterns=pats, patterns_source=saved.get("patterns_source"), bars=bars, summary=summary,
                 ta=e.get("ta"), evidence=ev, candles=candles, pattern_test=(PT.load_stats() or {}).get("meta"), fund=_fund(sym, saved["day"], g, e.get("fund")))
 

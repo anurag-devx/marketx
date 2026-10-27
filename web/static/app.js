@@ -51,8 +51,8 @@
   const FMT = {
     text: (v) => named(v) || esc(v ?? "—"),
     long: (v) => `<span class="long">${esc(v ?? "")}</span>`,
-    sym: (v, r) => v ? `<a class="sym" href="#/stock/${encodeURIComponent(v)}">${esc(v)}</a>${r && (r.company || r.company_name) ? `<div class="co">${esc(r.company || r.company_name)}</div>` : ""}` : "—",
-    symonly: (v) => v ? `<a class="sym" href="#/stock/${encodeURIComponent(v)}">${esc(v)}</a>` : "—",
+    sym: (v, r) => v ? `<a class="sym" href="#/desk/${encodeURIComponent(v)}">${esc(v)}</a>${r && (r.company || r.company_name) ? `<div class="co">${esc(r.company || r.company_name)}</div>` : ""}` : "—",
+    symonly: (v) => v ? `<a class="sym" href="#/desk/${encodeURIComponent(v)}">${esc(v)}</a>` : "—",
     int: (v) => num(v, 0), num0: (v) => num(v, 0), num1: (v) => num(v, 1), num2: (v) => num(v, 2), num3: (v) => num(v, 3),
     pct0: (v) => isNum(v) ? `${num(v, 0)}%` : "—", pct1: (v) => isNum(v) ? `${num(v, 1)}%` : "—",
     spct1: (v) => `<span class="${cls(v)}">${pct(v, 1)}</span>`, spct2: (v) => `<span class="${cls(v)}">${pct(v, 2)}</span>`,
@@ -292,7 +292,7 @@
       const link = safeUrl(n.link), syms = (Array.isArray(n.symbols) ? n.symbols : String(n.symbols || "").split(",")).filter(Boolean);
       return `<div class="item">${link ? `<a class="t" href="${esc(link)}" target="_blank" rel="noopener noreferrer">${esc(n.title)}</a>` : `<span class="t">${esc(n.title)}</span>`}
       <div class="m"><span>${esc(n.source || "")}</span><span>${dt(n.published)}</span>
-        ${syms.slice(0, 6).map((s) => `<a class="tag acc" href="#/stock/${encodeURIComponent(s)}">${esc(s)}</a>`).join("")}
+        ${syms.slice(0, 6).map((s) => `<a class="tag acc" href="#/desk/${encodeURIComponent(s)}">${esc(s)}</a>`).join("")}
         ${n.type ? `<span class="tag">${esc(n.type)}</span>${n.type_why ? `<span class="why">“${esc(n.type_why)}”</span>` : ""}` : ""}
         ${n.tone === "positive" || n.tone === "negative" ? `<span class="tag ${n.tone === "positive" ? "pos" : "neg"}">${esc(n.tone)}</span>${n.tone_why ? `<span class="why">“${esc(n.tone_why)}”</span>` : ""}` : ""}
         ${n.roundup ? `<span class="tag">round-up</span>` : ""}</div>${n.summary ? `<div class="sumy">${esc(String(n.summary).slice(0, 260))}</div>` : ""}</div>`; }).join("")}</div>`;
@@ -364,11 +364,9 @@
 
   // ---------- navigation ----------
   const NAV = [
-    ["Main", [["overview", "Overview"], ["market-lab", "Market Lab"], ["stock", "Stock"], ["desk", "Stock Desk"], ["live", "Live terminal"], ["tally", "Tally"], ["positions", "Positions & risk"], ["data", "Data health"]]],
-    ["Market", [["market", "Market"], ["market-news", "Market news"], ["screener", "Screener"]]],
-    ["Agents", [["agents", "Agents"], ["signals", "Signals"], ["strategies", "Strategies"], ["validation", "Validation"]]],
-    ["Tools", [["search", "Search"], ["ask", "Ask"], ["documents", "Documents"], ["records", "Reports & logs"], ["settings", "Settings"]]],
-    ["Labs", [["debate", "Debate"], ["scorecard", "Forecast scorecard"], ["kronos", "Kronos"], ["lab", "Strategy Lab"], ["screener-research", "Screener research"]]],
+    ["Daily", [["overview", "Overview"], ["market-lab", "Market Lab"], ["desk", "Stock Desk"], ["live", "Live terminal"], ["tally", "Tally"]]],
+    ["Data", [["coverage", "Coverage"], ["data", "Data health"], ["settings", "Settings"]]],
+    ["More", [["retro", "Retro"]]],
   ];
   const PAGES = {};
   function drawNav(cur) {
@@ -439,12 +437,12 @@
   // ---------- search ----------
   function setupSearch() {
     const inp = $("#q"), box = $("#qres"); let sel = 0, items = [], t = null;
-    const draw = () => { box.hidden = !items.length; box.innerHTML = items.map((r, i) => `<a href="#/stock/${encodeURIComponent(r.symbol)}" class="${i === sel ? "sel" : ""}"><b>${esc(r.symbol)}</b><span>${esc(r.company)}</span></a>`).join(""); };
+    const draw = () => { box.hidden = !items.length; box.innerHTML = items.map((r, i) => `<a href="#/desk/${encodeURIComponent(r.symbol)}" class="${i === sel ? "sel" : ""}"><b>${esc(r.symbol)}</b><span>${esc(r.company)}</span></a>`).join(""); };
     inp.addEventListener("input", () => { clearTimeout(t); t = setTimeout(async () => { items = await api(`search?q=${encodeURIComponent(inp.value)}`).catch(() => []); sel = 0; draw(); }, 120); });
     inp.addEventListener("keydown", (e) => {
       if (e.key === "ArrowDown") { sel = Math.min(items.length - 1, sel + 1); draw(); e.preventDefault(); }
       else if (e.key === "ArrowUp") { sel = Math.max(0, sel - 1); draw(); e.preventDefault(); }
-      else if (e.key === "Enter" && items[sel]) { location.hash = `#/stock/${encodeURIComponent(items[sel].symbol)}`; inp.value = ""; items = []; draw(); inp.blur(); }
+      else if (e.key === "Enter" && items[sel]) { location.hash = `#/desk/${encodeURIComponent(items[sel].symbol)}`; inp.value = ""; items = []; draw(); inp.blur(); }
       else if (e.key === "Escape") { items = []; draw(); inp.blur(); }
     });
     box.addEventListener("click", () => { inp.value = ""; items = []; draw(); });

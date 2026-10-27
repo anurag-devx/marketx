@@ -160,6 +160,11 @@
               <p class="small"><a href="#/tally/${encodeURIComponent(t.day)}" target="_blank" rel="noopener">Open that day in Tally ↗</a></p>` : `<p class="muted">Not graded yet.</p>`}</div>
           <div class="card"><div class="ct"><h2>Technical ${pl && pl.ta ? `· ${LEAN(pl.ta.dir)} <span class="muted small">score ${pl.ta.score ?? "—"}</span>` : ""}</h2></div>
             ${pl && pl.ta ? `<ul class="small">${why(pl.ta)}</ul>${(pl.patterns || []).map((x) => `<div class="muted small">candle: ${esc(x.label || x.pattern || "")} ${esc(x.direction || "")}</div>`).join("")}` : `<p class="muted">No technical read saved.</p>`}</div>
+          <div class="card"><div class="ct"><h2>Valuation <span class="muted small">point-in-time, from NSE filings</span></h2></div>
+            ${q.valuation ? `<dl class="kv"><dt>P/E (TTM)</dt><dd>${q.valuation.pe == null ? "—" : num(q.valuation.pe, 1)}</dd><dt>P/B</dt><dd>${q.valuation.pb == null ? "—" : num(q.valuation.pb, 2)}</dd>
+              <dt>ROE (TTM)</dt><dd>${q.valuation.roe == null ? "—" : `${num(100 * q.valuation.roe, 1)}%`}</dd><dt>Debt / equity</dt><dd>${q.valuation.de == null ? "—" : num(q.valuation.de, 2)}</dd>
+              <dt>Last filing</dt><dd>${esc(String(q.valuation.filed_at || "").slice(0, 10))}</dd></dl><p class="muted small">Blank = needs results history (4 quarters) or a balance sheet.</p>` : `<p class="muted">No results filings read yet.</p>`}
+            ${q.delivery ? `<div class="mllab" style="margin-top:8px">Delivery (NSE)</div><p class="small">${num(q.delivery.deliv_pct, 0)}% vs ${num(q.delivery.avg20, 0)}% 20-day average (${q.delivery.diff_pts >= 0 ? "+" : ""}${num(q.delivery.diff_pts, 1)} pts)</p>` : ""}</div>
           <div class="card"><div class="ct"><h2>Plan ${pl ? `<span class="muted small">for the session after ${F(pl.day)}</span>` : ""}</h2></div>
             ${pl ? `<div class="mllab">Intraday</div>${legs(pl.intraday)}<div class="mllab" style="margin-top:8px">Swing</div>${legs(pl.swing)}
               <div class="mllab" style="margin-top:8px">Fundamentals · ${LEAN(pl.fund && pl.fund.dir)}</div><ul class="small">${why(pl.fund)}</ul>` : `<p class="muted">No plan saved.</p>`}</div>
@@ -182,6 +187,15 @@
     if (!d.ready) { host.innerHTML = note(esc(d.why), "warn"); return null; }
     MX.mlMap(host, d, onNode);
     return d;
+  }
+
+  function deliveryCard(dl) {
+    if (!dl) return "";
+    if (!dl.ready) return `<div class="card section"><div class="ct"><h2>Delivery (NSE)</h2></div><p class="muted small">${esc(dl.why || "not available")}</p></div>`;
+    const r = dl.read || {};
+    return `<div class="card section"><div class="ct"><h2>Delivery (NSE)</h2><span class="aside muted small">information only: not a tested signal yet</span></div>
+      <p>${r.deliv_pct != null ? `Latest <b>${num(r.deliv_pct, 0)}%</b> delivered vs <b>${num(r.avg20, 0)}%</b> over the previous 20 sessions (${r.diff_pts >= 0 ? "+" : ""}${num(r.diff_pts, 1)} pts)${r.qty_x != null ? ` · delivered shares ${num(r.qty_x, 2)}× normal` : ""}` : "—"}</p>
+      ${table(dl.rows.slice().reverse(), [["date", "Date", "date"], ["deliv_pct", "Delivery %", "num1"], ["deliv_qty", "Delivered shares", "int"], ["close", "Close", "num2"]])}</div>`;
   }
 
   const RENDER = {
@@ -254,6 +268,7 @@
           ${kv("ROE", v.roe_pct == null ? "—" : `${num(v.roe_pct, 1)}%`)}${kv("Debt / equity", v.debt_to_equity == null ? "—" : num(v.debt_to_equity, 2))}${kv("Net debt", cr(v.net_debt_cr))}${kv("Free cash flow", cr(v.fcf_cr))}${kv("Balance sheet", esc(v.balance_sheet_date || v.note || "—"))}</dl></div>
           <div class="card"><div class="ct"><h2>Last quarters</h2></div>${(f.quarters || []).length ? table(f.quarters.slice().reverse(), [["period_end", "Quarter", "date"], ["revenue_cr", "Revenue ₹ cr", "int"], ["profit_cr", "Profit ₹ cr", "int"], ["margin_pct", "Margin %", "num1"],
             ["revenue_yoy", "Revenue y/y", (x) => S(x)], ["profit_yoy", "Profit y/y", (x) => S(x)], ["filed_at", "Filed", (x) => esc(String(x || "").slice(0, 10))]]) : `<p class="muted">No quarterly results downloaded (Data health → Quarterly results).</p>`}</div></div>
+        ${deliveryCard(s.delivery)}
         <p class="muted small">From NSE filings, as filed; blank = not filed or not downloaded. Nothing is estimated.</p>`;
     },
     own(b, s) {

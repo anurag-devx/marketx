@@ -464,8 +464,10 @@ def update(days=120, log=print, fetch=None, workers=4):
     fl = _merge_filings(new)
     log(f"  {len(new)} filings listed ({new.symbol.isin(_universe()).sum()} for Nifty 500 stocks)")
     done = set(results().filing_id)
-    todo = plan(fl, _universe(), done, st.get("failed", {}))
-    log(f"  {len(todo)} results files to read")
+    recent = fl[fl.filing_id.isin(set(new.filing_id))] if "filing_id" in new else fl.iloc[0:0]
+    todo = plan(recent, _universe(), done, st.get("failed", {}))            # only this window; older unread files: backfill
+    backlog = len(plan(fl, _universe(), done, st.get("failed", {}))) - len(todo)
+    log(f"  {len(todo)} results files to read" + (f" ({backlog} older ones not read yet: run 'Quarterly results history')" if backlog > 0 else ""))
     ok, bad = read_filings(todo, fetch, log, workers)
     st = state()
     st.update(last_update=str(pd.Timestamp.now().floor("s")), last_update_read=ok, last_update_failed=bad)

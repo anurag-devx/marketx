@@ -13,8 +13,8 @@ LOCK = JOBS / "current.json"
 # Lanes never share the database; files they share are protected by core/filelock.py and written atomically.
 LANES = {"news": {"news", "news-check", "announcements", "macro-fetch", "macro-all", "fundamentals", "fo"},
          "history": {"history-all", "announcements-backfill", "news-backfill", "news-articles", "search-index",
-                     "library-ingest", "news-retag", "articles-90d", "fundamentals-backfill", "shareholding", "fo-backfill", "search-compact", "fundamentals-balance"},
-         "lab": {"debate", "debate-eval", "debate-batch", "debate-replay", "stock-lists", "market-lab", "market-lab-test", "market-lab-replay", "pattern-test", "desk-analyse", "talib-install"},
+                     "library-ingest", "news-retag", "articles-90d", "fundamentals-backfill", "shareholding", "fo-backfill", "search-compact", "fundamentals-balance", "bhavcopy-backfill"},
+         "lab": {"debate", "debate-eval", "debate-batch", "debate-replay", "stock-lists", "market-lab", "market-lab-test", "market-lab-replay", "pattern-test", "desk-analyse", "talib-install", "market-lab-candidates"},
          "kronos": {"kronos-install", "kronos-forecast", "kronos-replay"},      # experimental, separate: see kronos_lab/README.md
          "intraday": {"intraday", "intraday-probe"}}      # 5-minute bars from Angel One: core/intraday.py
 SIDE = LANES["news"]                         # kept for older callers
@@ -43,7 +43,7 @@ COMMANDS = {
     "screener-experiments-force": [[PY, "-u", "-m", "screener", "experiments", "--force"]],
     "pipeline": [[PY, "-u", "pipeline.py", "all"]],
     "fetch+pipeline": [[PY, "-u", "fetch_angel.py"], [PY, "-u", "news_fetch.py"], [PY, "-u", "-m", "core.announcements"],
-                       [PY, "-u", "-m", "core.fundamentals"], [PY, "-u", "-m", "research.earnings"], [PY, "-u", "-m", "core.derivatives"], [PY, "-u", "-m", "core.macro"], [PY, "-u", "pipeline.py", "all"],
+                       [PY, "-u", "-m", "core.fundamentals"], [PY, "-u", "-m", "research.earnings"], [PY, "-u", "-m", "core.derivatives"], [PY, "-u", "-m", "core.bhavcopy"], [PY, "-u", "-m", "core.macro"], [PY, "-u", "pipeline.py", "all"],
                        [PY, "-u", "-m", "research.market_report", "--if-auto"],     # written only when auto is on (Market news → Report)
                        [PY, "-u", "-m", "marketlab"], [PY, "-u", "-m", "core.intraday", "update"],
                        [PY, "-u", "-m", "core.articles", "days=3", "linked=1", "max=300"]],      # new stock-news articles (a few minutes)
@@ -66,6 +66,9 @@ COMMANDS = {
     "search-index": [[PY, "-u", "-m", "core.search_index"]],
     "shareholding": [[PY, "-u", "-m", "core.shareholding"]],
     "fo": [[PY, "-u", "-m", "core.derivatives"]],
+    "bhavcopy": [[PY, "-u", "-m", "core.bhavcopy"]],
+    "bhavcopy-backfill": [[PY, "-u", "-m", "core.bhavcopy", "backfill", "start=2021-01-01"]],
+    "market-lab-candidates": [[PY, "-u", "-m", "marketlab", "candidates"]],
     "intraday": [[PY, "-u", "-m", "core.intraday"]],
     "market-lab": [[PY, "-u", "-m", "marketlab"]],
     "search-compact": [[PY, "-u", "-m", "core.search_compact"]],
@@ -103,7 +106,7 @@ COMMANDS = {
 
 
 KEEP_GOING = {"history-all"}
-OPTIONAL = ("marketlab", "core.intraday", "core.articles", "news_fetch.py", "core.announcements", "core.fundamentals", "core.derivatives", "research.earnings", "research.market_report", "core.macro", "research.macro_impact", "debate.batch", "debate.evaluate")   # a failure here is reported but never stops the agents
+OPTIONAL = ("marketlab", "core.intraday", "core.articles", "news_fetch.py", "core.announcements", "core.fundamentals", "core.derivatives", "core.bhavcopy", "research.earnings", "research.market_report", "core.macro", "research.macro_impact", "debate.batch", "debate.evaluate")   # a failure here is reported but never stops the agents
 
 
 def _cmd(cmd):
@@ -228,7 +231,7 @@ def tail(path, n=300):
 
 # ---------------- progress (for the dashboard) ----------------
 # command -> (what the user sees, agent tile key)
-STEPS = [("fetch_angel.py", "Downloading prices", "fetch"), ("news_fetch.py", "Fetching news", "announcements"),
+STEPS = [("marketlab candidates", "Market Lab: testing candidate signals", "market-lab"), ("fetch_angel.py", "Downloading prices", "fetch"), ("news_fetch.py", "Fetching news", "announcements"),
          ("core.announcements", "Fetching NSE filings", "announcements"), ("core.news", "Downloading news history", "announcements"),
          ("core.articles", "Reading article text", "search-index"),
          ("core.fundamentals", "Reading quarterly results (NSE XBRL)", "announcements"),
@@ -241,7 +244,7 @@ STEPS = [("fetch_angel.py", "Downloading prices", "fetch"), ("news_fetch.py", "F
          ("backtest.py", "Backtesting strategies", "backtest"), ("strategy_research.py", "Strategy research", "backtest"),
          ("analysis.py", "Strategy analysis", "backtest"), ("research.events", "Running the news study", "announcements"),
          ("core.quality", "Checking data quality", "fetch"), ("pip", "Installing packages", None),
-         ("kronos_lab.forecast", "Kronos forecasts", None), ("core.shareholding", "Reading shareholding patterns", "announcements"), ("core.derivatives", "Downloading F&O data", "announcements"), ("kronos_lab/setup.sh", "Installing Kronos", None),
+         ("kronos_lab.forecast", "Kronos forecasts", None), ("core.shareholding", "Reading shareholding patterns", "announcements"), ("core.derivatives", "Downloading F&O data", "announcements"), ("core.bhavcopy", "NSE bhavcopy and delivery", "fetch"), ("kronos_lab/setup.sh", "Installing Kronos", None),
          ("core.intraday", "Downloading 5-minute bars", None), ("marketlab", "Market Lab: tonight's radar", "market-lab"), ("core.search_compact", "Compacting the search database", "search-index")]
 AGENT_STEP = {"regime": "regime", "screener": "screener", "strategy": "strategy", "technical": "technical", "risk": "risk",
               "validation": "validation", "report": "report"}
