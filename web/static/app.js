@@ -507,4 +507,19 @@
                 page: (k, def) => (PAGES[k] = def), pageDef: (k) => PAGES[k], suggest, remember, status: () => lastStatus, refreshStatus, route, render };
   document.addEventListener("DOMContentLoaded", async () => { setupTheme(); setupSearch(); refreshStatus();
     try { NAMES = await api("meta/names"); } catch (e) { /* names are a nicety */ } render(); });
+
+  // ---------- side menu: hide to a thin edge (hover or click it to bring the menu back), pin it open again ----------
+  (function sideMenu() {
+    const pin = document.getElementById("sidepin"), side = document.querySelector(".side");
+    if (!pin || !side) return;
+    const get = () => { try { return localStorage.getItem("mx-side-min") === "1"; } catch (e) { return false; } };
+    const set = (v) => { document.body.classList.toggle("side-min", v); pin.textContent = v ? "»" : "«"; pin.title = v ? "Pin the menu open (shortcut: [ )" : "Hide the menu (shortcut: [ )";
+      try { localStorage.setItem("mx-side-min", v ? "1" : "0"); } catch (e) { /* ignore */ } setTimeout(() => window.dispatchEvent(new Event("resize")), 220); };
+    set(get());
+    pin.addEventListener("click", (e) => { e.preventDefault(); set(!document.body.classList.contains("side-min")); });
+    side.addEventListener("click", (e) => { if (document.body.classList.contains("side-min") && !side.classList.contains("peek") && e.target === side) side.classList.add("peek"); });
+    side.addEventListener("mouseenter", () => { if (document.body.classList.contains("side-min")) side.classList.add("peek"); });
+    side.addEventListener("mouseleave", () => side.classList.remove("peek"));
+    document.addEventListener("keydown", (e) => { if (e.key === "[" && !/INPUT|TEXTAREA|SELECT/.test(e.target.tagName) && !e.target.isContentEditable) set(!document.body.classList.contains("side-min")); });
+  })();
 })();

@@ -464,3 +464,22 @@ details.fold > .card, details.fold > div { border: 0; margin: 0; }
 .gc-q { font-weight: 600; margin-bottom: 4px; }
 .gc-a p { margin: 4px 0 8px; }
 .gc-ex { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+.gc-chip { font-size: 12px; padding: 4px 10px; border-radius: 99px; border: 1px solid var(--line-2); background: var(--surface); color: var(--ink-2); cursor: pointer; }
+.gc-chip:hover { border-color: var(--accent); color: var(--ink); }
+.btn.danger { background: var(--down-soft); color: var(--down); border-color: var(--down); }
+.lv-fill { color: var(--muted); }
+
+/* ---- collapsible side menu ---- */
+.brand-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.side-pin { background: none; border: 1px solid transparent; color: var(--muted); border-radius: 6px; width: 28px; height: 28px; cursor: pointer; font-size: 16px; line-height: 1; }
+.side-pin:hover { border-color: var(--line-2); color: var(--ink); }
+.side { transition: transform .18s ease, box-shadow .18s ease; z-index: 50; }
+.main { transition: margin-left .18s ease; }
+body.side-min .main { margin-left: 14px; }
+body.side-min .side { transform: translateX(calc(14px - var(--side))); }
+body.side-min .side > * { opacity: 0; transition: opacity .12s; }
+body.side-min .side::after { content: "›"; position: absolute; right: 2px; top: 50%; color: var(--muted); font-size: 14px; }
+body.side-min .side.peek { transform: none; box-shadow: var(--shadow); }
+body.side-min .side.peek > * { opacity: 1; }
+body.side-min .side.peek::after { content: none; }
+@media (max-width: 760px) { body.side-min .main { margin-left: 0; } }
