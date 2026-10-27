@@ -148,7 +148,7 @@
       const F = (v) => v ? day(v) : "—", LEAN = (l) => ar(l), legs = (pl) => { if (!pl || !pl.legs.length) return `<span class="muted">—</span>`;
         const sd = (side) => { const g = (k) => pl.legs.find((x) => x.leg === k && x.side === side); const e = g("E1"); return e ? `<div class="small"><b class="${side === "long" ? "up" : "down"}">${side === "long" ? "▲ Long" : "▼ Short"}</b> E1 ${inr(e.price)} · SL ${inr(g("SL")?.price)} · T1 ${inr(g("T1")?.price)} · T2 ${inr(g("T2")?.price)}</div>` : ""; };
         return `<div class="small">lean ${LEAN(pl.lean)}</div>${sd("long")}${sd("short")}`; };
-      const why = (o) => (o && o.why || []).slice(0, 6).map((w) => `<li>${esc(w)}</li>`).join("");
+      const why = (o) => (o && o.why || []).slice(0, 6).map((w) => `<li>${MX.arr(w)}</li>`).join("");
       const ml = q.market_lab, pl = q.plan, t = q.tally, p = q.price;
       $("#dkqv", el).innerHTML = `
         ${p ? `<div class="card section"><b style="font-size:20px">${inr(p.close)}</b> ${S(p.change, 2)} <span class="muted small">· ${F(p.date)} · 1m ${S(p.r1m)} · 3m ${S(p.r3m)} · 1y ${S(p.r1y)}</span></div>` : ""}

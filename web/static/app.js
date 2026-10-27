@@ -56,6 +56,8 @@
     return `<span class="chg ${c}">${mark} ${x > 0 ? "+" : x < 0 ? "−" : ""}${num(Math.abs(x), d)}${sfx}</span>`;
   }
   const lean = (v) => v === "up" ? `<span class="lean up">▲ up</span>` : v === "down" ? `<span class="lean down">▼ down</span>` : `<span class="lean flat">• ${esc(v || "unclear")}</span>`;
+  // arr: colour the ▲/▼/• marks inside a text (drivers, reasons)
+  const arr = (t) => esc(t || "").replace(/▲/g, `<span class="up">▲</span>`).replace(/▼/g, `<span class="down">▼</span>`).replace(/•/g, `<span class="muted">•</span>`);
   const CONF = { low: "c-low", medium: "c-med", high: "c-high" };
   const conf = (v) => v ? `<span class="tag conf ${CONF[String(v).toLowerCase()] || ""}">${esc(v)}</span>` : "—";
   // chance as a bar with the stock's usual chance as a tick; the fill gets stronger with the edge (chance - usual)
@@ -542,7 +544,7 @@
   window.addEventListener("hashchange", () => { render(); window.scrollTo(0, 0); });
   let rz; window.addEventListener("resize", () => { clearTimeout(rz); rz = setTimeout(() => window.dispatchEvent(new Event("mx-resize")), 200); });
 
-  window.MX = { api, qs, post, toast, startJob, esc, num, pct, cls, inr, day, dt, mmss, safeUrl, isNum, $, $$, table, dataTable, csv, download, chg, lean, conf, chanceBar, okMark, sdot, spark, sparks, heat, money,
+  window.MX = { api, qs, post, toast, startJob, esc, num, pct, cls, inr, day, dt, mmss, safeUrl, isNum, $, $$, table, dataTable, csv, download, chg, arr, lean, conf, chanceBar, okMark, sdot, spark, sparks, heat, money,
                 cols, kpi, card, nameOf, named, chartDrawer, head, note, loading, spinner, md, form, tabs, sections, section, newsList, drawer, editTable, openLog, fmt, debounce,
                 page: (k, def) => (PAGES[k] = def), pageDef: (k) => PAGES[k], suggest, remember, status: () => lastStatus, refreshStatus, route, render };
   document.addEventListener("DOMContentLoaded", async () => { setupTheme(); setupSearch(); refreshStatus();

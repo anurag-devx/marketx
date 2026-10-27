@@ -28,7 +28,7 @@
       return `<div class="small">lean ${LBL(p.lean)} · ${esc(p.hold || "")}</div>${sd("long")}${sd("short")}${(p.flags || []).map((f) => `<div class="muted small">⚠ ${esc(f)}</div>`).join("")}`; };
     const ml = c.picks.length ? c.picks.map((x) => `<div class="small">${esc(MV[x.move] || x.move)} ≥${x.size}%: <b>${num(100 * x.chance, 0)}%</b> <span class="muted">vs usual ${num(100 * x.usual, 0)}%</span> · lean ${LBL(x.lean)} · conf ${esc(x.confidence)}</div>`).join("")
       : `<div class="muted small">Not among today's picks.</div>`;
-    const why = (o) => (o && o.why || []).slice(0, 4).map((w) => `<li>${esc(w)}</li>`).join("");
+    const why = (o) => (o && o.why || []).slice(0, 4).map((w) => `<li>${MX.arr(w)}</li>`).join("");
     return `<div class="lv-call">
       <div><div class="mllab">Market Lab</div>${ml}</div>
       <div><div class="mllab">TA ${c.ta ? `· ${LBL(c.ta.dir)}${c.ta.score != null ? ` <span class="muted">score ${c.ta.score}</span>` : ""}` : ""}</div><ul class="lv-why">${why(c.ta)}</ul>

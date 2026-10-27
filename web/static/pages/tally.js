@@ -35,7 +35,7 @@
     el.innerHTML = MX.head("Tally", "What MarketX projected for a session vs what happened. Projections are the ones kept that night; nothing is recomputed with hindsight.") +
       `<div class="card"><div class="row" style="gap:10px;flex-wrap:wrap;align-items:center">
          <button class="btn" id="typrev" ${prev ? "" : "disabled"}>‹ ${prev ? F(prev.day) : ""}</button>
-         <select class="in" id="tyday">${ds.map((x) => `<option value="${x.day}" ${x.day === d.day ? "selected" : ""}>${F(x.day)} · ${x.kind}${x.graded ? "" : " · not graded"}</option>`).join("")}</select>
+         <select class="in ty-pick" id="tyday">${ds.map((x) => `<option value="${x.day}" ${x.day === d.day ? "selected" : ""}>${F(x.day)} · ${x.kind}${x.graded ? "" : " · not graded"}</option>`).join("")}</select>
          <button class="btn" id="tynext" ${next ? "" : "disabled"}>${next ? F(next.day) : ""} ›</button>
          <span class="ty-for">Projected on <b>${F(d.day)}</b> close → for <b>${F(d.for_day)}</b>${d.for_known ? "" : ` <span class="muted small">(expected)</span>`}</span>
          <span class="tag ${d.graded ? "" : "warn"}">${d.graded ? "graded" : d.live ? "session live: so far" : "waiting for the outcome"}</span>

@@ -25,7 +25,7 @@
     const SP = await MX.sparks(rows.map((r) => r.symbol));
     const picks = rows.length ? `<table class="tbl"><thead><tr><th>Stock</th><th>20 days</th><th>Chance ≥1% <span class="muted small">(tick = usual)</span></th><th class="r">Edge</th><th>Lean</th><th>Confidence</th><th>Biggest drivers</th></tr></thead><tbody>${rows.map((r) =>
         `<tr><td><a class="sym" href="#/desk/${encodeURIComponent(r.symbol)}" target="_blank" rel="noopener">${esc(r.symbol)}</a><div class="co">${esc(r.sector || "")}</div></td><td>${MX.spark(SP[r.symbol])}</td><td>${MX.chanceBar(r.chance, r.usual)}</td><td class="r">${MX.chg(100 * (r.chance - r.usual), 0, { pct: false, suffix: " pts" })}</td>
-          <td>${MX.lean(r.lean)}</td><td>${MX.conf(r.confidence)}</td><td class="small">${esc(r.why || "")}</td></tr>`).join("")}</tbody></table>`
+          <td>${MX.lean(r.lean)}</td><td>${MX.conf(r.confidence)}</td><td class="small">${MX.arr(r.why)}</td></tr>`).join("")}</tbody></table>`
       : `<div class="empty-next"><b>No picks yet.</b> ${esc((rd && rd.why) || "")} <span class="muted">Next: run Fetch + run all (after 18:00), or Market Lab → Scorecard → Build tonight's radar.</span></div>`;
     const morning = picks + `<div class="row" style="gap:6px;margin-top:8px"><a class="btn" href="#/market-lab">Full Move Radar →</a><span class="muted small">top 10 by edge · close-to-close ≥1% · click a stock for its Stock Desk</span></div>`;
     // 3 Day

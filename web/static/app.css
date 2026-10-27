@@ -669,3 +669,49 @@ nav a.on { background: var(--accent-soft); color: var(--accent-ink); box-shadow:
 .sk-wrap .skeleton { height: 12px; }
 .empty-next { padding: 14px 16px; border: 1px dashed var(--line-2); border-radius: var(--radius-sm); font-size: 13px; }
 .spark { display: inline-block; width: 84px; vertical-align: middle; }
+
+/* ===== controls v3: one modern system for every button-like control ===== */
+:root { --ctl-h: 34px; --ctl-h-sm: 28px; --ctl-r: 10px; --ring: 0 0 0 3px color-mix(in srgb, var(--accent) 28%, transparent); }
+.btn, a.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  height: var(--ctl-h); padding: 0 14px; border-radius: var(--ctl-r);
+  font: 550 13px/1 var(--font); letter-spacing: -0.005em; white-space: nowrap; text-decoration: none; cursor: pointer;
+  color: var(--ink); background: var(--surface-2); border: 1px solid var(--line-2);
+  box-shadow: 0 1px 0 color-mix(in srgb, #fff 6%, transparent) inset, 0 1px 2px rgba(0,0,0,.06);
+  transition: background .15s, border-color .15s, box-shadow .15s, color .15s, transform .06s;
+}
+.btn:hover:not(:disabled), a.btn:hover { text-decoration: none; border-color: color-mix(in srgb, var(--accent) 55%, var(--line-2));
+  background: color-mix(in srgb, var(--accent) 7%, var(--surface-2)); color: var(--ink); }
+.btn:active:not(:disabled) { transform: translateY(1px); }
+.btn:focus-visible, .seg button:focus-visible, .tabs button:focus-visible, .chip:focus-visible, .gc-chip:focus-visible, .lchip:focus-visible { outline: none; box-shadow: var(--ring); }
+.btn:disabled { opacity: .45; cursor: not-allowed; box-shadow: none; }
+.btn.small { height: var(--ctl-h-sm); padding: 0 11px; font-size: 12.5px; border-radius: 8px; }
+.btn.primary { color: var(--on-accent); border-color: transparent; font-weight: 650;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 88%, #fff 12%), var(--accent));
+  box-shadow: 0 1px 0 rgba(255,255,255,.18) inset, 0 4px 14px -6px color-mix(in srgb, var(--accent) 70%, transparent); }
+.btn.primary:hover:not(:disabled) { color: var(--on-accent); border-color: transparent; filter: brightness(1.06);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 88%, #fff 12%), var(--accent));
+  box-shadow: 0 1px 0 rgba(255,255,255,.18) inset, 0 6px 18px -6px color-mix(in srgb, var(--accent) 80%, transparent); }
+.btn.danger { color: var(--down); background: var(--down-soft); border-color: color-mix(in srgb, var(--down) 45%, transparent); }
+.btn.danger:hover:not(:disabled) { color: var(--down); background: color-mix(in srgb, var(--down) 16%, transparent); border-color: var(--down); }
+.btn.on, .ws-tools .btn.on { color: var(--accent-ink); background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 55%, transparent); }
+.guide-btn { height: var(--ctl-h-sm); padding: 0 12px; font-size: 12.5px; border-radius: 999px; }
+
+/* segmented controls: a pill track with a raised selected item */
+.seg { display: inline-flex; gap: 2px; padding: 3px; border-radius: 11px; border: 1px solid var(--line); background: color-mix(in srgb, var(--surface-2) 70%, transparent); overflow: visible; }
+.seg button, .seg button + button { height: 26px; padding: 0 11px; border: 0; border-radius: 8px; background: transparent;
+  font: 500 12.5px/1 var(--font); color: var(--muted); cursor: pointer; transition: background .15s, color .15s, box-shadow .15s; }
+.seg button:hover { color: var(--ink); background: color-mix(in srgb, var(--ink) 5%, transparent); }
+.seg button.on { color: var(--accent-ink); font-weight: 600; background: var(--surface);
+  box-shadow: 0 1px 2px rgba(0,0,0,.12), 0 0 0 1px color-mix(in srgb, var(--accent) 40%, transparent); }
+
+/* chips that act as buttons */
+.gc-chip, .lchip, button.chip { height: 26px; display: inline-flex; align-items: center; padding: 0 11px; border-radius: 999px; font-size: 12.5px; transition: border-color .15s, color .15s, background .15s; }
+.lv-secst { border-radius: 8px; transition: border-color .15s, background .15s; }
+.lv-secst:hover { background: color-mix(in srgb, var(--accent) 7%, var(--surface-2)); }
+
+/* inputs match button height and radius */
+.in, .search input { height: var(--ctl-h); border-radius: var(--ctl-r); }
+.in:focus, .search input:focus { box-shadow: var(--ring); }
+select.ty-pick { width: auto; min-width: 230px; flex: 0 1 280px; }
+.lv-rep input[type="date"] { min-width: 140px; }

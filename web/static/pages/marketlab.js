@@ -11,7 +11,7 @@
   const sortNodes = (ns) => [...ns].sort((a, b) => ORDER.indexOf(a.node) - ORDER.indexOf(b.node));
 
   // ▲ green (up) · ▼ red (down) · • grey (neutral) wherever these marks appear in text
-  const arr = (t) => esc(t || "").replace(/▲/g, `<span class="up">▲</span>`).replace(/▼/g, `<span class="down">▼</span>`).replace(/•/g, `<span class="muted">•</span>`);
+  const arr = MX.arr;
   const mv = (v, d = 1) => v == null ? "—" : `<span class="${v > 0.003 ? "up" : v < -0.003 ? "down" : "muted"}">${v > 0.003 ? "▲" : v < -0.003 ? "▼" : "•"} ${v > 0 ? "+" : ""}${num(100 * v, d)}%</span>`;
   function mini(nodes) {
     const ns = sortNodes(nodes || []), n = ns.length || 1;

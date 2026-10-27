@@ -116,7 +116,7 @@
         ["value", "Value", (v) => v == null ? "<span class='muted'>—</span>" : num(v, 3)], ["available", "Data", (v) => v ? `<span class="up">✓</span>` : `<span class="down">✗</span>`],
         ["status", "Used in forecast", (v, x) => `<span class="tag ${STATUS[v] ? STATUS[v][1] : ""}" title="${esc(x.why)}">${STATUS[v] ? STATUS[v][0] : esc(v)}</span>`]])}</div>
       <div class="card section"><div class="ct"><h2>Technical (plan of ${esc(d.plan_day || "—")})</h2><span class="aside muted small">shown as a second opinion; not in the chance</span></div>
-        <p>Chart read ${d.ta.dir ? esc(d.ta.dir) : "—"}${d.ta.score != null ? ` · score ${d.ta.score}` : ""}</p><ul class="small">${(d.ta.why || []).map((w) => `<li>${esc(w)}</li>`).join("")}</ul></div>`;
+        <p>Chart read ${d.ta.dir ? esc(d.ta.dir) : "—"}${d.ta.score != null ? ` · score ${d.ta.score}` : ""}</p><ul class="small">${(d.ta.why || []).map((w) => `<li>${MX.arr(w)}</li>`).join("")}</ul></div>`;
     $$(".cvfix", el).forEach((b) => b.addEventListener("click", () => startJob(b.dataset.job)));
   }
 
