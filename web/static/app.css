@@ -715,3 +715,23 @@ nav a.on { background: var(--accent-soft); color: var(--accent-ink); box-shadow:
 .in:focus, .search input:focus { box-shadow: var(--ring); }
 select.ty-pick { width: auto; min-width: 230px; flex: 0 1 280px; }
 .lv-rep input[type="date"] { min-width: 140px; }
+
+/* Tally · simulate */
+.sim-in .sim-row { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-end; }
+.sim-in .sim-row + .sim-row { margin-top: 14px; }
+.sim-in label { display: flex; flex-direction: column; }
+.sim-amt { width: 150px; } .sim-d { width: 150px; } .sim-bk { flex: 1 1 260px; }
+.sim-go { margin-left: auto; display: flex; gap: 8px; }
+.sim-help { margin: 12px 0 0; }
+.seg.dis { opacity: .45; }
+.sim-head { display: flex; justify-content: space-between; gap: 20px; flex-wrap: wrap; align-items: center; border-left: 3px solid var(--line-2); }
+.sim-head.passed { border-left-color: var(--up); background: linear-gradient(90deg, var(--up-soft), transparent 60%); }
+.sim-head.failed { border-left-color: var(--down); background: linear-gradient(90deg, var(--down-soft), transparent 60%); }
+.sim-big { font-family: var(--mono); font-size: 30px; letter-spacing: -0.03em; margin: 4px 0; }
+.sim-v { text-align: right; display: flex; flex-direction: column; gap: 4px; align-items: flex-end; }
+.verdict { display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 999px; font-weight: 700; font-size: 15px; }
+.verdict.pass { color: var(--up); background: var(--up-soft); border: 1px solid color-mix(in srgb, var(--up) 40%, transparent); }
+.verdict.fail { color: var(--down); background: var(--down-soft); border: 1px solid color-mix(in srgb, var(--down) 40%, transparent); }
+.verdict.none { color: var(--muted); background: var(--surface-2); border: 1px solid var(--line); }
+@media (max-width: 760px) { .sim-v { text-align: left; align-items: flex-start; } .sim-go { margin-left: 0; } }
+.tbl .verdict { font-size: 12px; padding: 2px 9px; font-weight: 650; }

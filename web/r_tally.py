@@ -125,3 +125,54 @@ def stock_history(p):
                    pick_hit=sum(1 for r in g if r["pick"] and r["hit"]), pick_graded=sum(1 for r in g if r["pick"]),
                    plans_entered=sum(1 for r in rows if r["r"] is not None), plans_r=round(sum(r["r"] for r in rows if r["r"] is not None), 2))
     return dict(symbol=sym, rows=rows, summary=summary, move=move, size=size, mode=mode)
+
+
+def _sim_params(p):
+    """Query string -> simulation inputs (marketlab.sim validates the values)."""
+    o = {}
+    for k in ("amount", "picks", "top", "hold", "split"):
+        if p.get(k) not in (None, ""):
+            o[k] = p.get(k)
+    for k in ("start", "end"):
+        v = str(p.get(k) or "")
+        if v:
+            if not DAY.match(v):
+                raise UserError(f"{k} must be YYYY-MM-DD")
+            o[k] = v
+    for k in ("reinvest", "costs"):
+        if p.get(k) not in (None, ""):
+            o[k] = str(p.get(k)).lower() in ("1", "true", "yes", "on")
+    b = [s.strip().upper() for s in str(p.get("basket") or "").replace(" ", ",").split(",") if s.strip()]
+    if any(not SYM.match(s) for s in b):
+        raise UserError("basket: use NSE symbols, e.g. TCS, INFY")
+    if b:
+        o["basket"] = b
+    return o
+
+
+@route("GET", "tally/sim")
+def sim(p):
+    """Money simulation: Rs X put into the picks (or a basket) on every saved projection; see marketlab/sim.py."""
+    from marketlab import sim as S
+    try:
+        return S.run(_sim_params(p))
+    except ValueError as e:
+        raise UserError(str(e))
+
+
+@route("GET", "tally/sim/compare")
+def sim_compare(p):
+    """The same money and period, a grid of setups (top 5/10/20 x hold x all/lean-up), or several baskets ('baskets=A,B;C,D')."""
+    from marketlab import sim as S
+    base = _sim_params(p)
+    grid = None
+    if p.get("baskets"):
+        bs = [[s.strip().upper() for s in g.split(",") if s.strip()] for g in str(p.get("baskets")).split(";")]
+        bs = [b for b in bs if b][:4]
+        if any(not SYM.match(s) for b in bs for s in b):
+            raise UserError("baskets: use NSE symbols")
+        grid = [dict(picks="basket", basket=b) for b in bs]
+    try:
+        return S.compare(base, grid)
+    except ValueError as e:
+        raise UserError(str(e))

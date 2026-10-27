@@ -164,13 +164,133 @@
     draw();
   }
 
+  // ---------- Simulate: Rs X put into the picks on every saved projection (marketlab/sim.py) ----------
+  const SIM0 = { amount: 100000, picks: "top", top: "10", hold: "1", split: "equal", reinvest: "on", costs: "on", basket: "", start: "", end: "", baskets: "" };
+  const HOLDL = { intraday: "Intraday", 1: "1 day", 3: "3 days", 5: "5 days" };
+  const PICKL = { top: "Top picks", up: "Lean-up picks", plans: "Plans entered", basket: "Basket" };
+  const setupLabel = (p) => p.picks === "basket" ? `Basket: ${(p.basket || []).join(", ")} · ${HOLDL[p.hold]}` : `${PICKL[p.picks]} · top ${p.top} · ${HOLDL[p.hold]}`;
+  const cssv = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  const VERD = (v) => v === "passed" ? `<span class="verdict pass">✓ Passed</span>` : v === "failed" ? `<span class="verdict fail">✗ Failed</span>` : `<span class="verdict none">• No trades</span>`;
+  const simQs = (s) => qs({ amount: s.amount, picks: s.picks, top: s.top, hold: s.hold, split: s.split, reinvest: s.reinvest === "on" ? 1 : 0,
+    costs: s.costs === "on" ? 1 : 0, basket: s.picks === "basket" ? s.basket : undefined, start: s.start || undefined, end: s.end || undefined });
+
+  async function simView(el) {
+    const s = st.sim = Object.assign({}, SIM0, st.sim || {});
+    let days = [];
+    try { days = (await api("tally/days")).items.map((x) => x.day).sort(); } catch (e) { /* the run reports it */ }
+    const sseg = (k, opts, dis) => `<div class="seg${dis ? " dis" : ""}" data-sk="${k}">${opts.map(([v, l]) => `<button data-v="${v}" class="${String(s[k]) === String(v) ? "on" : ""}" ${dis ? "disabled" : ""}>${esc(l)}</button>`).join("")}</div>`;
+    const dsel = (id, val, first) => `<select class="in sim-d" id="${id}"><option value="">${first}</option>${days.map((d) => `<option value="${d}" ${d === val ? "selected" : ""}>${F(d)}</option>`).join("")}</select>`;
+    el.innerHTML = `<div class="card sim-in">
+        <div class="sim-row">
+          <label><span class="mllab">Amount (₹)</span><input class="in sim-amt" id="smamt" type="number" min="1000" step="1000" value="${esc(s.amount)}"></label>
+          <label><span class="mllab">From</span>${dsel("smfrom", s.start, "first saved")}</label>
+          <label><span class="mllab">To</span>${dsel("smto", s.end, "latest")}</label>
+          <div><div class="mllab">Stocks</div>${sseg("picks", Object.entries(PICKL))}</div>
+          ${s.picks === "basket" ? `<label class="sim-bk"><span class="mllab">Basket (comma separated)</span><input class="in" id="smbk" placeholder="TCS, INFY, HDFCBANK" value="${esc(s.basket)}"></label>`
+            : `<div><div class="mllab">How many</div>${sseg("top", [["5", "Top 5"], ["10", "Top 10"], ["20", "Top 20"]])}</div>`}
+        </div>
+        <div class="sim-row">
+          <div><div class="mllab">Hold</div>${sseg("hold", [["intraday", "Intraday"], ["1", "1 day"], ["3", "3 days"], ["5", "5 days"]], s.picks === "plans")}</div>
+          <div><div class="mllab">Split</div>${sseg("split", [["equal", "Equal ₹"], ["edge", "More on higher edge"]], s.picks === "basket" || s.picks === "plans")}</div>
+          <div><div class="mllab">Reinvest gains</div>${sseg("reinvest", [["on", "On"], ["off", "Off"]])}</div>
+          <div><div class="mllab">Costs</div>${sseg("costs", [["on", "On"], ["off", "Off"]])}</div>
+          <div class="sim-go"><button class="btn primary" id="smrun">Run simulation</button><button class="btn" id="smcmp">Compare setups</button></div>
+        </div>
+        <p class="muted small sim-help">${s.picks === "plans" ? "Plans entered: each pick's intraday plan, at its own entry and exit (long or short). Hold is intraday." :
+          s.hold === "intraday" ? "Buys at the next session's open, sells at its close." : `Buys at the projection day's close, sells at the close ${s.hold} session${s.hold === "1" ? "" : "s"} later; the next buy uses that day's projection.`}
+          Only the projections kept that night are used; nothing is recomputed with hindsight.</p>
+      </div><div id="smout" class="section"></div><div id="smcmpout" class="section"></div>`;
+    const out = $("#smout", el), cmpOut = $("#smcmpout", el);
+    const read = () => { s.amount = Number($("#smamt", el).value) || 100000; s.start = $("#smfrom", el).value; s.end = $("#smto", el).value;
+      const b = $("#smbk", el); if (b) s.basket = b.value; save(); };
+    $$(".seg[data-sk]", el).forEach((g) => g.addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b || b.disabled) return;
+      read(); s[g.dataset.sk] = b.dataset.v; save(); simView(el); }));
+    $("#smrun", el).addEventListener("click", () => { read(); runSim(out); });
+    $("#smcmp", el).addEventListener("click", () => { read(); compareSim(el, cmpOut); });
+    if (s.picks !== "basket" || s.basket) runSim(out);
+  }
+
+  async function runSim(out) {
+    const s = st.sim;
+    out.innerHTML = spinner("Running the simulation …");
+    let d;
+    try { d = await api(`tally/sim?${simQs(s)}`); } catch (e) { out.innerHTML = note(esc(e.message), "warn"); return; }
+    if (!d.ready) { out.innerHTML = note(esc(d.why), "info"); return; }
+    const m = d.summary, M = (v, o) => MX.money(v, o || {});
+    out.innerHTML = `<div class="card sim-head ${m.verdict}">
+        <div><div class="muted small">${esc(setupLabel(d.params))} · ${F(m.start)} → ${F(m.end)} · ${m.rounds} round${m.rounds === 1 ? "" : "s"}</div>
+          <div class="sim-big">${M(m.amount)} <span class="muted">→</span> <b>${M(m.final)}</b></div>
+          <div>${MX.chg(m.ret, 2, { scale: 100 })} <span class="muted">·</span> ${M(m.pnl, { sign: true })} <span class="muted small">after ${M(m.costs)} costs</span></div></div>
+        <div class="sim-v">${VERD(m.verdict)}<div class="muted small">${esc(m.verdict_why)}</div>
+          <div class="small">Nifty same days: ${m.nifty_final == null ? "—" : `${M(m.nifty_final)} ${MX.chg(m.nifty_ret, 2, { scale: 100 })}`}</div></div></div>
+      ${m.small_sample ? note(`Small sample: ${m.traded} traded round${m.traded === 1 ? "" : "s"}. One good or bad week can swing this; trust it more after ${60} or more.`, "warn") : ""}
+      ${d.waiting ? `<p class="muted small">Projection of ${F(d.waiting)} is still open (its sell day has no price yet).</p>` : ""}
+      <div class="grid g4 section">
+        <div class="card kpi"><div class="label">Rounds passed</div><div class="value">${m.passed_rounds}/${m.traded}</div><div class="muted small">made money after costs</div></div>
+        <div class="card kpi"><div class="label">Worst drop from a peak</div><div class="value down">${M(m.max_dd_rs)}</div><div class="muted small">${MX.chg(m.max_dd, 1, { scale: 100 })}</div></div>
+        <div class="card kpi"><div class="label">Best / worst round</div><div class="value" style="font-size:18px">${m.best ? `<span class="up">${M(m.best.pnl, { sign: true })}</span>` : "—"} <span class="muted">/</span> ${m.worst ? `<span class="down">${M(m.worst.pnl, { sign: true })}</span>` : "—"}</div>
+          <div class="muted small">${m.best ? F(m.best.day) : ""}${m.worst ? ` · ${F(m.worst.day)}` : ""}</div></div>
+        <div class="card kpi"><div class="label">Longest losing run</div><div class="value">${m.losing_streak}</div><div class="muted small">rounds in a row without profit</div></div></div>
+      <div class="card section"><div class="ct"><h2>Money vs Nifty</h2><span class="aside muted small">value after each round · Nifty bought and held on the same days</span></div><div id="smch"></div></div>
+      <div class="card flush section"><div class="ct" style="padding:14px 16px 0"><h2>Round by round</h2></div><div id="smdays"></div></div>
+      <div class="card flush section"><div class="ct" style="padding:14px 16px 0"><h2>Who made the money</h2></div><div id="smstk"></div></div>`;
+    MXCharts.lineChart($("#smch", out), { x: d.curve.map((p) => p.date), height: 240, ysuffix: "", hlines: [m.amount], series: [
+      { name: "Your ₹", y: d.curve.map((p) => p.value), area: true, color: cssv(m.final >= m.amount ? "--up" : "--down"), width: 2.2 },
+      { name: "Nifty", y: d.curve.map((p) => p.nifty), dash: true, color: cssv("--muted") }] });
+    const legs = (r) => r.stocks.length ? r.stocks.map((x) => `<a class="sym" href="#/desk/${encodeURIComponent(x.symbol)}" target="_blank" rel="noopener">${esc(x.symbol)}</a>${x.side === "short" ? "↓" : ""} ${MX.chg(x.ret, 1, { scale: 100 })}`).join(" · ")
+      + (r.skipped.length ? ` <span class="muted small">(no price: ${esc(r.skipped.join(", "))})</span>` : "") : `<span class="muted">no stock qualified · cash</span>`;
+    $("#smdays", out).appendChild(MX.dataTable(d.rounds.slice().reverse(), [
+      ["day", "Projected on", (v, r) => `<a href="#/tally/${encodeURIComponent(v)}">${F(v)}</a><div class="muted small">${r.buy === r.sell ? `intraday ${F(r.sell)}` : `sold ${F(r.sell)}`}</div>`],
+      ["stocks", "Stocks", (v, r) => `<span class="small">${legs(r)}</span>`], ["invested", "Invested", (v) => v ? M(v) : "—", true],
+      ["ret", "Return", (v) => v == null ? "—" : MX.chg(v, 2, { scale: 100 }), true], ["pnl", "P&L", (v, r) => r.ret == null ? "—" : `<b class="${v > 0 ? "up" : v < 0 ? "down" : ""}">${M(v, { sign: true })}</b>`, true],
+      ["nifty_ret", "Nifty", (v) => v == null ? "—" : MX.chg(v, 2, { scale: 100 }), true], ["passed", "Passed?", (v) => OK(v)], ["value", "Value after", (v) => M(v), true]],
+      { csv: "simulation_rounds", per: 60, rowClass: (r) => r.passed == null ? "" : r.passed ? "row-hit" : "row-miss" }));
+    $("#smstk", out).appendChild(MX.dataTable(d.stocks, [
+      ["symbol", "Stock", (v) => `<a class="sym" href="#/desk/${encodeURIComponent(v)}" target="_blank" rel="noopener">${esc(v)}</a>`], ["rounds", "Rounds", "int"],
+      ["wins", "Made money", (v, r) => `${v}/${r.rounds}`], ["pnl", "P&L", (v) => `<b class="${v > 0 ? "up" : v < 0 ? "down" : ""}">${M(v, { sign: true })}</b>`, true]],
+      { csv: "simulation_stocks", per: 30, rowClass: (r) => r.pnl > 0 ? "row-hit" : r.pnl < 0 ? "row-miss" : "" }));
+  }
+
+  async function compareSim(el, host) {
+    const s = st.sim;
+    host.innerHTML = `<div class="card"><div class="ct"><h2>Compare setups</h2><span class="aside muted small">same amount, period, split, reinvest and costs as above</span></div>
+        <div class="row" style="gap:8px;flex-wrap:wrap;align-items:flex-end">
+          <label style="flex:1 1 360px"><span class="mllab">Or compare baskets: separate baskets with ;</span><input class="in" id="smbks" placeholder="TCS, INFY ; HDFCBANK, ICICIBANK ; RELIANCE" value="${esc(s.baskets)}"></label>
+          <button class="btn" id="smgrid">Picks grid</button><button class="btn" id="smbkgo">Compare baskets</button></div>
+        <div id="smct" class="section"></div></div>`;
+    const go = async (baskets) => {
+      const t = $("#smct", host); t.innerHTML = spinner(baskets ? "Running the baskets …" : "Running 24 setups …");
+      let d;
+      try { d = await api(`tally/sim/compare?${simQs(s)}&${qs({ baskets: baskets || undefined })}`); } catch (e) { t.innerHTML = note(esc(e.message), "warn"); return; }
+      if (!d.ready) { t.innerHTML = note(esc(d.why), "info"); return; }
+      const best = d.rows.find((r) => r.traded);
+      t.innerHTML = "";
+      t.appendChild(MX.dataTable(d.rows.map((r, i) => ({ ...r, i, label: setupLabel(r.params) })), [
+        ["label", "Setup", (v, r) => `${best && r.i === d.rows.indexOf(best) ? `<span class="tag c-high">best</span> ` : ""}${esc(v)}`],
+        ["final", "Final ₹", (v) => `<b>${MX.money(v)}</b>`, true], ["ret", "Return", (v) => MX.chg(v, 2, { scale: 100 }), true],
+        ["nifty_ret", "Nifty", (v) => v == null ? "—" : MX.chg(v, 2, { scale: 100 }), true], ["passed_rounds", "Rounds passed", (v, r) => `${v}/${r.traded}`],
+        ["max_dd", "Worst drop", (v) => MX.chg(v, 1, { scale: 100 }), true], ["verdict", "Verdict", (v) => VERD(v)],
+        ["i", "", (v) => `<button class="btn small" data-open="${v}">Open</button>`]],
+        { per: 30, rowClass: (r) => r.verdict === "passed" ? "row-hit" : r.verdict === "failed" ? "row-miss" : "" }));
+      t.onclick = (e) => { const b = e.target.closest("[data-open]"); if (!b) return;
+        const p = d.rows[Number(b.dataset.open)].params;
+        Object.assign(s, { picks: p.picks, top: String(p.top), hold: String(p.hold), basket: (p.basket || []).join(", ") }); save();
+        simView(el).then(() => el.scrollIntoView({ behavior: "smooth" })); };
+    };
+    $("#smgrid", host).addEventListener("click", () => go());
+    $("#smbkgo", host).addEventListener("click", () => { s.baskets = $("#smbks", host).value; save(); go(s.baskets); });
+    go();
+    host.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
   async function page(el, arg, fromTab) {
     if (arg && !fromTab) st.view = "day";                       // a link to a day (#/tally/DAY) opens the Day tab
-    el.innerHTML = `<div class="tabs" id="tyv" style="margin-top:0">${[["day", "Day"], ["compare", "Compare days"], ["stock", "Stock history"]].map(([k, l]) => `<button data-v="${k}" class="${(st.view || "day") === k ? "on" : ""}">${l}</button>`).join("")}</div><div id="tyvb"></div>`;
+    el.innerHTML = `<div class="tabs" id="tyv" style="margin-top:0">${[["day", "Day"], ["compare", "Compare days"], ["stock", "Stock history"], ["sim", "Simulate ₹"]].map(([k, l]) => `<button data-v="${k}" class="${(st.view || "day") === k ? "on" : ""}">${l}</button>`).join("")}</div><div id="tyvb"></div>`;
     const body = el.querySelector("#tyvb");
     el.querySelector("#tyv").addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; st.view = b.dataset.v; save(); page(el, arg, true); });
     const v = st.view || "day";
     if (v === "compare") { body.innerHTML = MX.head("Tally · compare days", "The same top numbers as the Day tab, for several nights side by side."); const x = document.createElement("div"); body.appendChild(x); return compareView(x); }
+    if (v === "sim") { body.innerHTML = MX.head("Tally · simulate", "If you had put money into MarketX's picks on every saved night, what would it be worth now? Long only; real open/close prices; costs included."); const x = document.createElement("div"); body.appendChild(x); return simView(x); }
     if (v === "stock") { body.innerHTML = MX.head("Tally · stock history", "One stock across every graded night."); const x = document.createElement("div"); body.appendChild(x); return stockView(x); }
     return dayView(body, arg);
   }
