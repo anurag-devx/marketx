@@ -312,7 +312,7 @@
       c.addEventListener("mouseenter", () => { const rr = svg.getBoundingClientRect(); tip.innerHTML = `<b>${String(p.label || "").replace(/[<>&]/g, "")}</b> · ${fmt(p.x, 2)} · ${fmt(p.y, 2)}${p.out ? " · outlier" : ""}`;
         tip.hidden = false; tip.style.left = `${Math.min(rr.width - 120, Math.max(120, (X(p.x) / W) * rr.width))}px`; tip.style.top = `${(Y(p.y) / H) * rr.height - 34}px`; });
       c.addEventListener("mouseleave", () => (tip.hidden = true));
-      if (p.sym) { c.style.cursor = "pointer"; c.addEventListener("click", () => (location.hash = `#/stock/${encodeURIComponent(p.sym)}`)); }
+      if (p.sym) { c.style.cursor = "pointer"; c.addEventListener("click", () => window.open(`#/desk/${encodeURIComponent(p.sym)}`, "_blank")); }
     });
     const lg = document.createElement("div"); lg.className = "legend";
     lg.innerHTML = `<span><i style="background:${css("--accent")}"></i>${n} points</span><span><i style="background:${css("--down")}"></i>outliers (far from the trend line)</span><span>dashed line = trend</span>`;
@@ -351,5 +351,51 @@
     if (spec.type === "barline") return barLine(host, spec.x, spec.bars, spec.line, spec);
   }
 
-  window.MXCharts = { sparkline, priceChart, barLine, lineChart, barsChart, hbar, scatter, histogram, draw };
+
+  /* forecastCandles: recent candles, then the forecast as hollow candles over a shaded 10-90% range of the sampled closes,
+     with what actually happened drawn as solid candles on the same slots. spec: {history, after, forecast, band, future, height} */
+  function forecastCandles(host, spec) {
+    host.innerHTML = ""; host.classList.add("chart");
+    const Hs = spec.history, A = spec.after || { t: [], o: [], h: [], l: [], c: [] }, F = spec.forecast, B = spec.band;
+    const nh = Hs.t.length, nf = F.c.length, n = nh + nf;
+    if (!nh) { host.innerHTML = '<div class="empty">No prices.</div>'; return; }
+    const W = host.clientWidth || 900, H = spec.height || 340, padL = 8, padR = 62, padT = 14, axisH = 22, ph = H - padT - axisH;
+    const vals = [...Hs.l, ...Hs.h, ...F.l, ...F.h, ...A.l, ...A.h, ...(B || []).flat()].filter((v) => v != null && !isNaN(v));
+    let lo = Math.min(...vals), hi = Math.max(...vals); const pad = (hi - lo) * 0.06 || 1; lo -= pad; hi += pad;
+    const x = (i) => padL + ((i + 0.5) / n) * (W - padL - padR), y = (v) => padT + (1 - (v - lo) / (hi - lo)) * ph;
+    const bw = Math.max(1.5, Math.min(12, ((W - padL - padR) / n) * 0.62));
+    const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, height: H }); host.appendChild(svg);
+    const up = css("--up"), down = css("--down"), acc = css("--accent");
+    for (const t of niceTicks(lo, hi, 5)) { el("line", { x1: padL, x2: W - padR, y1: y(t), y2: y(t), stroke: css("--line") }, svg);
+      const tx = el("text", { x: W - padR + 8, y: y(t) + 4 }, svg); tx.textContent = fmt(t, t >= 1000 ? 0 : 2); }
+    const xa = x(nh - 0.5);
+    el("rect", { x: xa, y: padT, width: W - padR - xa, height: ph, fill: acc, "fill-opacity": 0.04 }, svg);
+    el("line", { x1: xa, x2: xa, y1: padT, y2: padT + ph, stroke: css("--faint"), "stroke-dasharray": "4 3" }, svg);
+    const lab = el("text", { x: xa + 6, y: padT + 11 }, svg); lab.textContent = "forecast →";
+    const candle = (i, o, h, l, c, o2) => { const col = o2.color || (c >= o ? up : down), g = el("g", {}, svg);
+      el("line", { x1: x(i), x2: x(i), y1: y(h), y2: y(l), stroke: col, "stroke-width": 1, "stroke-dasharray": o2.dash ? "2 2" : "" }, g);
+      const top = y(Math.max(o, c)), ht = Math.max(1, Math.abs(y(o) - y(c))), w = bw * (o2.scale || 1);
+      el("rect", { x: x(i) - w / 2, y: top, width: w, height: ht, rx: 1.5, fill: o2.hollow ? "none" : col, stroke: col, "stroke-width": o2.hollow ? 1.4 : 0, "fill-opacity": o2.alpha ?? 1 }, g); };
+    for (let i = 0; i < nh; i++) candle(i, Hs.o[i], Hs.h[i], Hs.l[i], Hs.c[i], { alpha: 0.9 });
+    if (B && B.length) {
+      const c0 = Hs.c[nh - 1], top = [[x(nh - 1), y(c0)], ...B.map((b, k) => [x(nh + k), y(b[1])])], bot = [...B.map((b, k) => [x(nh + k), y(b[0])])].reverse();
+      el("polygon", { points: [...top, ...bot, [x(nh - 1), y(c0)]].map((p) => p.join(",")).join(" "), fill: acc, "fill-opacity": 0.16, stroke: acc, "stroke-opacity": 0.35, "stroke-width": 1 }, svg);
+    }
+    for (let k = 0; k < nf; k++) candle(nh + k, F.o[k], F.h[k], F.l[k], F.c[k], { hollow: true, color: acc, dash: true });
+    el("polyline", { points: [[x(nh - 1), y(Hs.c[nh - 1])], ...F.c.map((v, k) => [x(nh + k), y(v)])].map((p) => p.join(",")).join(" "), fill: "none", stroke: acc, "stroke-width": 1.6, "stroke-dasharray": "5 3" }, svg);
+    for (let k = 0; k < A.t.length && k < nf; k++) candle(nh + k, A.o[k], A.h[k], A.l[k], A.c[k], { scale: 0.55 });
+    const labels = [...Hs.t, ...(spec.future || F.c.map((_, k) => `+${k + 1}`))];
+    const short = (t) => String(t).length > 10 ? String(t).slice(11, 16) || String(t).slice(5, 10) : String(t).startsWith("+") ? t : xlabel(t, 60);
+    const step = Math.max(1, Math.floor(n / 8));
+    for (let i = 0; i < n; i += step) { const tx = el("text", { x: x(i), y: H - 6, "text-anchor": "middle" }, svg); tx.textContent = short(labels[i]); }
+    hover(host, svg, W, H, n, x, (i) => {
+      if (i < nh) return `${labels[i]} · O ${fmt(Hs.o[i])} H ${fmt(Hs.h[i])} L ${fmt(Hs.l[i])} C <b>${fmt(Hs.c[i])}</b>`;
+      const k = i - nh, a = k < A.t.length ? ` · actual <b>${fmt(A.c[k])}</b>` : " · actual not known yet";
+      return `${labels[i]} · forecast <b>${fmt(F.c[k])}</b>${B ? ` (range ${fmt(B[k][0])}–${fmt(B[k][1])})` : ""}${a}`; }, padT, padT + ph);
+    const lg = document.createElement("div"); lg.className = "legend";
+    lg.innerHTML = `<span><i style="background:${up}"></i>History</span><span><i style="background:${acc}"></i>Kronos forecast (mean candle)</span>` +
+      (B ? `<span><i style="background:${acc};opacity:.35"></i>10–90% range of sampled paths</span>` : "") + `<span><i style="background:${down}"></i>What happened (narrow candles)</span>`;
+    host.appendChild(lg);
+  }
+  window.MXCharts = { sparkline, priceChart, barLine, lineChart, barsChart, hbar, scatter, histogram, draw, forecastCandles };
 })();

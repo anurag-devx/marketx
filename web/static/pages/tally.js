@@ -167,7 +167,7 @@
   // ---------- Simulate: Rs X put into the picks on every saved projection (marketlab/sim.py) ----------
   const SIM0 = { amount: 100000, picks: "top", top: "10", hold: "1", split: "equal", reinvest: "on", costs: "on", basket: "", start: "", end: "", baskets: "" };
   const HOLDL = { intraday: "Intraday", 1: "1 day", 3: "3 days", 5: "5 days" };
-  const PICKL = { top: "Top picks", up: "Lean-up picks", plans: "Plans entered", basket: "Basket" };
+  const PICKL = { top: "Top picks", up: "Lean-up picks", plans: "Plans entered", kronos: "Kronos picks", basket: "Basket" };
   const setupLabel = (p) => p.picks === "basket" ? `Basket: ${(p.basket || []).join(", ")} · ${HOLDL[p.hold]}` : `${PICKL[p.picks]} · top ${p.top} · ${HOLDL[p.hold]}`;
   const cssv = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
   const VERD = (v) => v === "passed" ? `<span class="verdict pass">✓ Passed</span>` : v === "failed" ? `<span class="verdict fail">✗ Failed</span>` : `<span class="verdict none">• No trades</span>`;
@@ -196,7 +196,7 @@
           <div><div class="mllab">Costs</div>${sseg("costs", [["on", "On"], ["off", "Off"]])}</div>
           <div class="sim-go"><button class="btn primary" id="smrun">Run simulation</button><button class="btn" id="smcmp">Compare setups</button></div>
         </div>
-        <p class="muted small sim-help">${s.picks === "plans" ? "Plans entered: each pick's intraday plan, at its own entry and exit (long or short). Hold is intraday." :
+        <p class="muted small sim-help">${s.picks === "kronos" ? "Kronos picks: on each day Kronos forecast (daily), the stocks it gives the highest chance of going up (only those above 50%). Experimental; see Market Lab → Kronos. " : ""}${s.picks === "plans" ? "Plans entered: each pick's intraday plan, at its own entry and exit (long or short). Hold is intraday." :
           s.hold === "intraday" ? "Buys at the next session's open, sells at its close." : `Buys at the projection day's close, sells at the close ${s.hold} session${s.hold === "1" ? "" : "s"} later; the next buy uses that day's projection.`}
           Only the projections kept that night are used; nothing is recomputed with hindsight.</p>
       </div><div id="smout" class="section"></div><div id="smcmpout" class="section"></div>`;
@@ -227,7 +227,7 @@
       ${d.waiting ? `<p class="muted small">Projection of ${F(d.waiting)} is still open (its sell day has no price yet).</p>` : ""}
       <div class="grid g4 section">
         <div class="card kpi"><div class="label">Rounds passed</div><div class="value">${m.passed_rounds}/${m.traded}</div><div class="muted small">made money after costs</div></div>
-        <div class="card kpi"><div class="label">Worst drop from a peak</div><div class="value down">${M(m.max_dd_rs)}</div><div class="muted small">${MX.chg(m.max_dd, 1, { scale: 100 })}</div></div>
+        <div class="card kpi"><div class="label">Worst drop from a peak</div><div class="value ${m.max_dd_rs < 0 ? "down" : ""}">${M(m.max_dd_rs)}</div><div class="muted small">${MX.chg(m.max_dd, 1, { scale: 100 })}</div></div>
         <div class="card kpi"><div class="label">Best / worst round</div><div class="value" style="font-size:18px">${m.best ? `<span class="up">${M(m.best.pnl, { sign: true })}</span>` : "—"} <span class="muted">/</span> ${m.worst ? `<span class="down">${M(m.worst.pnl, { sign: true })}</span>` : "—"}</div>
           <div class="muted small">${m.best ? F(m.best.day) : ""}${m.worst ? ` · ${F(m.worst.day)}` : ""}</div></div>
         <div class="card kpi"><div class="label">Longest losing run</div><div class="value">${m.losing_streak}</div><div class="muted small">rounds in a row without profit</div></div></div>
@@ -253,13 +253,13 @@
 
   async function compareSim(el, host) {
     const s = st.sim;
-    host.innerHTML = `<div class="card"><div class="ct"><h2>Compare setups</h2><span class="aside muted small">same amount, period, split, reinvest and costs as above</span></div>
+    host.innerHTML = `<div class="card"><div class="ct"><h2>Compare setups</h2><span class="aside muted small">same amount, period, split, reinvest and costs as above · Market Lab picks and Kronos picks</span></div>
         <div class="row" style="gap:8px;flex-wrap:wrap;align-items:flex-end">
           <label style="flex:1 1 360px"><span class="mllab">Or compare baskets: separate baskets with ;</span><input class="in" id="smbks" placeholder="TCS, INFY ; HDFCBANK, ICICIBANK ; RELIANCE" value="${esc(s.baskets)}"></label>
           <button class="btn" id="smgrid">Picks grid</button><button class="btn" id="smbkgo">Compare baskets</button></div>
         <div id="smct" class="section"></div></div>`;
     const go = async (baskets) => {
-      const t = $("#smct", host); t.innerHTML = spinner(baskets ? "Running the baskets …" : "Running 24 setups …");
+      const t = $("#smct", host); t.innerHTML = spinner(baskets ? "Running the baskets …" : "Running every setup …");
       let d;
       try { d = await api(`tally/sim/compare?${simQs(s)}&${qs({ baskets: baskets || undefined })}`); } catch (e) { t.innerHTML = note(esc(e.message), "warn"); return; }
       if (!d.ready) { t.innerHTML = note(esc(d.why), "info"); return; }

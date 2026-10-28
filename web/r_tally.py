@@ -130,6 +130,10 @@ def stock_history(p):
 def _sim_params(p):
     """Query string -> simulation inputs (marketlab.sim validates the values)."""
     o = {}
+    if p.get("kset"):
+        if not re.match(r"^[a-z]+\|1d\|\d+\|[\d.]+\|[\d.]+$", str(p.get("kset"))):
+            raise UserError("kset: a Kronos daily setting")
+        o["kset"] = str(p.get("kset"))
     for k in ("amount", "picks", "top", "hold", "split"):
         if p.get(k) not in (None, ""):
             o[k] = p.get(k)

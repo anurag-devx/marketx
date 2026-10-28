@@ -245,8 +245,8 @@
     $("#pfu", host).addEventListener("click", () => profileView(host, symbol, dayStr, +$("#pft", host).value, +$("#pfb", host).value));
   }
 
-  // Market Lab = Move Radar + Scorecard. The full classic tab set (Stock analysis, Review, Debate) lives in Retro.
-  const TABS_MAIN = [["radar", "Move Radar"], ["score", "Scorecard"]];
+  // Market Lab = Move Radar + Scorecard + Kronos (experimental, side by side only). The full classic tab set (Stock analysis, Review, Debate) lives in Retro.
+  const TABS_MAIN = [["radar", "Move Radar"], ["score", "Scorecard"], ["kronos", "Kronos"]];
   const TABS_ALL = [["radar", "Move Radar"], ["stock", "Stock analysis"], ["review", "Review"], ["score", "Scorecard"], ["debate", "Debate (classic)"]];
   async function mlRender(el, arg, retro) {
       const TABS = retro ? TABS_ALL : TABS_MAIN;
@@ -280,6 +280,7 @@
           else if (st.tab === "stock") await stockTab(b);
           else if (st.tab === "score") await scoreTab(b);
           else if (st.tab === "review") await reviewTab(b);
+          else if (st.tab === "kronos") await MX.kronosTab(b);
           else b.innerHTML = note("The original bull-and-bear debate, with statistical tests on every claim. It opens on its own page.") + `<div class="row section"><a class="btn primary" href="#/debate">Open the debate</a></div>`;
         } catch (e) { if (b.isConnected) b.innerHTML = note(esc(e.message), "warn"); } };
       $("#mltabs", el).addEventListener("click", (e) => { const x = e.target.closest("button"); if (x) go(x.dataset.t); });
@@ -287,5 +288,6 @@
   }
   MX.page("market-lab", { title: "Market Lab", reloadOnJob: true, render: (el, arg) => mlRender(el, arg, false) });
   MX.page("market-lab-retro", { title: "Market Lab classic", reloadOnJob: true, render: (el, arg) => mlRender(el, arg, true) });
+  MX.mlGo = (t) => { st.tab = t; save(); };
   MX.mlMap = drawMap; MX.mlMini = mini; MX.mlNodePanel = nodePanel;
 })();

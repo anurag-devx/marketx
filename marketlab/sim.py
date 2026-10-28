@@ -6,21 +6,23 @@ so money is never in two rounds at once.
   hold 'intraday': buy at the next session's open, sell at its close (intraday costs)
   hold N (1/3/5):  buy at the projection day's close, sell at the close N sessions later (delivery costs)
 Stocks: 'top' = top N picks by edge (close-to-close >=1% radar), 'up' = those that leaned up, 'plans' = the intraday
-plans that were entered (entry and exit from plans_grade), 'basket' = the same list of stocks every round.
+plans that were entered (entry and exit from plans_grade), 'basket' = the same list of stocks every round,
+'kronos' = top N by Kronos's chance of going up (daily forecasts in results/kronos; only stocks it leans up on), on the
+days Kronos forecast (one setting: the most used daily one unless kset is given).
 A round passes when it made money after costs. The run passes when it ended above the amount and beat Nifty
 (bought and held over the same days). Long only, except 'plans', which follows each plan's side."""
 import numpy as np, pandas as pd
 from core import config as C
 from . import review as RV, tally as T
 
-PICKS = ("top", "up", "plans", "basket")
+PICKS = ("top", "up", "plans", "basket", "kronos")
 HOLDS = ("intraday", 1, 3, 5)
 TOPS = (5, 10, 20)
 MIN_ROUNDS = 60                     # fewer traded rounds than this -> 'small sample' warning
 
 
 def defaults():
-    return dict(amount=100000.0, start=None, end=None, picks="top", top=10, hold=1, split="equal", reinvest=True, costs=True, basket=[])
+    return dict(amount=100000.0, start=None, end=None, picks="top", top=10, hold=1, split="equal", reinvest=True, costs=True, basket=[], kset=None)
 
 
 def _cost(buy, value, delivery):
@@ -48,7 +50,24 @@ class Data:
         except Exception:
             nf = pd.Series(dtype=float)
         self.nifty = nf
-        self._calls, self._plans = {}, {}
+        self._calls, self._plans, self._kronos = {}, {}, None
+
+    def kronos(self, kset=None):
+        """{day: forecasts} for one daily Kronos setting (model|1d|h|temp|top_p), plus its sorted days."""
+        if self._kronos is None or self._kronos[0] != kset:
+            try:
+                from kronos_lab import forecast as F
+                k = F.load()
+                k = k[k.freq == "1d"]
+                k["as_of"] = pd.to_datetime(k.as_of)
+                k["key"] = k.model + "|1d|" + k.h.astype(int).astype(str) + "|" + k.temp.astype(float).map("{:g}".format) + "|" + k.top_p.astype(float).map("{:g}".format)
+                key = kset if kset in set(k.key) else (k.key.value_counts().index[0] if len(k) else None)
+                k = k[k.key == key]
+                by = {str(d.date()): g.sort_values(["p_up", "pred_ret_pct"], ascending=False) for d, g in k.groupby("as_of")}
+            except Exception:
+                key, by = None, {}
+            self._kronos = (kset, key, by)
+        return self._kronos[1], self._kronos[2]
 
     def calls(self, day):
         if day not in self._calls:
@@ -116,6 +135,15 @@ def _choose(D, day, o):
     """[(symbol, weight, side)] for the round projected on `day`; weights sum to 1."""
     if o["picks"] == "basket":
         return [(s, 1 / len(o["basket"]), 1) for s in o["basket"]]
+    if o["picks"] == "kronos":
+        _, by = D.kronos(o.get("kset"))
+        k = by.get(day)
+        k = k[k.p_up > 0.5].head(o["top"]) if k is not None else []
+        if not len(k):
+            return []
+        w = (k.p_up.astype(float) - 0.5).clip(lower=0.01).values if o["split"] == "edge" else np.ones(len(k))
+        w = w / w.sum()
+        return [(s, float(x), 1) for s, x in zip(k.symbol, w)]
     c = D.calls(day)
     c = c[c["pick"].astype(bool)].head(o["top"]) if "pick" in c else c.head(0)
     if o["picks"] == "up":
@@ -137,7 +165,8 @@ def _choose(D, day, o):
 def run(p=None, data=None):
     o = _norm(p)
     D = data or Data()
-    days = [d for d in D.days if (not o["start"] or d >= o["start"]) and (not o["end"] or d <= o["end"])]
+    pool = sorted(D.kronos(o.get("kset"))[1]) if o["picks"] == "kronos" else D.days
+    days = [d for d in pool if (not o["start"] or d >= o["start"]) and (not o["end"] or d <= o["end"])]
     if not days:
         return dict(ready=False, why="No saved projections in that period.", params=o)
     intraday = o["hold"] == "intraday"
@@ -188,6 +217,8 @@ def run(p=None, data=None):
         i = next((k for k in range(i + 1, len(days)) if days[k] >= nxt), len(days))
     if not rounds:
         return dict(ready=False, why=f"The first projection ({days[0]}) has no finished session after it yet.", params=o)
+    if o["picks"] == "kronos":
+        o = dict(o, kset=D.kronos(o.get("kset"))[0])
     return dict(ready=True, params=o, rounds=rounds, waiting=waiting, summary=_summary(D, o, rounds),
                 stocks=sorted(({**a, "pnl": round(a["pnl"], 2)} for a in contrib.values()), key=lambda a: -a["pnl"]),
                 curve=_curve(D, o, rounds))
@@ -238,7 +269,7 @@ def compare(p=None, grid=None):
     """Run a grid of setups on the same data; rows ranked by final value."""
     base = _norm(p)
     D = Data()
-    grid = grid or [dict(top=n, hold=h, picks=f) for f in ("top", "up") for n in TOPS for h in HOLDS]
+    grid = grid or [dict(top=n, hold=h, picks=f) for f in ("top", "up", "kronos") for n in TOPS for h in HOLDS]
     rows = []
     for g in grid:
         q = {**base, **g}
@@ -249,7 +280,7 @@ def compare(p=None, grid=None):
         if not r.get("ready"):
             continue
         s = r["summary"]
-        rows.append(dict(params={k: r["params"][k] for k in ("picks", "top", "hold", "split", "reinvest", "costs", "basket")},
+        rows.append(dict(params={k: r["params"].get(k) for k in ("picks", "top", "hold", "split", "reinvest", "costs", "basket", "kset")},
                          final=s["final"], ret=s["ret"], nifty_ret=s["nifty_ret"], traded=s["traded"], passed_rounds=s["passed_rounds"],
                          max_dd=s["max_dd"], verdict=s["verdict"], small_sample=s["small_sample"]))
     rows.sort(key=lambda x: (x["traded"] == 0, -x["final"]))

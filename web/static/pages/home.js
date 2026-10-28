@@ -56,7 +56,7 @@
     ["Market & research", [["market", "Market", "breadth, sectors, movers, news, catalyst"], ["market-news", "Market news", "daily report, macro, news research"],
       ["search", "Search", "search news, filings, documents"], ["ask", "Ask", "chat with the local model over MarketX data"], ["documents", "Documents", "your document library"],
       ["records", "Reports & logs", "saved reports and job logs"]]],
-    ["Labs", [["debate", "Debate", "bull vs bear with statistical checks"], ["scorecard", "Forecast scorecard", "Debate forecasts graded"], ["kronos", "Kronos", "experimental forecasting model"],
+    ["Labs", [["debate", "Debate", "bull vs bear with statistical checks"], ["scorecard", "Forecast scorecard", "Debate forecasts graded"], 
       ["lab", "Strategy Lab", "build and test your own rules"], ["screener-research", "Screener research", "screener experiments"]]],
   ];
   function retro(el) {

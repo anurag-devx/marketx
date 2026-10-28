@@ -46,7 +46,8 @@ COMMANDS = {
                        [PY, "-u", "-m", "core.fundamentals"], [PY, "-u", "-m", "research.earnings"], [PY, "-u", "-m", "core.derivatives"], [PY, "-u", "-m", "core.bhavcopy"], [PY, "-u", "-m", "core.macro"], [PY, "-u", "pipeline.py", "all"],
                        [PY, "-u", "-m", "research.market_report", "--if-auto"],     # written only when auto is on (Market news → Report)
                        [PY, "-u", "-m", "marketlab"], [PY, "-u", "-m", "core.intraday", "update"],
-                       [PY, "-u", "-m", "core.articles", "days=3", "linked=1", "max=300"]],      # new stock-news articles (a few minutes)
+                       [PY, "-u", "-m", "core.articles", "days=3", "linked=1", "max=300"],       # new stock-news articles (a few minutes)
+                       [PY, "-u", "-m", "kronos_lab.nightly"]],     # starts Kronos in its own lane when its nightly toggle is on
     # dropped from the nightly run (on demand only): macro impact study, Debate batch + evaluation (Labs)
     "announcements": [[PY, "-u", "news_fetch.py"], [PY, "-u", "-m", "core.announcements"]],
     "backtest": [[PY, "-u", "backtest.py"], [PY, "-u", "strategy_research.py"], [PY, "-u", "analysis.py"]],
@@ -106,7 +107,7 @@ COMMANDS = {
 
 
 KEEP_GOING = {"history-all"}
-OPTIONAL = ("marketlab", "core.intraday", "core.articles", "news_fetch.py", "core.announcements", "core.fundamentals", "core.derivatives", "core.bhavcopy", "research.earnings", "research.market_report", "core.macro", "research.macro_impact", "debate.batch", "debate.evaluate")   # a failure here is reported but never stops the agents
+OPTIONAL = ("kronos_lab.nightly", "marketlab", "core.intraday", "core.articles", "news_fetch.py", "core.announcements", "core.fundamentals", "core.derivatives", "core.bhavcopy", "research.earnings", "research.market_report", "core.macro", "research.macro_impact", "debate.batch", "debate.evaluate")   # a failure here is reported but never stops the agents
 
 
 def _cmd(cmd):
@@ -244,7 +245,7 @@ STEPS = [("marketlab candidates", "Market Lab: testing candidate signals", "mark
          ("backtest.py", "Backtesting strategies", "backtest"), ("strategy_research.py", "Strategy research", "backtest"),
          ("analysis.py", "Strategy analysis", "backtest"), ("research.events", "Running the news study", "announcements"),
          ("core.quality", "Checking data quality", "fetch"), ("pip", "Installing packages", None),
-         ("kronos_lab.forecast", "Kronos forecasts", None), ("core.shareholding", "Reading shareholding patterns", "announcements"), ("core.derivatives", "Downloading F&O data", "announcements"), ("core.bhavcopy", "NSE bhavcopy and delivery", "fetch"), ("kronos_lab/setup.sh", "Installing Kronos", None),
+         ("kronos_lab.forecast", "Kronos forecasts", None), ("kronos_lab.nightly", "Kronos nightly forecast", None), ("core.shareholding", "Reading shareholding patterns", "announcements"), ("core.derivatives", "Downloading F&O data", "announcements"), ("core.bhavcopy", "NSE bhavcopy and delivery", "fetch"), ("kronos_lab/setup.sh", "Installing Kronos", None),
          ("core.intraday", "Downloading 5-minute bars", None), ("marketlab", "Market Lab: tonight's radar", "market-lab"), ("core.search_compact", "Compacting the search database", "search-index")]
 AGENT_STEP = {"regime": "regime", "screener": "screener", "strategy": "strategy", "technical": "technical", "risk": "risk",
               "validation": "validation", "report": "report"}

@@ -75,3 +75,14 @@ def test_compare_and_validation(led):
     with pytest.raises(ValueError):
         S.run(dict(hold=2))
     assert not S.run(dict(start="2027-01-01"))["ready"]
+
+
+def test_kronos_picks(led, monkeypatch):
+    from kronos_lab import forecast as F
+    k = pd.DataFrame(dict(as_of=pd.to_datetime([DAYS[0]] * 2 + [DAYS[1]] * 2), symbol=["AAA", "BBB", "AAA", "BBB"], model="small", freq="1d", h=5,
+                          temp=1.0, top_p=0.9, p_up=[0.8, 0.4, 0.3, 0.6], pred_ret_pct=[2.0, -1.0, -1.0, 1.0]))
+    monkeypatch.setattr(F, "load", lambda: k.copy())
+    r = S.run(dict(picks="kronos", top=5, hold=1, costs=False, amount=10000))
+    # day 1: only AAA leans up (+10%); day 2: only BBB (+10%)
+    assert [[x["symbol"] for x in rd["stocks"]] for rd in r["rounds"]] == [["AAA"], ["BBB"]]
+    assert r["summary"]["final"] == 12100.0 and r["params"]["kset"] == "small|1d|5|1|0.9"
