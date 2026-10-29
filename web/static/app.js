@@ -398,7 +398,7 @@
   // ---------- navigation ----------
   const NAV = [
     ["Daily", [["overview", "Overview"], ["market-lab", "Market Lab"], ["desk", "Stock Desk"], ["live", "Live terminal"], ["tally", "Tally"]]],
-    ["Data", [["coverage", "Coverage"], ["data", "Data health"], ["settings", "Settings"]]],
+    ["Data", [["coverage", "Coverage"], ["research", "Research"], ["data", "Data health"], ["settings", "Settings"]]],
     ["More", [["retro", "Retro"]]],
   ];
   const PAGES = {};

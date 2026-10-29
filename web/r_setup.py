@@ -341,11 +341,11 @@ def _history():
         bst = BH.state()
         nd = len([d for d in bst.get("done", []) if d not in bst.get("missing", {})])
         from core.derivatives import trading_days
-        want = len(trading_days("2021-01-01"))
+        want = len(trading_days("2015-01-01"))
         chk = js_.loads(BH.CHECK.read_text()) if BH.CHECK.exists() else {}
         cdet = (f" · price check vs NSE: {chk.get('compared', 0):,} bars, {len(chk.get('mismatches', []))} differ >0.5%, {len(chk.get('missing', []))} missing"
                 if chk.get("ready") else "")
-        rows.append(dict(label="NSE bhavcopy + delivery (2021 →)", frac=min(1.0, nd / max(want, 1)), job="bhavcopy-backfill", button="Download / continue",
+        rows.append(dict(label="NSE bhavcopy + delivery, all NSE stocks (2015 →)", frac=min(1.0, nd / max(want, 1)), job="bhavcopy-backfill", button="Download / continue",
                          detail=f"{nd:,} of {want:,} trading days{cdet}",
                          help="NSE's official daily file for every stock: prices, trades and delivery %. New days come in Fetch + run all (after 18:00). "
                               "History resumes where it stopped; about 1.2 s per day."))
@@ -385,14 +385,38 @@ def _history():
     except Exception:
         pass
     try:
+        from core import allnse as AN
+        u = AN.stocks()
+        if len(u):
+            rows.append(dict(label="All NSE stocks: adjusted prices and stock list", frac=1.0, job="allnse-build", button="Rebuild",
+                             detail=f"{len(u):,} stocks ({int(u.active.sum()):,} trading now) · {int(u.tradable.sum()):,} at or above the liquidity floor "
+                                    f"of Rs {AN.floor():g} crore a day · rebuilt nightly from the NSE bhavcopy",
+                             help="Built from the bhavcopy above; complete history needs the 2015 → download finished."))
+    except Exception:
+        pass
+    try:
+        from core import depth as DP
+        ds = DP.status()
+        on = ds["settings"].get("enabled", True)
+        rows.append(dict(label="Order-flow recorder (best 5 bids/asks, liquid 100)", frac=min(1.0, ds["days"] / 60), job="depth-record", button="Record now",
+                         detail=(f"{'on' if on else 'off'} · {ds['days']} day(s) recorded" + (f", {ds['first']} to {ds['last']}" if ds["days"] else "")
+                                 + f" · {ds['size_mb']} MB" + (" · recording now" if ds["recording"] else "")),
+                         help="Starts by itself on weekdays at 09:00 while the app runs, stops at 15:35. About 60 trading days are needed "
+                              "for a first intraday order-flow test. Switch off: Settings file data/depth/settings.json (enabled: false)."))
+    except Exception:
+        pass
+    try:
         from core import derivatives as DV
         dd = DV.daily()
         days_have = dd.date.nunique() if len(dd) else 0
-        rows.append(dict(label="F&O open interest (NSE, daily)", frac=min(1.0, days_have / 250), job="fo-backfill", button="Download / continue",
+        want_fo = len(DV.trading_days("2015-01-01"))
+        nf_days = len(DV.state().get("fut_done", []))
+        rows.append(dict(label="F&O history (NSE, 2015 →): futures, open interest, participant positions", frac=min(1.0, nf_days / max(want_fo, 1)),
+                         job="fo-backfill", button="Download / continue",
                          detail=(f"{days_have} trading days, {dd.date.min():%d %b %Y} to {dd.date.max():%d %b %Y} · "
                                  f"{dd[~dd['index'].astype(bool)].symbol.nunique()} stocks in F&O" if days_have else "nothing yet")
-                                + " · new days are added by the daily run",
-                         help="Two small NSE files per trading day (F&O bhavcopy + participant positions); the last year by default, ~15 min"))
+                                + f" · futures rows for {nf_days:,} of {want_fo:,} days · new days are added by the daily run",
+                         help="Two small NSE files per trading day (F&O bhavcopy + participant positions), back to 2015: about 1-2 hours the first time, resumes where it stopped."))
     except Exception:
         pass
     try:
@@ -412,7 +436,15 @@ def _history():
             macro = "Macro history: " + " · ".join(f"{s} {r['min']:%Y}→{r['max']:%d %b %Y}" for s, r in span.iterrows())
     except Exception:
         pass
-    return dict(rows=rows, busy=bool(jobs.busy("history-all")), macro=macro)
+    for r in rows:                                   # a running download shows as running, with Stop
+        if r.get("job"):
+            cur = jobs.current(r["job"])
+            r["running"] = bool(cur and cur.get("name") == r["job"])
+            r["lane"] = jobs.lane_of(r["job"])
+            r["started"] = cur.get("started") if r["running"] else None
+    cur = jobs.current("history-all")
+    return dict(rows=rows, busy=bool(jobs.busy("history-all")) or any(r.get("running") for r in rows), macro=macro,
+                all_running=bool(cur and cur.get("name") == "history-all"))
 
 
 def _news_section():

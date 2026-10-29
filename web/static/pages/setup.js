@@ -134,14 +134,20 @@
   async function historyTab(b) {
     const d = await api("data?tab=history");
     b.innerHTML = note("Everything the news study, Catalyst, Search, Results and the reports learn from. Each download is polite to the source, resumes where it stopped, and can run while you use the app.") +
-      `<div class="row section"><button class="btn primary" id="hall" title="In order: NSE filings since 2016 → news archives since 2016 → article text (300) → search index. Press again later to continue.">⬇ Download all history (runs for hours; safe to leave running)</button></div>
-      <div class="card section flush">${d.rows.map((r, i) => `<div class="hrow"><div class="hl"><b>${esc(r.label)}</b></div>
-        <div class="hm">${r.frac != null ? `<div class="bar wide"><i style="width:${Math.max(1, Math.min(100, 100 * r.frac)).toFixed(1)}%"></i></div>` : ""}<div class="muted small">${esc(r.detail)}</div></div>
-        <div>${r.job ? `<button class="btn small" data-h="${i}" title="${esc(r.help || "")}">${esc(r.button)}</button>` : ""}</div></div>`).join("")}</div>
+      `<div class="row section">${d.all_running ? `<button class="btn danger" id="hall" data-stop="history">■ Stop: download all history</button> <span class="dl-live">downloading</span>`
+        : `<button class="btn primary" id="hall" title="In order: NSE filings since 2016 → news archives since 2016 → article text (300) → search index. Press again later to continue.">⬇ Download all history (runs for hours; safe to leave running)</button>`}</div>
+      <div class="card section flush">${d.rows.map((r, i) => `<div class="hrow${r.running ? " is-running" : ""}"><div class="hl"><b>${esc(r.label)}</b>${r.running ? `<div><span class="dl-live">downloading${r.started ? ` since ${esc(String(r.started).slice(11, 16))}` : ""}</span></div>` : ""}</div>
+        <div class="hm">${r.frac != null ? `<div class="bar wide${r.running ? " live" : ""}"><i style="width:${Math.max(1, Math.min(100, 100 * r.frac)).toFixed(1)}%"></i></div>` : ""}<div class="muted small">${esc(r.detail)}</div></div>
+        <div>${r.job ? (r.running ? `<button class="btn small danger" data-s="${i}" title="Stops now; it resumes where it stopped next time">■ Stop</button>`
+          : `<button class="btn small" data-h="${i}" title="${esc(r.help || "")}">▶ ${esc(r.button)}</button>`) : ""}</div></div>`).join("")}</div>
       ${d.macro ? `<p class="muted small">${esc(d.macro)}</p>` : ""}`;
-    $("#hall", b).addEventListener("click", () => startJob("history-all"));
-    $$("[data-h]", b).forEach((x) => x.addEventListener("click", () => { const r = d.rows[+x.dataset.h]; startJob(r.job, r.args); }));
-    if (d.busy) setTimeout(() => { if (document.body.contains(b) && b.querySelector("#hall")) historyTab(b); }, 20000);   // live counts while a download runs
+    const again = () => setTimeout(() => { if (document.body.contains(b)) historyTab(b); }, 1200);
+    $("#hall", b).addEventListener("click", async (e) => { if (e.currentTarget.dataset.stop) { await post("job/stop", { lane: "history" }, "Stopped: it resumes where it stopped"); again(); }
+      else if (await startJob("history-all")) again(); });
+    $$("[data-h]", b).forEach((x) => x.addEventListener("click", async () => { const r = d.rows[+x.dataset.h]; if (await startJob(r.job, r.args)) again(); }));
+    $$("[data-s]", b).forEach((x) => x.addEventListener("click", async () => { const r = d.rows[+x.dataset.s];
+      await post("job/stop", { lane: r.lane }, "Stopped: it resumes where it stopped next time"); again(); }));
+    if (d.busy) setTimeout(() => { if (document.body.contains(b) && b.querySelector("#hall")) historyTab(b); }, 10000);   // live counts while a download runs
   }
 
   async function newsTab(b) {

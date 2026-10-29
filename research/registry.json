@@ -1,0 +1,352 @@
+{
+ "title": "MarketX research log",
+ "intro": "Living record of every test: what was asked, the pass mark set before it ran, what came out and what it means. Numbers are after costs unless marked gross. Nothing is edited after the fact; corrections get a new entry.",
+ "rules": [
+  "Goal: at least 1% a day on capital. Every result is reported against it, including the gap.",
+  "No hindsight: each test year is predicted only from earlier years (walk-forward); saved forecasts are never recomputed.",
+  "Real costs: delivery about 0.30% round trip + 0.10% slippage each way; intraday 0.06% + 0.05% each way; stop exits pay another 0.05%. Futures costs come with the F&O work.",
+  "Baselines every time: random, simple momentum, Nifty buy-and-hold.",
+  "Known bias in tests T1-T8: the stock list was today's Nifty 500 (stocks that later fell out or delisted are missing), which flatters absolute returns. The all-NSE work (R1-R2) removes it."
+ ],
+ "plan": "Agreed 29 Oct 2026: data, then research, then screens. Data: D1 all NSE cash 2015 on (with delistings, split/bonus adjusted, liquidity floor you set, default Rs 5 crore a day); D2 F&O history 2015 on (futures per expiry, options OI, participant positions, near-month series); D3 S&P 500, Nasdaq, Nikkei. Screens after research: all NSE in every page, Live for the 1,000 most liquid, and a separate F&O section.",
+ "items": [
+  {
+   "id": "T1",
+   "kind": "done",
+   "date": "2026-10-28",
+   "status": "failed",
+   "title": "Market Lab as built (24 saved nights)",
+   "question": "Do Market Lab's nightly picks make money after costs?",
+   "pass_mark": "Simulate: beat Nifty after costs over the saved nights.",
+   "headline": "Top 10, 1-day hold: Rs 1 lakh -> Rs 84,171 (-15.8%) vs Nifty -2.5%. All 24 setups lost money.",
+   "numbers": [
+    [
+     "Top 10, hold 1 day",
+     "-15.8%"
+    ],
+    [
+     "Nifty same days",
+     "-2.5%"
+    ],
+    [
+     "Costs paid",
+     "Rs 7,428"
+    ],
+    [
+     "Setups that made money",
+     "0 of 24"
+    ]
+   ],
+   "notes": "The radar predicts 'moves at least 1% either way' (volatility), not direction; the lean was 'unclear' almost every night, so buy-only can't use it.",
+   "script": "Tally -> Simulate",
+   "results": "Tally -> Simulate"
+  },
+  {
+   "id": "T2",
+   "kind": "done",
+   "date": "2026-10-28",
+   "status": "passed",
+   "title": "Framework diagnostic",
+   "question": "Is the analysis framework the weak link? Which inputs carry direction?",
+   "pass_mark": "Find inputs whose link to next-day relative return keeps its sign in at least 10 of 12 years (|t| >= 3), and compare methods on the same data.",
+   "headline": "Stable signals found (reversal, volatility, gap fade, sector strength, results day, delivery). Equal-weight matching 0.014 vs boosting 0.051: the framework captured about a quarter of what is there.",
+   "numbers": [
+    [
+     "Equal-weight matching (Market Lab)",
+     "0.014"
+    ],
+    [
+     "Ridge",
+     "0.015"
+    ],
+    [
+     "Gradient boosting",
+     "0.051"
+    ],
+    [
+     "Opening gap fade (intraday), t",
+     "-26"
+    ],
+    [
+     "After strong up / down results day, 5 days",
+     "+0.42% / -0.79%"
+    ]
+   ],
+   "notes": "Stable 12/12 years: big 1-5 day movers do worse next day; volatile stocks do worse; opening gaps fade intraday (strongest); strong sector -> stock does better; results day -> stock lags; delivery % up -> better. News tone very weak. Filings on average give no buy signal; first reaction to results continues for 5 days.",
+   "script": "research/diagnose.py",
+   "results": "results/diagnose/report.json"
+  },
+  {
+   "id": "T3",
+   "kind": "done",
+   "date": "2026-10-28",
+   "status": "passed",
+   "title": "Model v2: daily backtest 2019-2026",
+   "question": "With a learned model, do daily books make money after costs?",
+   "pass_mark": "Positive after costs in every year group, beating random and momentum.",
+   "headline": "On paper: intraday long top 10 / short bottom 10 +0.23% a day, worst drop -9%, no losing year. Later failed the stress test (T4).",
+   "numbers": [
+    [
+     "Intraday long-short, boosting",
+     "+0.23% a day"
+    ],
+    [
+     "Same, simple rules",
+     "+0.07% a day"
+    ],
+    [
+     "Buy top 10, sell next close, boosting",
+     "+0.28% a day, worst drop -61%"
+    ]
+   ],
+   "notes": "Buy-only next-day: costs (about 0.4% a day) dominate and gains came in 2020-21, negative in 2025-26. Superseded by T4.",
+   "script": "research/model2.py",
+   "results": "results/model2/report.json"
+  },
+  {
+   "id": "T4",
+   "kind": "done",
+   "date": "2026-10-28",
+   "status": "failed",
+   "title": "Stress test of the intraday long-short",
+   "question": "Does the T3 intraday edge survive realistic entry and liquidity?",
+   "pass_mark": "Still positive after costs with entry at 09:20, liquid 200 only and 0.10% slippage per side.",
+   "headline": "Gone: all 500 at 09:20 +0.04% a day; liquid 200 at 09:20 -0.05%; everything negative at 0.10% slippage.",
+   "numbers": [
+    [
+     "All 500, open, 0.05% slip",
+     "+0.18% a day"
+    ],
+    [
+     "All 500, 09:20",
+     "+0.04%"
+    ],
+    [
+     "Liquid 200, 09:20",
+     "-0.05%"
+    ],
+    [
+     "Any, 0.10% slip at 09:20",
+     "negative"
+    ]
+   ],
+   "notes": "The 'edge' lived in the noisy opening print of thinly traded stocks. Not tradeable. Parked.",
+   "script": "research/model2.py part=stress",
+   "results": "results/model2/stress.csv"
+  },
+  {
+   "id": "T5",
+   "kind": "done",
+   "date": "2026-10-28",
+   "status": "passed",
+   "title": "Swing, buy-only, hold 5 / 10 / 20 sessions",
+   "question": "Is there a swing edge after costs on liquid stocks?",
+   "pass_mark": "Beat Nifty after costs in at least 6 of 8 years with a worst drop no worse than about Nifty's.",
+   "headline": "Simple rules, hold 20, top 10: 25.0% a year vs Nifty 8.3%, beat Nifty 8 of 8 years, worst drop -36% (Nifty -33%).",
+   "numbers": [
+    [
+     "Simple rules",
+     "25.0% a year, 8/8 years"
+    ],
+    [
+     "12-month momentum",
+     "23.5%, 4/8"
+    ],
+    [
+     "Boosting",
+     "19.9%, 5/8"
+    ],
+    [
+     "Random",
+     "9.4%"
+    ],
+    [
+     "Nifty",
+     "8.3%"
+    ]
+   ],
+   "notes": "ML not needed for swing: simple rules are the most consistent and explainable.",
+   "script": "research/swing.py",
+   "results": "results/swing/report.csv"
+  },
+  {
+   "id": "T6",
+   "kind": "done",
+   "date": "2026-10-28",
+   "status": "passed",
+   "title": "Swing robustness",
+   "question": "Does T5 hold for other start days, sizes, costs and a market filter?",
+   "pass_mark": "Every start day beats Nifty overall; at least 5 of 8 years.",
+   "headline": "Hold 20 / 15 stocks: 16.4 / 19.0 / 23.9% a year (lowest / average / highest start day) vs Nifty 10%; 5-7 of 8 years. 2025 weak in every version.",
+   "numbers": [
+    [
+     "Hold 20, 15 stocks, 0.25%/side",
+     "19.0% a year (avg)"
+    ],
+    [
+     "Same at 0.40%/side",
+     "16.5%"
+    ],
+    [
+     "Hold 10, 10 stocks + Nifty filter",
+     "18.9%, worst drop -23%"
+    ],
+    [
+     "2025 vs Nifty",
+     "-6 to -19 points"
+    ]
+   ],
+   "notes": "Built as Market Lab -> Swing picks (15 stocks, hold 20 sessions): rebuilt 2019-2026 22.3% a year vs Nifty 10.0%, worst drop -28.6%. About 0.08% a day: far below the 1% target.",
+   "script": "research/swing.py part=robust",
+   "results": "results/swing/robust.csv"
+  },
+  {
+   "id": "T7",
+   "kind": "done",
+   "date": "2026-10-28",
+   "status": "failed",
+   "title": "Intraday with stop-loss and targets",
+   "question": "Can 3-5 morning setups a day with hard stops reach the 1% target with margin?",
+   "pass_mark": "At least +0.2% a day net at 1x (so about 1% at 5x) with no losing year.",
+   "headline": "Best: 3 trades at 09:30, hold to 15:15: +0.06% a day at 1x; +0.30% at 5x with a -95% worst drop; 2 losing years of 8.",
+   "numbers": [
+    [
+     "Win rate",
+     "50.6%"
+    ],
+    [
+     "Avg win / loss",
+     "+1.69% / -1.61%"
+    ],
+    [
+     "Per day, 1x",
+     "+0.06%"
+    ],
+    [
+     "Per day, 5x",
+     "+0.30% (worst drop -95%)"
+    ],
+    [
+     "Stop / target grids",
+     "all worse than holding to 15:15"
+    ]
+   ],
+   "notes": "The model leans on market-wide inputs (VIX, how the market opened, breadth): it is mostly calling the day's direction. Baselines (momentum, gap fade, random) all lose.",
+   "script": "research/intraday.py",
+   "results": "results/intraday/report.csv"
+  },
+  {
+   "id": "T8",
+   "kind": "done",
+   "date": "2026-10-29",
+   "status": "failed",
+   "title": "Day direction",
+   "question": "Can the market's 09:30 -> 15:15 direction be called before or at 09:30?",
+   "pass_mark": "Right on at least 56% of days in every year group.",
+   "headline": "52-54% right vs 51% always-up. Ceiling: if the direction were known, the intraday picks earn +0.58% a day at 1x, no losing year.",
+   "numbers": [
+    [
+     "Best call",
+     "54.2% right"
+    ],
+    [
+     "Always 'up'",
+     "51.1%"
+    ],
+    [
+     "Value for intraday picks",
+     "+0.06% -> +0.07% a day"
+    ],
+    [
+     "Ceiling (direction known)",
+     "+0.58% a day"
+    ]
+   ],
+   "notes": "The day's direction is the main lever toward 1%. Not yet tried: S&P 500 / Nasdaq / Nikkei (download added), GIFT Nifty, FII/DII flows, F&O positioning: that is R3.",
+   "script": "research/daydir.py",
+   "results": "results/daydir/calls.csv"
+  },
+  {
+   "id": "R1",
+   "kind": "planned",
+   "status": "pending",
+   "date": null,
+   "title": "Data check: all NSE",
+   "question": "Do NSE's files match Angel's prices, and how big is the survivorship bias?",
+   "pass_mark": "Nifty 500 closes within 0.5% on at least 99% of stock-days after adjustment; adjustment events match known splits/bonuses.",
+   "needs": "Bhavcopy 2015 -> download finished.",
+   "script": "research/(to write)"
+  },
+  {
+   "id": "R2",
+   "kind": "planned",
+   "status": "pending",
+   "date": null,
+   "title": "Swing on all NSE",
+   "question": "Does the swing book hold on every NSE stock, delistings included?",
+   "pass_mark": "Beats Nifty after costs in at least 6 of 8 years at the chosen liquidity floor (tested at Rs 1 / 5 / 10 / 25 crore).",
+   "needs": "R1 passed."
+  },
+  {
+   "id": "R3",
+   "kind": "planned",
+   "status": "pending",
+   "date": null,
+   "title": "Day direction, more inputs",
+   "question": "Do global closes, FII/client positions and option open interest improve the day call?",
+   "pass_mark": "Right on at least 56% of days in every year group.",
+   "needs": "Macro download (S&P/Nasdaq/Nikkei) and F&O history."
+  },
+  {
+   "id": "R4",
+   "kind": "planned",
+   "status": "pending",
+   "date": null,
+   "title": "Nifty / Bank Nifty futures",
+   "question": "Do intraday (09:30 -> 15:15) and overnight (close -> open) direction trades make money with futures costs and margin?",
+   "pass_mark": "Positive after costs in every year group at 1x.",
+   "needs": "F&O history."
+  },
+  {
+   "id": "R5",
+   "kind": "planned",
+   "status": "pending",
+   "date": null,
+   "title": "Stock futures: open-interest build-up",
+   "question": "Do long build-up / short covering / short build-up / long unwinding, basis and rollover predict 1- and 5-day moves, long and short?",
+   "pass_mark": "Beats random and momentum after costs in 6 of 8 years.",
+   "needs": "F&O history."
+  },
+  {
+   "id": "R6",
+   "kind": "planned",
+   "status": "pending",
+   "date": null,
+   "title": "Options as signals",
+   "question": "Do put-call ratio, open-interest shifts and max pain call the index's next-day direction?",
+   "pass_mark": "Adds at least 2 points of hit rate to R3's call, every year group.",
+   "needs": "F&O history."
+  },
+  {
+   "id": "R7",
+   "kind": "planned",
+   "status": "pending",
+   "date": null,
+   "title": "Intraday on all NSE",
+   "question": "Do the intraday tests change with 1,000 liquid stocks instead of 200?",
+   "pass_mark": "Same as T7: at least +0.2% a day net at 1x, no losing year.",
+   "needs": "5-minute bars for the top 1,000."
+  },
+  {
+   "id": "R8",
+   "kind": "planned",
+   "status": "pending",
+   "date": null,
+   "title": "Order flow",
+   "question": "Do bid/ask imbalance and trade-side flow predict 5-30 minute moves?",
+   "pass_mark": "Positive after intraday costs on held-out days, with realistic fills.",
+   "needs": "About 60 recorded days (recorder started 29 Oct 2026)."
+  }
+ ],
+ "entries": []
+}

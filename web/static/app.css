@@ -750,3 +750,27 @@ select.ty-pick { width: auto; min-width: 230px; flex: 0 1 280px; }
 .kr-job { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--line); }
 .kr-job:last-child { border-bottom: 0; }
 .kr-job .btn { margin-left: auto; }
+
+/* Data health: a running download shows as running, with Stop */
+.dl-live { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--up); font-weight: 600; }
+.dl-live::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--up); box-shadow: 0 0 0 0 color-mix(in srgb, var(--up) 60%, transparent); animation: dlpulse 1.4s infinite; }
+@keyframes dlpulse { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--up) 55%, transparent); } 100% { box-shadow: 0 0 0 8px transparent; } }
+.hrow.is-running { background: color-mix(in srgb, var(--up) 6%, transparent); box-shadow: inset 3px 0 0 var(--up); }
+.bar.live i { background: linear-gradient(90deg, var(--up), color-mix(in srgb, var(--up) 60%, var(--accent))); background-size: 200% 100%; animation: dlbar 1.6s linear infinite; }
+@keyframes dlbar { from { background-position: 0 0; } to { background-position: 200% 0; } }
+@media (prefers-reduced-motion: reduce) { .dl-live::before, .bar.live i { animation: none; } }
+
+/* Research page */
+.rs-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); gap: 14px; margin-top: 4px; }
+@media (max-width: 760px) { .rs-grid { grid-template-columns: 1fr; } }
+.rs-card { display: flex; flex-direction: column; gap: 10px; border-left: 3px solid var(--line-2); }
+.rs-card.passed { border-left-color: var(--up); } .rs-card.failed { border-left-color: var(--down); } .rs-card.running { border-left-color: var(--warn); }
+.rs-top { display: flex; align-items: center; gap: 10px; }
+.rs-id { font-family: var(--mono); font-size: 12px; padding: 2px 8px; border-radius: 6px; background: var(--surface-2); border: 1px solid var(--line); }
+.rs-title { font-size: 15px; } .rs-pill { margin-left: auto; }
+.rs-pill .verdict { font-size: 12.5px; padding: 3px 10px; }
+.rs-q { color: var(--ink-2); }
+.rs-mark, .rs-res { font-size: 13px; } .rs-mark div, .rs-res div { margin-top: 2px; }
+.rs-more { align-self: flex-start; }
+.rs-num td { padding: 6px 8px; } .rs-detail { border-top: 1px solid var(--line); padding-top: 10px; }
+.verdict.run { color: var(--warn); background: var(--warn-soft); border: 1px solid color-mix(in srgb, var(--warn) 40%, transparent); }

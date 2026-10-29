@@ -166,9 +166,9 @@
 
   // ---------- Simulate: Rs X put into the picks on every saved projection (marketlab/sim.py) ----------
   const SIM0 = { amount: 100000, picks: "top", top: "10", hold: "1", split: "equal", reinvest: "on", costs: "on", basket: "", start: "", end: "", baskets: "" };
-  const HOLDL = { intraday: "Intraday", 1: "1 day", 3: "3 days", 5: "5 days" };
-  const PICKL = { top: "Top picks", up: "Lean-up picks", plans: "Plans entered", kronos: "Kronos picks", basket: "Basket" };
-  const setupLabel = (p) => p.picks === "basket" ? `Basket: ${(p.basket || []).join(", ")} · ${HOLDL[p.hold]}` : `${PICKL[p.picks]} · top ${p.top} · ${HOLDL[p.hold]}`;
+  const HOLDL = { intraday: "Intraday", 1: "1 day", 3: "3 days", 5: "5 days", 20: "20 days" };
+  const PICKL = { top: "Top picks", up: "Lean-up picks", plans: "Plans entered", kronos: "Kronos picks", swing: "Swing book", basket: "Basket" };
+  const setupLabel = (p) => p.picks === "swing" ? "Swing book · 15 stocks · 20 days" : p.picks === "basket" ? `Basket: ${(p.basket || []).join(", ")} · ${HOLDL[p.hold]}` : `${PICKL[p.picks]} · top ${p.top} · ${HOLDL[p.hold]}`;
   const cssv = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
   const VERD = (v) => v === "passed" ? `<span class="verdict pass">✓ Passed</span>` : v === "failed" ? `<span class="verdict fail">✗ Failed</span>` : `<span class="verdict none">• No trades</span>`;
   const simQs = (s) => qs({ amount: s.amount, picks: s.picks, top: s.top, hold: s.hold, split: s.split, reinvest: s.reinvest === "on" ? 1 : 0,
@@ -187,17 +187,17 @@
           <label><span class="mllab">To</span>${dsel("smto", s.end, "latest")}</label>
           <div><div class="mllab">Stocks</div>${sseg("picks", Object.entries(PICKL))}</div>
           ${s.picks === "basket" ? `<label class="sim-bk"><span class="mllab">Basket (comma separated)</span><input class="in" id="smbk" placeholder="TCS, INFY, HDFCBANK" value="${esc(s.basket)}"></label>`
-            : `<div><div class="mllab">How many</div>${sseg("top", [["5", "Top 5"], ["10", "Top 10"], ["20", "Top 20"]])}</div>`}
+            : s.picks === "swing" ? "" : `<div><div class="mllab">How many</div>${sseg("top", [["5", "Top 5"], ["10", "Top 10"], ["20", "Top 20"]])}</div>`}
         </div>
         <div class="sim-row">
-          <div><div class="mllab">Hold</div>${sseg("hold", [["intraday", "Intraday"], ["1", "1 day"], ["3", "3 days"], ["5", "5 days"]], s.picks === "plans")}</div>
+          <div><div class="mllab">Hold</div>${sseg("hold", [["intraday", "Intraday"], ["1", "1 day"], ["3", "3 days"], ["5", "5 days"]], s.picks === "plans" || s.picks === "swing")}</div>
           <div><div class="mllab">Split</div>${sseg("split", [["equal", "Equal ₹"], ["edge", "More on higher edge"]], s.picks === "basket" || s.picks === "plans")}</div>
           <div><div class="mllab">Reinvest gains</div>${sseg("reinvest", [["on", "On"], ["off", "Off"]])}</div>
           <div><div class="mllab">Costs</div>${sseg("costs", [["on", "On"], ["off", "Off"]])}</div>
           <div class="sim-go"><button class="btn primary" id="smrun">Run simulation</button><button class="btn" id="smcmp">Compare setups</button></div>
         </div>
-        <p class="muted small sim-help">${s.picks === "kronos" ? "Kronos picks: on each day Kronos forecast (daily), the stocks it gives the highest chance of going up (only those above 50%). Experimental; see Market Lab → Kronos. " : ""}${s.picks === "plans" ? "Plans entered: each pick's intraday plan, at its own entry and exit (long or short). Hold is intraday." :
-          s.hold === "intraday" ? "Buys at the next session's open, sells at its close." : `Buys at the projection day's close, sells at the close ${s.hold} session${s.hold === "1" ? "" : "s"} later; the next buy uses that day's projection.`}
+        <p class="muted small sim-help">${s.picks === "swing" ? "Swing book: the monthly 15-stock book from Market Lab → Swing picks, held 20 sessions (here bought and sold at closing prices; the Swing tab uses 09:20). " : ""}${s.picks === "kronos" ? "Kronos picks: on each day Kronos forecast (daily), the stocks it gives the highest chance of going up (only those above 50%). Experimental; see Market Lab → Kronos. " : ""}${s.picks === "plans" ? "Plans entered: each pick's intraday plan, at its own entry and exit (long or short). Hold is intraday." :
+          s.picks === "swing" ? "" : s.hold === "intraday" ? "Buys at the next session's open, sells at its close." : `Buys at the projection day's close, sells at the close ${s.hold} session${s.hold === "1" ? "" : "s"} later; the next buy uses that day's projection.`}
           Only the projections kept that night are used; nothing is recomputed with hindsight.</p>
       </div><div id="smout" class="section"></div><div id="smcmpout" class="section"></div>`;
     const out = $("#smout", el), cmpOut = $("#smcmpout", el);
